@@ -68,7 +68,7 @@ export function Header({
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-neutral-200 bg-white/95 backdrop-blur-xl dark:border-white/10 dark:bg-[#0a0a0a]/95">
+    <header className="site-header sticky top-0 z-40 border-b border-neutral-200 bg-white/95 backdrop-blur-xl dark:border-white/10 dark:bg-[#0a0a0a]/95">
       <div className="flex h-14 items-center gap-2.5 px-3 sm:h-16 sm:gap-3 sm:px-6 lg:px-8">
         {!isSubscriptionPage && (
           <button
@@ -86,7 +86,7 @@ export function Header({
           onClick={() => navigate("Overview")}
           className="pressable flex shrink-0 items-center gap-2.5 rounded-md text-left"
         >
-          <span className="block h-10 w-10 shrink-0 overflow-hidden rounded-[10px] bg-[#070b26] sm:h-11 sm:w-11 sm:rounded-[11px]">
+          <span className="brand-mark-motion block h-10 w-10 shrink-0 overflow-hidden rounded-[10px] bg-[#070b26] sm:h-11 sm:w-11 sm:rounded-[11px]">
             <img
               src={`${import.meta.env.BASE_URL}assets/lingofusion-logo-square.png`}
               alt="LingoFusion logo"

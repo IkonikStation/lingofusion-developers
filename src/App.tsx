@@ -18,8 +18,8 @@ import {
   Video,
   Zap,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { DashboardModal } from "./components/DashboardModal";
 import { Header } from "./components/Header";
 import { PricingCard } from "./components/PricingCard";
@@ -75,6 +75,51 @@ const billingNotes = [
   {
     icon: FileText,
     key: "billingPdf",
+  },
+] as const;
+
+const showcaseItems = [
+  {
+    kind: "image",
+    title: "Document translation",
+    label: "Before and after",
+    description: "Demonstrates LingoFusion translating a full document while preserving headings, lists, terminology, and tone.",
+    src: "",
+  },
+  {
+    kind: "video",
+    title: "Live conversation",
+    label: "Real-time demo",
+    description: "Demonstrates LingoFusion Live Translate interpreting a conversation with low latency and natural turn-taking.",
+    src: "",
+  },
+  {
+    kind: "video",
+    title: "Video dubbing",
+    label: "Dubbing demo",
+    description: "Demonstrates translated speech aligned to the original video with consistent voices and timing.",
+    src: "",
+  },
+  {
+    kind: "image",
+    title: "PDF localization",
+    label: "Layout preservation",
+    description: "Demonstrates extracting and translating PDF content without losing the document's visual structure.",
+    src: "",
+  },
+  {
+    kind: "image",
+    title: "Image translation",
+    label: "Visual text replacement",
+    description: "Demonstrates detecting text inside an image, translating it, and placing the result back into the design.",
+    src: "",
+  },
+  {
+    kind: "video",
+    title: "Aurora music generation",
+    label: "Prompt to music",
+    description: "Demonstrates Aurora turning a written creative direction into a complete, production-ready music sample.",
+    src: "",
   },
 ] as const;
 
@@ -155,6 +200,7 @@ export default function App() {
     window.localStorage.getItem("lingofusion-pro-variant") === "1m" ? "1m" : "500k",
   );
   const [toast, setToast] = useState<string | null>(null);
+  const scrollProgressRef = useRef<HTMLSpanElement>(null);
   const t = useMemo(() => createTranslator(language), [language]);
   const tc = useMemo(() => createContentTranslator(language), [language]);
   const activeLanguage = getLanguage(language);
@@ -238,8 +284,58 @@ export default function App() {
     canonical.href = `${window.location.origin}${window.location.pathname}`;
   }, [activePage, isSubscriptionPage]);
 
+  useEffect(() => {
+    if (isSubscriptionPage) return;
+    let frame = 0;
+
+    const updateProgress = () => {
+      frame = 0;
+      const scrollableHeight = document.documentElement.scrollHeight - window.innerHeight;
+      const progress = scrollableHeight > 0 ? Math.min(Math.max(window.scrollY / scrollableHeight, 0), 1) : 0;
+      if (scrollProgressRef.current) {
+        scrollProgressRef.current.style.transform = `scaleX(${progress})`;
+      }
+    };
+    const handleScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(updateProgress);
+    };
+
+    updateProgress();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("resize", handleScroll);
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("resize", handleScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [activePage, isSubscriptionPage]);
+
+  useEffect(() => {
+    if (isSubscriptionPage) return;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const elements = Array.from(document.querySelectorAll<HTMLElement>(".site-reveal"));
+
+    if (reducedMotion || !("IntersectionObserver" in window)) {
+      elements.forEach((element) => element.classList.add("site-reveal-visible"));
+      return;
+    }
+
+    elements.forEach((element) => element.classList.add("site-reveal-ready"));
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add("site-reveal-visible");
+        observer.unobserve(entry.target);
+      });
+    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
+
+    elements.forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, [activePage, isSubscriptionPage]);
+
   return (
     <div className="min-h-screen bg-white text-neutral-950 selection:bg-neutral-900 selection:text-white dark:bg-[#0a0a0a] dark:text-neutral-100 dark:selection:bg-neutral-100 dark:selection:text-neutral-950">
+      {!isSubscriptionPage && <div className="site-scroll-progress" aria-hidden="true"><span ref={scrollProgressRef} /></div>}
       <Header
         activePage={activePage}
         isSubscriptionPage={isSubscriptionPage}
@@ -494,7 +590,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
 
   return (
     <>
-      <section className="section-enter max-w-3xl">
+      <section className="site-reveal section-enter max-w-3xl">
         <p className="mb-4 text-sm font-medium text-neutral-600 dark:text-neutral-400">{t("lingoFusionApi")}</p>
         <h1 className="text-3xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50 sm:text-6xl">
           {t("pricing")}
@@ -542,7 +638,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
       </section>
 
       <div className="mt-8 space-y-9 sm:mt-12 sm:space-y-12">
-        <div id="text-models" className="section-enter [--section-index:1]">
+        <div id="text-models" className="site-reveal section-enter [--section-index:1]">
           <TextModelGallery
             models={visibleTextModels}
             pricingMode={textPricingMode}
@@ -612,7 +708,8 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
             headerNote={textPricingDescription}
           />
         </div>
-        <div id="tts-models" className="section-enter [--section-index:2]">
+        <MediaShowcase />
+        <div id="tts-models" className="site-reveal section-enter [--section-index:2]">
           <SectionCalculator title={t("ttsCalculator")} estimateLabel={t("estimate")} estimate={ttsEstimate === null ? "TBD" : displayCurrency(ttsEstimate, true)}>
             <SelectField label={t("model")} value={selectedTtsModel} onChange={setSelectedTtsModel}>
               {ttsCharacterModels.map((model) => (
@@ -653,7 +750,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
             tableClassName="pricing-table-change"
           />
         </div>
-        <div id="transcription-models" className="section-enter [--section-index:3]">
+        <div id="transcription-models" className="site-reveal section-enter [--section-index:3]">
           <SectionCalculator title={t("transcriptionCalculator")} estimateLabel={t("estimate")} estimate={transcriptionEstimate === null ? "TBD" : displayCurrency(transcriptionEstimate, true)}>
             <SelectField
               label={t("model")}
@@ -685,7 +782,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
             tableClassName="pricing-table-change"
           />
         </div>
-        <div id="dubbing-models" className="section-enter [--section-index:4]">
+        <div id="dubbing-models" className="site-reveal section-enter [--section-index:4]">
           <SectionCalculator title={t("dubbingCalculator")} estimateLabel={t("estimate")} estimate={dubbingEstimate === null ? "TBD" : displayCurrency(dubbingEstimate, true)}>
             <SelectField label={t("model")} value={selectedDubbingModel} onChange={setSelectedDubbingModel}>
               {dubbingModels.map((model) => (
@@ -713,7 +810,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
             tableClassName="pricing-table-change"
           />
         </div>
-        <div id="image-translation" className="section-enter [--section-index:5]">
+        <div id="image-translation" className="site-reveal section-enter [--section-index:5]">
           <SectionCalculator title={t("imageCalculator")} estimateLabel={t("estimate")} estimate={displayCurrency(imageEstimate, true)}>
             <SelectField label={t("tableImageSize")} value={selectedImageSize} onChange={setSelectedImageSize}>
               {imageModels.map((model) => (
@@ -739,7 +836,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
             tableClassName="pricing-table-change"
           />
         </div>
-        <div id="pdf-extraction-and-editing" className="section-enter [--section-index:6]">
+        <div id="pdf-extraction-and-editing" className="site-reveal section-enter [--section-index:6]">
           <SectionCalculator title={t("pdfCalculator")} estimateLabel={t("estimate")} estimate={pdfEstimate === null ? "TBD" : displayCurrency(pdfEstimate, true)}>
             <SelectField label={t("workflow")} value={selectedPdfModel} onChange={setSelectedPdfModel}>
               {pdfModels.map((model) => (
@@ -765,7 +862,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
             tableClassName="pricing-table-change"
           />
         </div>
-        <div id="music-models" className="section-enter [--section-index:7]">
+        <div id="music-models" className="site-reveal section-enter [--section-index:7]">
           <SectionCalculator title={t("musicCalculator")} estimateLabel={t("estimate")} estimate={musicEstimate === null ? "TBD" : displayCurrency(musicEstimate, true)}>
             <SelectField label={t("model")} value={selectedMusicModel} onChange={setSelectedMusicModel}>
               {musicModels.map((model) => (
@@ -796,7 +893,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
       </div>
 
 
-      <section id="billing-notes" className="section-enter mt-12 border-t border-neutral-200 pt-8 dark:border-white/10 [--section-index:8]">
+      <section id="billing-notes" className="site-reveal section-enter mt-12 border-t border-neutral-200 pt-8 dark:border-white/10 [--section-index:8]">
         <h2 className="text-2xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50">{t("billingNotes")}</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {billingNotes.map((note) => {
@@ -841,7 +938,7 @@ function TextModelGallery({ models, pricingMode, displayPrice, onOpenModel }: {
               key={model.model}
               type="button"
               onClick={() => onOpenModel(model.model)}
-              className="pressable group flex min-w-0 items-start gap-5 rounded-lg p-1 text-left opacity-90 outline-none transition hover:opacity-100 focus-visible:ring-2 focus-visible:ring-neutral-950 focus-visible:ring-offset-4 dark:focus-visible:ring-white dark:focus-visible:ring-offset-[#0a0a0a]"
+              className="model-catalog-item pressable group flex min-w-0 items-start gap-5 rounded-lg p-2 text-left opacity-90 outline-none transition hover:opacity-100 focus-visible:ring-2 focus-visible:ring-neutral-950 focus-visible:ring-offset-4 dark:focus-visible:ring-white dark:focus-visible:ring-offset-[#0a0a0a]"
             >
               <ModelIcon presentation={presentation} />
               <span className="min-w-0 flex-1 pt-0.5">
@@ -863,6 +960,71 @@ function TextModelGallery({ models, pricingMode, displayPrice, onOpenModel }: {
   );
 }
 
+function MediaShowcase() {
+  return (
+    <section className="site-reveal border-t border-neutral-200 pt-9 dark:border-white/10" aria-labelledby="media-showcase-heading">
+      <div className="max-w-3xl">
+        <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-500">LingoFusion in action</p>
+        <h2 id="media-showcase-heading" className="mt-2 text-2xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50 sm:text-3xl">
+          Show what the platform can do
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">
+          These media slots are ready for your final product images and videos. Each caption explains the result the demo should highlight.
+        </p>
+      </div>
+
+      <div className="mt-6 grid gap-5 md:grid-cols-2">
+        {showcaseItems.map((item, index) => {
+          const PlaceholderIcon = item.kind === "video" ? Play : Image;
+          return (
+            <figure
+              key={item.title}
+              className="media-showcase-card group overflow-hidden rounded-lg border border-neutral-200 bg-white dark:border-white/10 dark:bg-[#141414]"
+              style={{ "--media-index": index } as CSSProperties}
+            >
+              <div className="media-showcase-frame relative aspect-video overflow-hidden border-b border-neutral-200 bg-neutral-100 dark:border-white/10 dark:bg-[#101010]">
+                {item.src ? (
+                  item.kind === "video" ? (
+                    <video className="h-full w-full object-cover" controls preload="metadata" src={item.src} />
+                  ) : (
+                    <img className="h-full w-full object-cover" src={item.src} alt={item.title} />
+                  )
+                ) : (
+                  <div
+                    role="img"
+                    aria-label={`${item.title} ${item.kind} placeholder`}
+                    className="media-placeholder grid h-full w-full place-items-center"
+                  >
+                    <div className="text-center">
+                      <span className="media-placeholder-icon mx-auto grid h-12 w-12 place-items-center rounded-full border border-neutral-300 bg-white text-neutral-700 shadow-sm dark:border-white/15 dark:bg-white/[0.06] dark:text-neutral-200">
+                        <PlaceholderIcon className="h-5 w-5" />
+                      </span>
+                      <p className="mt-3 text-sm font-semibold text-neutral-800 dark:text-neutral-200">
+                        Add {item.kind} here
+                      </p>
+                      <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">16:9 recommended</p>
+                    </div>
+                    {item.kind === "video" && <span className="media-scan-line" aria-hidden="true" />}
+                  </div>
+                )}
+              </div>
+              <figcaption className="p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="font-semibold text-neutral-950 dark:text-neutral-50">{item.title}</h3>
+                  <span className="shrink-0 rounded-full border border-neutral-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-500 dark:border-white/10 dark:text-neutral-400">
+                    {item.label}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">{item.description}</p>
+              </figcaption>
+            </figure>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function ModelIcon({
   presentation,
   size = "catalog",
@@ -874,7 +1036,7 @@ function ModelIcon({
 
   return (
     <span
-      className={`${sizeClass} shrink-0 overflow-hidden`}
+      className={`model-icon-motion ${sizeClass} shrink-0 overflow-hidden`}
       aria-hidden="true"
     >
       <img
@@ -905,7 +1067,7 @@ function ModelComparisonPage({ onOpenModel }: { onOpenModel: (model: string) => 
   return (
     <div className="max-w-6xl">
       <button type="button" onClick={() => window.history.length > 1 ? window.history.back() : onOpenModel("Models")} className="pressable inline-flex items-center gap-2 text-sm font-medium text-neutral-600 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white"><ArrowLeft className="h-4 w-4" /> Models</button>
-      <section className="mt-10 flex flex-col gap-5 border-b border-neutral-200 pb-8 dark:border-white/10 sm:flex-row sm:items-end sm:justify-between">
+      <section className="site-reveal mt-10 flex flex-col gap-5 border-b border-neutral-200 pb-8 dark:border-white/10 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-4xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50 sm:text-5xl">All models</h1>
           <p className="mt-3 max-w-2xl text-base leading-7 text-neutral-600 dark:text-neutral-300">Browse all available LingoFusion models and compare their capabilities.</p>
@@ -913,7 +1075,7 @@ function ModelComparisonPage({ onOpenModel }: { onOpenModel: (model: string) => 
         <a href="#compare-models" className="pressable inline-flex min-h-11 items-center justify-center rounded-full bg-neutral-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200">Compare models</a>
       </section>
 
-      <section className="mt-10" aria-labelledby="model-gallery-heading">
+      <section className="site-reveal mt-10" aria-labelledby="model-gallery-heading">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:gap-3">
           <h2 id="model-gallery-heading" className="text-lg font-semibold text-neutral-950 dark:text-neutral-50">Translation models</h2>
           <p className="text-sm text-neutral-600 dark:text-neutral-400">LingoFusion's text models for multilingual tasks at every scale.</p>
@@ -923,7 +1085,7 @@ function ModelComparisonPage({ onOpenModel }: { onOpenModel: (model: string) => 
         </div>
       </section>
 
-      <section id="compare-models" className="mt-12 scroll-mt-24 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#161616] sm:p-6" aria-labelledby="model-comparison-heading">
+      <section id="compare-models" className="site-reveal mt-12 scroll-mt-24 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#161616] sm:p-6" aria-labelledby="model-comparison-heading">
         <div className="flex flex-col gap-5 border-b border-neutral-200 pb-5 dark:border-white/10 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-500">API model comparison</p>
@@ -960,7 +1122,7 @@ function ModelGalleryItem({ model, onOpen }: { model: TextModel; onOpen: () => v
   const presentation = textModelPresentations[model.model];
 
   return (
-    <button type="button" onClick={onOpen} className="pressable group flex min-w-0 items-start gap-5 rounded-lg p-1 text-left opacity-90 outline-none transition hover:opacity-100 focus-visible:ring-2 focus-visible:ring-neutral-950 focus-visible:ring-offset-4 dark:focus-visible:ring-white dark:focus-visible:ring-offset-[#0a0a0a]">
+    <button type="button" onClick={onOpen} className="model-catalog-item pressable group flex min-w-0 items-start gap-5 rounded-lg p-2 text-left opacity-90 outline-none transition hover:opacity-100 focus-visible:ring-2 focus-visible:ring-neutral-950 focus-visible:ring-offset-4 dark:focus-visible:ring-white dark:focus-visible:ring-offset-[#0a0a0a]">
       <ModelIcon presentation={presentation} />
       <div className="min-w-0 flex-1 pt-0.5">
         <div className="flex flex-wrap items-center gap-2">
@@ -1124,7 +1286,7 @@ function ModelDetailPage({
     <div className="mx-auto max-w-6xl pb-20">
       <button type="button" onClick={onBack} className="pressable inline-flex items-center gap-2 text-sm font-medium text-neutral-600 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white"><ArrowLeft className="h-4 w-4" /> All models</button>
 
-      <header className="mt-8">
+      <header className="site-reveal mt-8">
         <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
           <div className="flex min-w-0 items-center gap-4">
             <ModelIcon presentation={presentation} size="detail" />
@@ -1153,7 +1315,7 @@ function ModelDetailPage({
         </div>
       </header>
 
-      <section className="mt-10 overflow-hidden rounded-lg border border-neutral-200 dark:border-white/10" aria-label="Model summary">
+      <section className="site-reveal mt-10 overflow-hidden rounded-lg border border-neutral-200 dark:border-white/10" aria-label="Model summary">
         <div className="grid grid-cols-2 divide-x divide-y divide-neutral-200 dark:divide-white/10 sm:grid-cols-3 lg:grid-cols-5 lg:divide-y-0">
           <div className="p-5 text-center"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Reasoning</p><div className="mt-3"><RatingMarks value={profile.reasoningLevel} icon={BrainCircuit} /></div><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">{profile.reasoning}</p></div>
           <div className="p-5 text-center"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Speed</p><div className="mt-3"><RatingMarks value={profile.speedLevel} icon={Zap} /></div><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">{profile.speed}</p></div>
@@ -1163,7 +1325,7 @@ function ModelDetailPage({
         </div>
       </section>
 
-      <section className="grid gap-8 border-b border-neutral-200 py-10 dark:border-white/10 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.6fr)]">
+      <section className="site-reveal grid gap-8 border-b border-neutral-200 py-10 dark:border-white/10 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.6fr)]">
         <p className="text-base leading-8 text-neutral-700 dark:text-neutral-300">{profile.description}</p>
         <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-1">
           <div className="flex items-center gap-3"><Layers3 className="h-5 w-5 text-neutral-500" /><div><dt className="text-neutral-500">Context window</dt><dd className="font-medium text-neutral-950 dark:text-white">{profile.contextWindow} tokens</dd></div></div>
@@ -1173,7 +1335,7 @@ function ModelDetailPage({
         </dl>
       </section>
 
-      <section className="grid gap-8 border-b border-neutral-200 py-12 dark:border-white/10 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-labelledby="model-pricing-heading">
+      <section className="site-reveal grid gap-8 border-b border-neutral-200 py-12 dark:border-white/10 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-labelledby="model-pricing-heading">
         <h2 id="model-pricing-heading" className="text-xl font-semibold text-neutral-950 dark:text-white">Pricing</h2>
         <div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -1208,7 +1370,7 @@ function ModelDetailPage({
         </div>
       </section>
 
-      <section className="grid gap-8 border-b border-neutral-200 py-12 dark:border-white/10 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-labelledby="capabilities-heading">
+      <section className="site-reveal grid gap-8 border-b border-neutral-200 py-12 dark:border-white/10 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-labelledby="capabilities-heading">
         <h2 id="capabilities-heading" className="text-xl font-semibold text-neutral-950 dark:text-white">Capabilities</h2>
         <div>
           <p className="max-w-3xl text-base leading-7 text-neutral-600 dark:text-neutral-300">{presentation.bestFor}</p>
@@ -1218,7 +1380,7 @@ function ModelDetailPage({
         </div>
       </section>
 
-      <section className="grid gap-8 border-b border-neutral-200 py-12 dark:border-white/10 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-labelledby="api-usage-heading">
+      <section className="site-reveal grid gap-8 border-b border-neutral-200 py-12 dark:border-white/10 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-labelledby="api-usage-heading">
         <h2 id="api-usage-heading" className="text-xl font-semibold text-neutral-950 dark:text-white">API usage</h2>
         <div>
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1232,7 +1394,7 @@ function ModelDetailPage({
         </div>
       </section>
 
-      <section className="grid gap-8 border-b border-neutral-200 py-12 dark:border-white/10 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-labelledby="guidance-heading">
+      <section className="site-reveal grid gap-8 border-b border-neutral-200 py-12 dark:border-white/10 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-labelledby="guidance-heading">
         <h2 id="guidance-heading" className="text-xl font-semibold text-neutral-950 dark:text-white">Usage guidance</h2>
         <div className="grid gap-8 md:grid-cols-2">
           <div>
@@ -1248,7 +1410,7 @@ function ModelDetailPage({
         </div>
       </section>
 
-      <section className="grid gap-8 py-12 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-labelledby="operations-heading">
+      <section className="site-reveal grid gap-8 py-12 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-labelledby="operations-heading">
         <h2 id="operations-heading" className="text-xl font-semibold text-neutral-950 dark:text-white">Operations</h2>
         <div className="grid gap-4 sm:grid-cols-3">
           <article className="rounded-lg border border-neutral-200 p-5 dark:border-white/10"><Activity className="h-5 w-5 text-neutral-500" /><h3 className="mt-4 font-semibold text-neutral-950 dark:text-white">Streaming</h3><p className="mt-2 text-sm leading-6 text-neutral-500">Receive text as it is generated for responsive interfaces and live translation workflows.</p></article>
@@ -1269,7 +1431,7 @@ function ModelComparisonCard({ model, pricingMode }: { model: TextModel; pricing
   }).format(value);
 
   return (
-    <article className={`rounded-lg border p-5 ${model.recommended ? "border-neutral-950 bg-neutral-50 dark:border-white/50 dark:bg-white/[0.05]" : "border-neutral-200 bg-white dark:border-white/10 dark:bg-[#111111]"}`}>
+    <article className={`comparison-card-motion rounded-lg border p-5 ${model.recommended ? "border-neutral-950 bg-neutral-50 dark:border-white/50 dark:bg-white/[0.05]" : "border-neutral-200 bg-white dark:border-white/10 dark:bg-[#111111]"}`}>
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-xl font-semibold text-neutral-950 dark:text-neutral-50">{model.model}</h3>
@@ -1298,7 +1460,7 @@ function SectionCalculator({
   children: ReactNode;
 }) {
   return (
-    <div className="surface-lift mb-4 rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-white/10 dark:bg-white/[0.03] sm:p-4">
+    <div className="calculator-motion surface-lift mb-4 rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-white/10 dark:bg-white/[0.03] sm:p-4">
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-sm font-semibold text-neutral-950 dark:text-neutral-50">{title}</h3>
         <div className="rounded-md border border-neutral-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-[#111111] sm:text-right">
@@ -1422,7 +1584,7 @@ function DocsPage({
 
   return (
     <div>
-      <section className="max-w-3xl">
+      <section className="site-reveal max-w-3xl">
         <p className="mb-4 text-sm font-medium text-neutral-600 dark:text-neutral-400">
           {isModel ? t("modelReference") : t("developerDocs")}
         </p>
@@ -1434,7 +1596,7 @@ function DocsPage({
           <button
             type="button"
             onClick={() => onNavigate("Pricing")}
-            className="inline-flex items-center gap-2 rounded-md bg-neutral-950 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+            className="pressable inline-flex items-center gap-2 rounded-md bg-neutral-950 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
           >
             {t("viewPricing")}
             <BadgeDollarSign className="h-4 w-4" />
@@ -1442,7 +1604,7 @@ function DocsPage({
           <button
             type="button"
             onClick={onCopy}
-            className="inline-flex items-center gap-2 rounded-md border border-neutral-300 bg-white px-4 py-2.5 text-sm font-medium text-neutral-950 hover:bg-neutral-50 dark:border-white/15 dark:bg-white/5 dark:text-neutral-100 dark:hover:bg-white/10"
+            className="pressable inline-flex items-center gap-2 rounded-md border border-neutral-300 bg-white px-4 py-2.5 text-sm font-medium text-neutral-950 hover:bg-neutral-50 dark:border-white/15 dark:bg-white/5 dark:text-neutral-100 dark:hover:bg-white/10"
           >
             {t("copyQuickstart")}
             <Copy className="h-4 w-4" />
@@ -1450,7 +1612,7 @@ function DocsPage({
         </div>
       </section>
 
-      <div className="mt-12 grid gap-4 lg:grid-cols-3">
+      <div className="site-reveal mt-12 grid gap-4 lg:grid-cols-3">
         <DocCard icon={Play} title={t("startFast")} tc={tc}>
           Generate a scoped key, pick a model, and send your first request from the
           dashboard or an SDK.
@@ -1463,7 +1625,7 @@ function DocsPage({
         </DocCard>
       </div>
 
-      <section className="mt-8 border-t border-neutral-200 pt-8 dark:border-white/10">
+      <section className="site-reveal mt-8 border-t border-neutral-200 pt-8 dark:border-white/10">
         <h2 className="text-2xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50">{t("relatedPages")}</h2>
         <div className="mt-4 flex flex-wrap gap-2">
           {sidebarSections
@@ -1475,7 +1637,7 @@ function DocsPage({
                 type="button"
                 key={item}
                 onClick={() => onNavigate(item)}
-                className="rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50 hover:text-neutral-950 dark:border-white/15 dark:bg-white/5 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-neutral-100"
+                className="pressable rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50 hover:text-neutral-950 dark:border-white/15 dark:bg-white/5 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-neutral-100"
               >
                 {tc(item)}
               </button>
@@ -1498,7 +1660,7 @@ function DocCard({
   children: ReactNode;
 }) {
   return (
-    <article className="rounded-lg border border-neutral-200 bg-white p-5 dark:border-white/10 dark:bg-[#161616]">
+    <article className="surface-lift rounded-lg border border-neutral-200 bg-white p-5 dark:border-white/10 dark:bg-[#161616]">
       <Icon className="mb-4 h-5 w-5 text-neutral-500 dark:text-neutral-500" />
       <h2 className="font-semibold text-neutral-950 dark:text-neutral-50">{title}</h2>
       <p className="mt-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">

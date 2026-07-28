@@ -59,7 +59,7 @@ export type PricingLabels = {
 
 export function PricingCard(props: PricingCardProps) {
   return (
-    <section className="scroll-mt-24 border-t border-neutral-200 pt-8 dark:border-white/10">
+    <section className="pricing-section-motion scroll-mt-24 border-t border-neutral-200 pt-8 dark:border-white/10">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50">{props.title}</h2>
@@ -96,7 +96,7 @@ function TextTable({ rows, labels }: { rows: DisplayTextModel[]; labels: Pricing
         </thead>
         <tbody className="divide-y divide-neutral-200 dark:divide-white/10">
           {rows.map((row) => (
-            <tr key={row.model} className="hover:bg-neutral-50 dark:hover:bg-white/[0.04]">
+            <tr key={row.model} className="pricing-row-motion hover:bg-neutral-50 dark:hover:bg-white/[0.04]">
               <td data-label={labels.model} className="px-4 py-3.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium text-neutral-950 dark:text-neutral-50">{row.model}</span>
@@ -129,7 +129,7 @@ function SimpleTable({ rows, labels }: { rows: DisplaySimpleModel[]; labels: Pri
         </thead>
         <tbody className="divide-y divide-neutral-200 dark:divide-white/10">
           {rows.map((row) => (
-            <tr key={row.model} className="hover:bg-neutral-50 dark:hover:bg-white/[0.04]">
+            <tr key={row.model} className="pricing-row-motion hover:bg-neutral-50 dark:hover:bg-white/[0.04]">
               <td data-label={labels.model} className="px-4 py-3.5 font-medium text-neutral-950 dark:text-neutral-50">{row.model}</td>
               <td data-label={labels.price} className="px-4 py-3.5 font-mono text-sm text-neutral-800 dark:text-neutral-300">{row.price}</td>
             </tr>
@@ -152,7 +152,7 @@ function ImageTable({ rows, labels }: { rows: DisplayImageModel[]; labels: Prici
         </thead>
         <tbody className="divide-y divide-neutral-200 dark:divide-white/10">
           {rows.map((row) => (
-            <tr key={row.size} className="hover:bg-neutral-50 dark:hover:bg-white/[0.04]">
+            <tr key={row.size} className="pricing-row-motion hover:bg-neutral-50 dark:hover:bg-white/[0.04]">
               <td data-label={labels.imageSize} className="px-4 py-3.5 font-medium text-neutral-950 dark:text-neutral-50">{row.size}</td>
               <td data-label={labels.price} className="px-4 py-3.5 font-mono text-sm text-neutral-800 dark:text-neutral-300">{row.price}</td>
             </tr>
