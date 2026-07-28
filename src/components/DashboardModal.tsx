@@ -16,6 +16,8 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { musicModels, textModelsByPricingMode } from "../data/pricing";
 import type { TextPricingMode } from "../data/pricing";
 import { browserApi, shouldUseBrowserApi } from "../data/browserApi";
+import { sdkExamples } from "../data/sdkExamples";
+import type { SdkLanguage } from "../data/sdkExamples";
 
 type DashboardModalProps = {
   tc: (text: string) => string;
@@ -159,51 +161,6 @@ const statusRows = [
   ["Documentation", "Operational", "28 ms", "100%"],
 ];
 
-const sdkExamples = {
-  curl: `curl http://localhost:8787/v1/translate \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
-  -H "Content-Type: application/json" \\
-  -H "Idempotency-Key: UNIQUE_VALUE" \\
-  -d '{
-    "model": "LingoFusion Pro",
-    "input": "Hello, how are you?",
-    "from_language": "English",
-    "to_language": "French",
-    "stream": false
-  }'`,
-  python: `import requests
-
-response = requests.post(
-    "http://localhost:8787/v1/translate",
-    headers={"Authorization": "Bearer YOUR_API_KEY"},
-    json={
-        "model": "LingoFusion Pro",
-        "input": "Hello, how are you?",
-        "from_language": "English",
-        "to_language": "French",
-        "stream": False,
-    },
-)
-print(response.json())`,
-  typescript: `const response = await fetch("/v1/translate", {
-  method: "POST",
-  headers: {
-    "Authorization": "Bearer YOUR_API_KEY",
-    "Content-Type": "application/json",
-    "Idempotency-Key": crypto.randomUUID?.() ?? String(Date.now()),
-  },
-  body: JSON.stringify({
-    model: "LingoFusion Pro",
-    input: "Hello, how are you?",
-    from_language: "English",
-    to_language: "French",
-    stream: false,
-  }),
-});
-
-console.log(await response.json());`,
-};
-
 function dollars(value: number) {
   return `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })}`;
 }
@@ -301,7 +258,10 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
   });
   const [projectFilter, setProjectFilter] = useState("All projects");
   const [statusFilter, setStatusFilter] = useState("All statuses");
-  const [sdkLanguage, setSdkLanguage] = useState<keyof typeof sdkExamples>("curl");
+  const [sdkLanguage, setSdkLanguage] = useState<SdkLanguage>(() => {
+    const storedLanguage = window.localStorage.getItem("lingofusion-sdk-language");
+    return storedLanguage && storedLanguage in sdkExamples ? storedLanguage as SdkLanguage : "curl";
+  });
   const [statusEmail, setStatusEmail] = useState("");
   const [tryKey, setTryKey] = useState("");
   const [playgroundPricingMode, setPlaygroundPricingMode] = useState<TextPricingMode>(() => {
@@ -331,6 +291,10 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
       document.body.style.overflow = previousOverflow;
     };
   }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("lingofusion-sdk-language", sdkLanguage);
+  }, [sdkLanguage]);
 
   const refresh = async () => {
     setLoading(true);
@@ -1018,7 +982,13 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                         Send `Idempotency-Key` to retry safely without duplicate processing or duplicate charging.
                       </InfoCard>
                     </div>
-                    <CodeBlock code={sdkExamples.curl} onCopy={() => copyText(sdkExamples.curl, tc("cURL copied"))} />
+                    <CodeBlock
+                      code={sdkExamples.curl.code}
+                      filename={sdkExamples.curl.filename}
+                      language={sdkExamples.curl.label}
+                      showLineNumbers
+                      onCopy={() => copyText(sdkExamples.curl.code, tc("cURL copied"))}
+                    />
                     <Table
                       headers={["Model", "Input / 1M", "Output / 1M"]}
                       rows={data.models.map((model) => [model.model, dollars(model.input), dollars(model.output)])}
@@ -1027,23 +997,42 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                 )}
 
                 {tab === "SDKs" && (
-                  <Panel title="SDKs and examples" description="Runnable HTTP examples are available now. Official package publishing would be a separate release step.">
-                    <Toolbar>
-                      <SelectInput label="Language" value={sdkLanguage} onChange={(value) => setSdkLanguage(value as keyof typeof sdkExamples)}>
-                        <option value="curl">cURL</option>
-                        <option value="python">Python</option>
-                        <option value="typescript">JavaScript/TypeScript</option>
-                      </SelectInput>
-                      <ActionButton onClick={() => copyText(sdkExamples[sdkLanguage], tc("Example copied"))}>
-                        <ClipboardCopy className="h-4 w-4" />
-                        {tc("Copy example")}
-                      </ActionButton>
-                    </Toolbar>
-                    <CodeBlock code={sdkExamples[sdkLanguage]} onCopy={() => copyText(sdkExamples[sdkLanguage], tc("Example copied"))} />
+                  <Panel title="SDKs and examples" description="Choose your programming language to see a clean, complete translation request.">
+                    <div
+                      role="group"
+                      aria-label={tc("Programming language")}
+                      className="flex gap-1 overflow-x-auto rounded-lg border border-neutral-200 bg-neutral-50 p-1 dark:border-white/10 dark:bg-white/[0.04]"
+                    >
+                      {(Object.entries(sdkExamples) as Array<[SdkLanguage, (typeof sdkExamples)[SdkLanguage]]>).map(([id, example]) => (
+                        <button
+                          key={id}
+                          type="button"
+                          aria-pressed={sdkLanguage === id}
+                          onClick={() => setSdkLanguage(id)}
+                          className={`pressable shrink-0 rounded-md px-3 py-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-950 focus-visible:ring-offset-2 dark:focus-visible:ring-white dark:focus-visible:ring-offset-[#0d0d0d] ${
+                            sdkLanguage === id
+                              ? "bg-neutral-950 text-white shadow-sm dark:bg-white dark:text-neutral-950"
+                              : "text-neutral-600 hover:bg-white hover:text-neutral-950 dark:text-neutral-400 dark:hover:bg-white/[0.08] dark:hover:text-neutral-100"
+                          }`}
+                        >
+                          {example.label}
+                        </button>
+                      ))}
+                    </div>
+                    <CodeBlock
+                      key={sdkLanguage}
+                      code={sdkExamples[sdkLanguage].code}
+                      filename={sdkExamples[sdkLanguage].filename}
+                      language={sdkExamples[sdkLanguage].label}
+                      showLineNumbers
+                      onCopy={() => copyText(sdkExamples[sdkLanguage].code, tc("Example copied"))}
+                    />
                     <div className="mt-5 rounded-lg border border-neutral-200 p-4 dark:border-white/10">
                       <h4 className="font-semibold text-neutral-950 dark:text-neutral-50">{tc("Want to spend fake balance?")}</h4>
                       <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-                        {tc("Use the Playground tab to run simulated API model calls. Those requests authenticate, bill, and log through the backend.")}
+                        {tc(browserMode
+                          ? "Use the Playground tab to run simulated API model calls in this browser."
+                          : "Use the Playground tab to run simulated API model calls. Those requests authenticate, bill, and log through the backend.")}
                       </p>
                     </div>
                   </Panel>
@@ -1278,23 +1267,55 @@ function Table({ headers, rows }: { headers: string[]; rows: Array<Array<string 
   );
 }
 
-function CodeBlock({ code, onCopy }: { code: string; onCopy: () => void }) {
+function CodeBlock({
+  code,
+  filename,
+  language,
+  showLineNumbers = false,
+  onCopy,
+}: {
+  code: string;
+  filename?: string;
+  language?: string;
+  showLineNumbers?: boolean;
+  onCopy: () => void;
+}) {
   const t = useDashboardText();
+  const lines = code.split("\n");
+
   return (
-    <div className="mt-5 overflow-hidden rounded-lg border border-neutral-200 dark:border-white/10">
-      <div className="flex items-center justify-between border-b border-neutral-200 bg-neutral-50 px-4 py-2 dark:border-white/10 dark:bg-white/5">
-        <span className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-500">{t("Example")}</span>
+    <div className="pricing-table-change mt-5 overflow-hidden rounded-lg border border-neutral-800 bg-neutral-950 shadow-sm dark:border-white/15">
+      <div className="flex min-h-11 items-center justify-between gap-3 border-b border-white/10 bg-neutral-900 px-3 sm:px-4">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="truncate font-mono text-xs text-neutral-300">{filename ?? t("Example")}</span>
+          {language && (
+            <span className="shrink-0 rounded border border-white/10 bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-neutral-400">
+              {language}
+            </span>
+          )}
+        </div>
         <button
           type="button"
           onClick={onCopy}
-          className="inline-flex items-center gap-1.5 rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50 dark:border-white/15 dark:bg-white/5 dark:text-neutral-300 dark:hover:bg-white/10"
+          className="pressable inline-flex shrink-0 items-center gap-1.5 rounded-md border border-white/15 bg-white/[0.06] px-2.5 py-1.5 text-xs font-medium text-neutral-200 hover:bg-white/[0.12]"
         >
           <ClipboardCopy className="h-3.5 w-3.5" />
           {t("Copy")}
         </button>
       </div>
-      <pre className="overflow-x-auto bg-white p-4 text-sm text-neutral-900 dark:bg-[#111111] dark:text-neutral-100">
-        <code>{code}</code>
+      <pre className="max-h-[34rem] overflow-auto bg-neutral-950 py-4 text-[13px] leading-6 text-neutral-100 sm:text-sm">
+        <code className="block min-w-max">
+          {showLineNumbers
+            ? lines.map((line, index) => (
+                <span key={`${index}-${line}`} className="grid grid-cols-[2.75rem_1fr] px-3 sm:grid-cols-[3.25rem_1fr] sm:px-4">
+                  <span aria-hidden="true" className="select-none border-r border-white/10 pr-3 text-right text-neutral-600">
+                    {index + 1}
+                  </span>
+                  <span className="pl-3 sm:pl-4">{line || " "}</span>
+                </span>
+              ))
+            : code}
+        </code>
       </pre>
     </div>
   );
