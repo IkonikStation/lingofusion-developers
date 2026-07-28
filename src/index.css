@@ -123,13 +123,7 @@ textarea {
 }
 
 .model-icon-motion {
-  box-shadow: 0 8px 20px rgba(23, 23, 23, 0.08);
-  transition: transform 340ms cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 340ms ease;
-}
-
-.dark .model-icon-motion {
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+  transition: transform 340ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .calculator-motion {
@@ -306,10 +300,8 @@ textarea {
   .model-catalog-item:hover .model-icon-motion,
   button:hover > .brand-mark-motion {
     transform: translateY(-2px) scale(1.035);
-    box-shadow: 0 14px 28px rgba(23, 23, 23, 0.14);
   }
 
-  .dark .model-catalog-item:hover .model-icon-motion,
   .dark button:hover > .brand-mark-motion {
     box-shadow: 0 16px 30px rgba(0, 0, 0, 0.38);
   }
