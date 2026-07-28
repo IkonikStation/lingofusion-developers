@@ -1,0 +1,578 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light dark;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: #ffffff;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  overflow-wrap: break-word;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body,
+button,
+input,
+select,
+textarea {
+  transition-property: color, background-color, border-color, box-shadow;
+  transition-duration: 180ms;
+  transition-timing-function: ease;
+}
+
+.page-enter {
+  animation: page-enter 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.section-enter {
+  animation: section-enter 600ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--section-index, 0) * 55ms);
+}
+
+.surface-lift {
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 220ms ease, box-shadow 220ms ease, background-color 180ms ease;
+}
+
+.pricing-table-change {
+  animation: pricing-table-change 220ms ease-out both;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .surface-lift:hover {
+    transform: translateY(-2px);
+    border-color: #a3a3a3;
+    box-shadow: 0 12px 30px rgba(23, 23, 23, 0.07);
+  }
+
+  .dark .surface-lift:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+  }
+}
+
+.pressable {
+  transition: transform 150ms ease, color 180ms ease, background-color 180ms ease,
+    border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.pressable:active {
+  transform: scale(0.97);
+}
+
+.click-feedback {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.click-feedback::after {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  z-index: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(0);
+  transition: transform 420ms ease-out, opacity 480ms ease-out;
+}
+
+.click-feedback:active::after {
+  opacity: 0.14;
+  transform: translate(-50%, -50%) scale(12);
+  transition-duration: 0ms;
+}
+
+.estimate-pop {
+  animation: estimate-pop 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.modal-backdrop {
+  animation: backdrop-in 180ms ease-out both;
+}
+
+.modal-panel {
+  animation: modal-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.toast-enter {
+  animation: toast-in 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.subscriptions-page {
+  background-image: linear-gradient(180deg, rgba(221, 237, 255, 0.56) 0, rgba(248, 251, 255, 0) 28rem);
+}
+
+.dark .subscriptions-page {
+  background-image: linear-gradient(180deg, rgba(37, 74, 119, 0.22) 0, rgba(9, 13, 22, 0) 30rem);
+}
+
+.subscription-scroll-progress {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 70;
+  height: 3px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.subscription-scroll-progress span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #3679cc;
+  box-shadow: 0 0 12px rgba(54, 121, 204, 0.45);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 90ms linear;
+}
+
+.dark .subscription-scroll-progress span {
+  background: #8ec1ff;
+}
+
+.subscription-kicker,
+.subscription-title,
+.subscription-subtitle {
+  animation: subscription-rise 650ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.subscription-title {
+  animation-delay: 70ms;
+}
+
+.subscription-subtitle {
+  animation-delay: 140ms;
+}
+
+.subscription-plan-card {
+  animation: subscription-card-in 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 220ms ease, box-shadow 220ms ease;
+}
+
+.subscription-card-free {
+  animation-delay: 100ms;
+}
+
+.subscription-card-pro {
+  animation-delay: 170ms;
+}
+
+.subscription-card-ultra {
+  animation-delay: 240ms;
+}
+
+.subscription-card-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgba(70, 135, 218, 0.28), 0 0 34px rgba(67, 134, 220, 0.1);
+  animation: subscription-glow 3.6s ease-in-out infinite;
+}
+
+.scroll-reveal-ready {
+  opacity: 0;
+  transform: translateY(24px);
+}
+
+.scroll-reveal-ready.scroll-reveal-visible {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 700ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.subscription-value-change {
+  animation: subscription-value-change 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.subscription-segment {
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.subscription-segment-active {
+  animation: subscription-segment-select 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.subscription-info-tile,
+.quality-card {
+  transition: transform 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.subscription-faq-answer {
+  animation: subscription-faq-open 220ms ease-out both;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .subscription-plan-card:hover,
+  .subscription-info-tile:hover,
+  .quality-card:hover {
+    transform: translateY(-3px);
+    border-color: #9fb5d0;
+    box-shadow: 0 18px 45px rgba(35, 63, 98, 0.11);
+  }
+
+  .dark .subscription-plan-card:hover,
+  .dark .subscription-info-tile:hover,
+  .dark .quality-card:hover {
+    border-color: rgba(142, 193, 255, 0.32);
+    box-shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
+  }
+}
+
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes section-enter {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes estimate-pop {
+  0% { opacity: 0.55; transform: translateY(3px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pricing-table-change {
+  from { opacity: 0.72; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes subscription-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes subscription-card-in {
+  from { opacity: 0; transform: translateY(20px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes subscription-value-change {
+  from { opacity: 0.35; filter: blur(2px); transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes subscription-segment-select {
+  0% { transform: scale(0.97); }
+  70% { transform: scale(1.015); }
+  100% { transform: scale(1); }
+}
+
+@keyframes subscription-glow {
+  0%, 100% { opacity: 0.65; }
+  50% { opacity: 1; }
+}
+
+@keyframes subscription-faq-open {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 639px) {
+  body {
+    min-width: 0;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  .section-enter,
+  .page-enter,
+  .modal-panel,
+  .modal-backdrop {
+    animation: none;
+  }
+
+  .subscription-plan-card {
+    min-height: 0;
+  }
+
+  .subscription-plan-card ul {
+    min-height: 0;
+  }
+
+  .mobile-record-table,
+  .mobile-record-table tbody,
+  .mobile-record-table tr,
+  .mobile-record-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .mobile-record-table {
+    min-width: 0 !important;
+  }
+
+  .mobile-record-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .mobile-record-table tbody {
+    display: grid;
+    gap: 0;
+  }
+
+  .mobile-record-table tbody tr {
+    padding: 14px 16px;
+  }
+
+  .mobile-record-table tbody tr + tr {
+    border-top: 1px solid #e5e5e5;
+  }
+
+  .dark .mobile-record-table tbody tr + tr {
+    border-top-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .mobile-record-table td {
+    display: grid;
+    grid-template-columns: minmax(88px, 0.8fr) minmax(0, 1.2fr);
+    gap: 12px;
+    align-items: start;
+    padding: 5px 0 !important;
+    overflow-wrap: anywhere;
+    text-align: right;
+  }
+
+  .mobile-record-table td::before {
+    content: attr(data-label);
+    color: #737373;
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    line-height: 1.4;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  .mobile-record-table td > * {
+    justify-self: end;
+  }
+
+  button,
+  a,
+  input,
+  select {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-reveal-ready,
+  .scroll-reveal-ready.scroll-reveal-visible {
+    opacity: 1;
+    transform: none;
+  }
+
+  .subscription-scroll-progress span {
+    transition: none;
+  }
+}
+
+@keyframes mobile-sheet-in {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.dark body {
+  background: #0a0a0a;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid rgba(28, 25, 23, 0.82);
+  outline-offset: 3px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #ffffff;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d4d4d4;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a3a3a3;
+}
+
+.sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d4 transparent;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #3f3f3f;
+  border-color: #0a0a0a;
+}
+
+.dark .sidebar-scroll {
+  scrollbar-color: #3f3f3f transparent;
+}
+
+.clean-select {
+  background-image: none;
+}
+
+.clean-select option {
+  background: #ffffff;
+  color: #171717;
+}
+
+.dark .clean-select option {
+  background: #111111;
+  color: #f5f5f5;
+}
+
+.clean-range {
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.clean-range:focus {
+  outline: none;
+}
+
+.clean-range::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: #d4d4d4;
+}
+
+.clean-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  background: #171717;
+  box-shadow: 0 1px 3px rgba(23, 23, 23, 0.2);
+}
+
+.clean-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px rgba(23, 23, 23, 0.16);
+}
+
+.clean-range::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: #d4d4d4;
+}
+
+.clean-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  background: #171717;
+  box-shadow: 0 1px 3px rgba(23, 23, 23, 0.2);
+}
+
+.dark .clean-range::-webkit-slider-runnable-track {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.dark .clean-range::-webkit-slider-thumb {
+  border-color: #111111;
+  background: #f5f5f4;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
+.dark .clean-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px rgba(245, 245, 244, 0.18);
+}
+
+.dark .clean-range::-moz-range-track {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.dark .clean-range::-moz-range-thumb {
+  border-color: #111111;
+  background: #f5f5f4;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
