@@ -414,6 +414,7 @@ export default function App() {
                 </p>
                 <nav className="space-y-2 text-sm">
                   {[
+                    ["product-demos", "Product demos"],
                     ["text-models", t("textModels")],
                     ["tts-models", t("ttsModels")],
                     ["transcription-models", t("transcriptionModels")],
@@ -634,10 +635,17 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
           >
             {t("comparePricing")}
           </a>
+          <a
+            href="#product-demos"
+            className="pressable inline-flex w-full items-center justify-center rounded-md border border-neutral-300 bg-white px-4 py-2.5 text-sm font-medium text-neutral-950 hover:bg-neutral-50 dark:border-white/15 dark:bg-white/5 dark:text-neutral-100 dark:hover:bg-white/10 sm:w-auto"
+          >
+            View product demos
+          </a>
         </div>
       </section>
 
       <div className="mt-8 space-y-9 sm:mt-12 sm:space-y-12">
+        <MediaShowcase />
         <div id="text-models" className="site-reveal section-enter [--section-index:1]">
           <TextModelGallery
             models={visibleTextModels}
@@ -708,7 +716,6 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
             headerNote={textPricingDescription}
           />
         </div>
-        <MediaShowcase />
         <div id="tts-models" className="site-reveal section-enter [--section-index:2]">
           <SectionCalculator title={t("ttsCalculator")} estimateLabel={t("estimate")} estimate={ttsEstimate === null ? "TBD" : displayCurrency(ttsEstimate, true)}>
             <SelectField label={t("model")} value={selectedTtsModel} onChange={setSelectedTtsModel}>
@@ -962,7 +969,7 @@ function TextModelGallery({ models, pricingMode, displayPrice, onOpenModel }: {
 
 function MediaShowcase() {
   return (
-    <section className="site-reveal border-t border-neutral-200 pt-9 dark:border-white/10" aria-labelledby="media-showcase-heading">
+    <section id="product-demos" className="site-reveal scroll-mt-24 border-y border-neutral-200 py-9 dark:border-white/10" aria-labelledby="media-showcase-heading">
       <div className="max-w-3xl">
         <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-500">LingoFusion in action</p>
         <h2 id="media-showcase-heading" className="mt-2 text-2xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50 sm:text-3xl">
@@ -995,14 +1002,19 @@ function MediaShowcase() {
                     aria-label={`${item.title} ${item.kind} placeholder`}
                     className="media-placeholder grid h-full w-full place-items-center"
                   >
+                    <span className="media-placeholder-number">
+                      Media placeholder {String(index + 1).padStart(2, "0")}
+                    </span>
                     <div className="text-center">
-                      <span className="media-placeholder-icon mx-auto grid h-12 w-12 place-items-center rounded-full border border-neutral-300 bg-white text-neutral-700 shadow-sm dark:border-white/15 dark:bg-white/[0.06] dark:text-neutral-200">
-                        <PlaceholderIcon className="h-5 w-5" />
+                      <span className="media-placeholder-icon mx-auto grid h-14 w-14 place-items-center rounded-lg border border-neutral-400 bg-white text-neutral-800 shadow-sm dark:border-white/25 dark:bg-[#191919] dark:text-neutral-100">
+                        <PlaceholderIcon className="h-6 w-6" />
                       </span>
-                      <p className="mt-3 text-sm font-semibold text-neutral-800 dark:text-neutral-200">
-                        Add {item.kind} here
+                      <p className="mt-3 text-base font-semibold text-neutral-950 dark:text-neutral-100">
+                        Replace with {item.kind}
                       </p>
-                      <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">16:9 recommended</p>
+                      <p className="mt-1 text-xs font-medium uppercase tracking-wide text-neutral-600 dark:text-neutral-400">
+                        16:9 · JPG, PNG, WebP or MP4
+                      </p>
                     </div>
                     {item.kind === "video" && <span className="media-scan-line" aria-hidden="true" />}
                   </div>
