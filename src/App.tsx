@@ -878,7 +878,7 @@ function ModelIcon({
       aria-hidden="true"
     >
       <img
-        src={presentation?.image ?? "/assets/models/lingofusion.png"}
+        src={`${import.meta.env.BASE_URL}${(presentation?.image ?? "/assets/models/lingofusion.png").replace(/^\/+/, "")}`}
         alt=""
         className="h-full w-full object-cover transition-transform duration-300"
         style={{ transform: `scale(${presentation?.imageScale ?? 1})` }}

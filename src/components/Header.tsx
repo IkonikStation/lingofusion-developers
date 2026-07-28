@@ -88,7 +88,7 @@ export function Header({
         >
           <span className="block h-10 w-10 shrink-0 overflow-hidden rounded-[10px] bg-[#070b26] sm:h-11 sm:w-11 sm:rounded-[11px]">
             <img
-              src="/assets/lingofusion-logo-square.png"
+              src={`${import.meta.env.BASE_URL}assets/lingofusion-logo-square.png`}
               alt="LingoFusion logo"
               width="44"
               height="44"
