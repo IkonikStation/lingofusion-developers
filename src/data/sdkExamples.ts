@@ -2,6 +2,7 @@ export const sdkExamples = {
   curl: {
     label: "cURL",
     filename: "request.sh",
+    syntax: "bash",
     code: `curl https://api.lingofusion.ai/v1/translate \\
   --request POST \\
   --header "Authorization: Bearer YOUR_API_KEY" \\
@@ -19,6 +20,7 @@ export const sdkExamples = {
   javascript: {
     label: "JavaScript",
     filename: "translate.mjs",
+    syntax: "javascript",
     code: `const response = await fetch(
   "https://api.lingofusion.ai/v1/translate",
   {
@@ -48,6 +50,7 @@ console.log(await response.json());`,
   typescript: {
     label: "TypeScript",
     filename: "translate.ts",
+    syntax: "typescript",
     code: `type TranslationResponse = {
   id: string;
   model: string;
@@ -90,6 +93,7 @@ console.log(result.output_text, result.usage.cost_usd);`,
   python: {
     label: "Python",
     filename: "translate.py",
+    syntax: "python",
     code: `import os
 import uuid
 import requests
@@ -119,6 +123,7 @@ print(f"Cost: \${result['usage']['cost_usd']}")`,
   go: {
     label: "Go",
     filename: "main.go",
+    syntax: "go",
     code: `package main
 
 import (
@@ -161,6 +166,7 @@ func main() {
   java: {
     label: "Java",
     filename: "Translate.java",
+    syntax: "java",
     code: `import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -197,6 +203,7 @@ public class Translate {
   csharp: {
     label: "C#",
     filename: "Program.cs",
+    syntax: "csharp",
     code: `using System.Net.Http.Headers;
 using System.Net.Http.Json;
 
@@ -224,6 +231,7 @@ Console.WriteLine(await response.Content.ReadAsStringAsync());`,
   php: {
     label: "PHP",
     filename: "translate.php",
+    syntax: "php",
     code: `<?php
 
 $payload = json_encode([
@@ -254,6 +262,7 @@ echo $response;`,
   ruby: {
     label: "Ruby",
     filename: "translate.rb",
+    syntax: "ruby",
     code: `require "json"
 require "net/http"
 
@@ -279,6 +288,7 @@ puts JSON.pretty_generate(JSON.parse(response.body))`,
   swift: {
     label: "Swift",
     filename: "Translate.swift",
+    syntax: "swift",
     code: `import Foundation
 
 let url = URL(string: "https://api.lingofusion.ai/v1/translate")!

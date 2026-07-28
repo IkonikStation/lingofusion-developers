@@ -18,6 +18,7 @@ import type { TextPricingMode } from "../data/pricing";
 import { browserApi, shouldUseBrowserApi } from "../data/browserApi";
 import { sdkExamples } from "../data/sdkExamples";
 import type { SdkLanguage } from "../data/sdkExamples";
+import { highlightCode } from "../lib/highlightCode";
 
 type DashboardModalProps = {
   tc: (text: string) => string;
@@ -662,7 +663,14 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                             {tc("Create key")}
                           </button>
                         </div>
-                        {tryResult && <CodeBlock code={tryResult} onCopy={() => copyText(tryResult, tc("Result copied"))} />}
+                        {tryResult && (
+                          <CodeBlock
+                            code={tryResult}
+                            language="JSON"
+                            syntax="json"
+                            onCopy={() => copyText(tryResult, tc("Result copied"))}
+                          />
+                        )}
                       </div>
 
                       <div className="space-y-3">
@@ -986,6 +994,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                       code={sdkExamples.curl.code}
                       filename={sdkExamples.curl.filename}
                       language={sdkExamples.curl.label}
+                      syntax={sdkExamples.curl.syntax}
                       showLineNumbers
                       onCopy={() => copyText(sdkExamples.curl.code, tc("cURL copied"))}
                     />
@@ -1024,6 +1033,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                       code={sdkExamples[sdkLanguage].code}
                       filename={sdkExamples[sdkLanguage].filename}
                       language={sdkExamples[sdkLanguage].label}
+                      syntax={sdkExamples[sdkLanguage].syntax}
                       showLineNumbers
                       onCopy={() => copyText(sdkExamples[sdkLanguage].code, tc("Example copied"))}
                     />
@@ -1271,17 +1281,20 @@ function CodeBlock({
   code,
   filename,
   language,
+  syntax,
   showLineNumbers = false,
   onCopy,
 }: {
   code: string;
   filename?: string;
   language?: string;
+  syntax?: string;
   showLineNumbers?: boolean;
   onCopy: () => void;
 }) {
   const t = useDashboardText();
   const lines = code.split("\n");
+  const highlightedCode = useMemo(() => highlightCode(code, syntax), [code, syntax]);
 
   return (
     <div className="pricing-table-change mt-5 overflow-hidden rounded-lg border border-neutral-800 bg-neutral-950 shadow-sm dark:border-white/15">
@@ -1303,20 +1316,23 @@ function CodeBlock({
           {t("Copy")}
         </button>
       </div>
-      <pre className="max-h-[34rem] overflow-auto bg-neutral-950 py-4 text-[13px] leading-6 text-neutral-100 sm:text-sm">
-        <code className="block min-w-max">
-          {showLineNumbers
-            ? lines.map((line, index) => (
-                <span key={`${index}-${line}`} className="grid grid-cols-[2.75rem_1fr] px-3 sm:grid-cols-[3.25rem_1fr] sm:px-4">
-                  <span aria-hidden="true" className="select-none border-r border-white/10 pr-3 text-right text-neutral-600">
-                    {index + 1}
-                  </span>
-                  <span className="pl-3 sm:pl-4">{line || " "}</span>
-                </span>
-              ))
-            : code}
-        </code>
-      </pre>
+      <div className="flex overflow-hidden bg-neutral-950 text-[13px] leading-6 sm:text-sm">
+        {showLineNumbers && (
+          <div aria-hidden="true" className="select-none overflow-hidden border-r border-white/10 py-4 pl-3 pr-3 text-right text-neutral-600 sm:pl-4">
+            {lines.map((_, index) => (
+              <span key={index} className="block">
+                {index + 1}
+              </span>
+            ))}
+          </div>
+        )}
+        <pre className="min-w-0 flex-1 overflow-auto py-4 pl-3 pr-4 sm:pl-4">
+          <code
+            className="syntax-code block min-w-max text-neutral-100"
+            dangerouslySetInnerHTML={{ __html: highlightedCode }}
+          />
+        </pre>
+      </div>
     </div>
   );
 }

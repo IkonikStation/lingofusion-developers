@@ -110,6 +110,55 @@ textarea {
   animation: estimate-pop 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.syntax-code .hljs-comment,
+.syntax-code .hljs-quote {
+  color: #7d8590;
+  font-style: italic;
+}
+
+.syntax-code .hljs-keyword,
+.syntax-code .hljs-selector-tag,
+.syntax-code .hljs-type {
+  color: #d2a8ff;
+}
+
+.syntax-code .hljs-string,
+.syntax-code .hljs-regexp,
+.syntax-code .hljs-addition {
+  color: #a5d6a7;
+}
+
+.syntax-code .hljs-number,
+.syntax-code .hljs-literal,
+.syntax-code .hljs-symbol,
+.syntax-code .hljs-bullet {
+  color: #ffb86b;
+}
+
+.syntax-code .hljs-title,
+.syntax-code .hljs-title.function_,
+.syntax-code .hljs-section {
+  color: #79c0ff;
+}
+
+.syntax-code .hljs-variable,
+.syntax-code .hljs-template-variable,
+.syntax-code .hljs-params,
+.syntax-code .hljs-attr,
+.syntax-code .hljs-attribute {
+  color: #ffa7c4;
+}
+
+.syntax-code .hljs-built_in,
+.syntax-code .hljs-meta,
+.syntax-code .hljs-property {
+  color: #7ee787;
+}
+
+.syntax-code .hljs-deletion {
+  color: #ff7b72;
+}
+
 .modal-backdrop {
   animation: backdrop-in 180ms ease-out both;
 }
