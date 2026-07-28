@@ -1006,8 +1006,8 @@ function MediaShowcase() {
                       Media placeholder {String(index + 1).padStart(2, "0")}
                     </span>
                     <div className="text-center">
-                      <span className="media-placeholder-icon mx-auto grid h-14 w-14 place-items-center rounded-lg border border-neutral-400 bg-white text-neutral-800 shadow-sm dark:border-white/25 dark:bg-[#191919] dark:text-neutral-100">
-                        <PlaceholderIcon className="h-6 w-6" />
+                      <span className="media-placeholder-icon mx-auto grid h-10 w-10 place-items-center text-neutral-700 dark:text-neutral-300">
+                        <PlaceholderIcon className="h-8 w-8 stroke-[1.5]" />
                       </span>
                       <p className="mt-3 text-base font-semibold text-neutral-950 dark:text-neutral-100">
                         Replace with {item.kind}
