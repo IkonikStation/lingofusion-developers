@@ -1045,6 +1045,8 @@ function ModelIcon({
   size?: "catalog" | "detail";
 }) {
   const sizeClass = size === "detail" ? "h-24 w-24 rounded-2xl" : "h-16 w-16 rounded-2xl";
+  const imageScale = presentation?.imageScale ?? 1;
+  const resolvedImageScale = size === "detail" && imageScale > 1 ? imageScale - 0.04 : imageScale;
 
   return (
     <span
@@ -1055,7 +1057,7 @@ function ModelIcon({
         src={`${import.meta.env.BASE_URL}${(presentation?.image ?? "/assets/models/lingofusion.png").replace(/^\/+/, "")}`}
         alt=""
         className="h-full w-full object-cover transition-transform duration-300"
-        style={{ transform: `scale(${presentation?.imageScale ?? 1})` }}
+        style={{ transform: `scale(${resolvedImageScale})` }}
       />
     </span>
   );
