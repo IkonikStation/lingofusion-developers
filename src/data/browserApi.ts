@@ -361,8 +361,9 @@ function runMusic(state: BrowserState, options?: RequestInit) {
 }
 
 export function shouldUseBrowserApi() {
-  return window.location.hostname.endsWith(".github.io")
-    || new URLSearchParams(window.location.search).has("browser-api");
+  return !import.meta.env.VITE_LINGOFUSION_API_URL
+    && (window.location.hostname.endsWith(".github.io")
+      || new URLSearchParams(window.location.search).has("browser-api"));
 }
 
 export async function browserApi<T>(path: string, options?: RequestInit): Promise<T> {
