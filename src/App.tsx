@@ -1,1685 +1,5 @@
-import {
-  Activity,
-  ArrowLeft,
-  BadgeDollarSign,
-  BrainCircuit,
-  CheckCircle2,
-  Clock3,
-  Copy,
-  FileText,
-  Gauge,
-  Globe2,
-  Image,
-  Layers3,
-  Mic,
-  Music,
-  Play,
-  Type,
-  Video,
-  Zap,
-} from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
-import { DashboardModal } from "./components/DashboardModal";
-import { Header } from "./components/Header";
-import { PricingCard } from "./components/PricingCard";
-import { Sidebar } from "./components/Sidebar";
-import { SubscriptionPage } from "./components/SubscriptionPage";
-import { createContentTranslator, createTranslator, getLanguage } from "./data/i18n";
-import type { LanguageCode, TranslationKey } from "./data/i18n";
-import { currencies, defaultCurrencyRates, formatCurrencyAmount } from "./data/currency";
-import type { CurrencyCode } from "./data/currency";
-import {
-  dubbingModels,
-  imageModels,
-  latestModels,
-  modelDetails,
-  musicModels,
-  pageSummaries,
-  pdfModels,
-  sidebarSections,
-  textModels,
-  textModelsByPricingMode,
-  textModelPresentations,
-  transcriptionModels,
-  ttsModels,
-} from "./data/pricing";
-import type { TextModel, TextModelPresentation, TextPricingMode } from "./data/pricing";
-import type { ProVariantKey } from "./data/subscriptions";
-
-const billingNotes = [
-  {
-    icon: FileText,
-    key: "billingText",
-  },
-  {
-    icon: Mic,
-    key: "billingTts",
-  },
-  {
-    icon: FileText,
-    key: "billingTranscription",
-  },
-  {
-    icon: Video,
-    key: "billingDubbing",
-  },
-  {
-    icon: Music,
-    key: "billingMusic",
-  },
-  {
-    icon: Image,
-    key: "billingImage",
-  },
-  {
-    icon: FileText,
-    key: "billingPdf",
-  },
-] as const;
-
-const showcaseItems = [
-  {
-    kind: "image",
-    title: "Document translation",
-    label: "Before and after",
-    description: "Demonstrates LingoFusion translating a full document while preserving headings, lists, terminology, and tone.",
-    src: "",
-  },
-  {
-    kind: "video",
-    title: "Live conversation",
-    label: "Real-time demo",
-    description: "Demonstrates LingoFusion Live Translate interpreting a conversation with low latency and natural turn-taking.",
-    src: "",
-  },
-  {
-    kind: "video",
-    title: "Video dubbing",
-    label: "Dubbing demo",
-    description: "Demonstrates translated speech aligned to the original video with consistent voices and timing.",
-    src: "",
-  },
-  {
-    kind: "image",
-    title: "PDF localization",
-    label: "Layout preservation",
-    description: "Demonstrates extracting and translating PDF content without losing the document's visual structure.",
-    src: "",
-  },
-  {
-    kind: "image",
-    title: "Image translation",
-    label: "Visual text replacement",
-    description: "Demonstrates detecting text inside an image, translating it, and placing the result back into the design.",
-    src: "",
-  },
-  {
-    kind: "video",
-    title: "Aurora music generation",
-    label: "Prompt to music",
-    description: "Demonstrates Aurora turning a written creative direction into a complete, production-ready music sample.",
-    src: "",
-  },
-] as const;
-
-const searchItems = Array.from(
-  new Set([
-    "API Prices",
-    "Subscription Prices",
-    ...Object.keys(pageSummaries),
-    ...latestModels,
-    ...textModels.map((model) => model.model),
-    ...ttsModels.map((model) => model.model),
-    ...transcriptionModels.map((model) => model.model),
-    ...dubbingModels.map((model) => model.model),
-    ...musicModels.map((model) => model.model),
-    ...imageModels.map((model) => model.size),
-    ...pdfModels.map((model) => model.model),
-  ]),
-);
-
-function clampNumber(value: number, min: number, max: number) {
-  if (!Number.isFinite(value)) {
-    return min;
-  }
-
-  return Math.min(max, Math.max(min, value));
-}
-
-function clampMinuteNotation(value: number, min: number, max: number) {
-  const clamped = clampNumber(value, min, max);
-  const wholeMinutes = Math.trunc(clamped);
-  const seconds = Math.min(59, Math.round((clamped - wholeMinutes) * 100));
-
-  return Number((wholeMinutes + seconds / 100).toFixed(2));
-}
-
-function minuteNotationToMinutes(value: number) {
-  const wholeMinutes = Math.trunc(value);
-  const seconds = Math.round((value - wholeMinutes) * 100);
-
-  return wholeMinutes + seconds / 60;
-}
-
-function modelSlug(modelName: string) {
-  return modelName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-}
-
-const appBasePath = import.meta.env.BASE_URL.replace(/\/$/, "");
-
-function stripBasePath(pathname: string) {
-  if (!appBasePath || !pathname.startsWith(appBasePath)) return pathname;
-  return pathname.slice(appBasePath.length) || "/";
-}
-
-function withBasePath(pathname: string) {
-  return `${appBasePath}${pathname}`;
-}
-
-function modelNameFromPath(pathname: string) {
-  const slug = stripBasePath(pathname).match(/^\/models\/([^/]+)\/?$/)?.[1];
-  return slug ? textModels.find((model) => modelSlug(model.model) === slug)?.model : undefined;
-}
-
-function pageFromPath(pathname: string) {
-  const appPath = stripBasePath(pathname);
-  if (appPath === "/subscriptions") return "Subscription Prices";
-  if (appPath === "/models" || appPath === "/models/") return "Models";
-  return modelNameFromPath(pathname) ?? "Pricing";
-}
-
-export default function App() {
-  const [activePage, setActivePage] = useState(() => pageFromPath(window.location.pathname));
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-  const [language, setLanguage] = useState<LanguageCode>("en");
-  const [dashboardOpen, setDashboardOpen] = useState(false);
-  const [proVariantKey, setProVariantKey] = useState<ProVariantKey>(() =>
-    window.localStorage.getItem("lingofusion-pro-variant") === "1m" ? "1m" : "500k",
-  );
-  const [toast, setToast] = useState<string | null>(null);
-  const scrollProgressRef = useRef<HTMLSpanElement>(null);
-  const t = useMemo(() => createTranslator(language), [language]);
-  const tc = useMemo(() => createContentTranslator(language), [language]);
-  const activeLanguage = getLanguage(language);
-  const isSubscriptionPage = activePage === "Subscription Prices";
-
-  const navigate = (page: string) => {
-    const nextPage = page === "API Prices" ? "Pricing" : page;
-    const nextPath = nextPage === "Subscription Prices"
-      ? "/subscriptions"
-      : nextPage === "Models"
-        ? "/models"
-        : textModels.some((model) => model.model === nextPage)
-          ? `/models/${modelSlug(nextPage)}`
-          : "/";
-    const deployedPath = withBasePath(nextPath);
-    if (window.location.pathname !== deployedPath) window.history.pushState({}, "", deployedPath);
-    setActivePage(nextPage);
-    setMobileOpen(false);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const notify = (message: string) => {
-    setToast(message);
-    window.setTimeout(() => setToast(null), 2200);
-  };
-  const selectProVariant = (variant: ProVariantKey) => {
-    setProVariantKey(variant);
-    window.localStorage.setItem("lingofusion-pro-variant", variant);
-  };
-
-  const copySnippet = async () => {
-    try {
-      await navigator.clipboard.writeText(
-        "curl https://api.lingofusion.dev/v1/responses -H 'Authorization: Bearer $LINGOFUSION_API_KEY'",
-      );
-      notify(`${t("copyQuickstart")} copied`);
-    } catch {
-      notify("Clipboard permission was blocked");
-    }
-  };
-
-  useEffect(() => {
-    document.documentElement.classList.toggle("dark", theme === "dark");
-    document.documentElement.style.colorScheme = theme;
-    document.body.style.background = theme === "dark" ? "#0a0a0a" : "#ffffff";
-  }, [theme]);
-
-  useEffect(() => {
-    document.documentElement.lang = language;
-    document.documentElement.dir = activeLanguage.dir;
-  }, [activeLanguage.dir, language]);
-
-  useEffect(() => {
-    const handlePopState = () => {
-      setActivePage(pageFromPath(window.location.pathname));
-      setMobileOpen(false);
-    };
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
-
-  useEffect(() => {
-    if (isSubscriptionPage) return;
-    document.title = activePage === "Pricing" ? "API Prices | LingoFusion Developers" : `${activePage} | LingoFusion Developers`;
-    const description = activePage === "Pricing"
-      ? "LingoFusion API pricing for text, speech, transcription, dubbing, image, PDF, and music models."
-      : pageSummaries[activePage] ?? pageSummaries.Overview;
-    let meta = document.querySelector<HTMLMetaElement>('meta[name="description"]');
-    if (!meta) {
-      meta = document.createElement("meta");
-      meta.name = "description";
-      document.head.append(meta);
-    }
-    meta.content = description;
-    let canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
-    if (!canonical) {
-      canonical = document.createElement("link");
-      canonical.rel = "canonical";
-      document.head.append(canonical);
-    }
-    canonical.href = `${window.location.origin}${window.location.pathname}`;
-  }, [activePage, isSubscriptionPage]);
-
-  useEffect(() => {
-    if (isSubscriptionPage) return;
-    let frame = 0;
-
-    const updateProgress = () => {
-      frame = 0;
-      const scrollableHeight = document.documentElement.scrollHeight - window.innerHeight;
-      const progress = scrollableHeight > 0 ? Math.min(Math.max(window.scrollY / scrollableHeight, 0), 1) : 0;
-      if (scrollProgressRef.current) {
-        scrollProgressRef.current.style.transform = `scaleX(${progress})`;
-      }
-    };
-    const handleScroll = () => {
-      if (!frame) frame = window.requestAnimationFrame(updateProgress);
-    };
-
-    updateProgress();
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    window.addEventListener("resize", handleScroll);
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-      window.removeEventListener("resize", handleScroll);
-      if (frame) window.cancelAnimationFrame(frame);
-    };
-  }, [activePage, isSubscriptionPage]);
-
-  useEffect(() => {
-    if (isSubscriptionPage) return;
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const elements = Array.from(document.querySelectorAll<HTMLElement>(".site-reveal"));
-
-    if (reducedMotion || !("IntersectionObserver" in window)) {
-      elements.forEach((element) => element.classList.add("site-reveal-visible"));
-      return;
-    }
-
-    elements.forEach((element) => element.classList.add("site-reveal-ready"));
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        entry.target.classList.add("site-reveal-visible");
-        observer.unobserve(entry.target);
-      });
-    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
-
-    elements.forEach((element) => observer.observe(element));
-    return () => observer.disconnect();
-  }, [activePage, isSubscriptionPage]);
-
-  return (
-    <div className="min-h-screen bg-white text-neutral-950 selection:bg-neutral-900 selection:text-white dark:bg-[#0a0a0a] dark:text-neutral-100 dark:selection:bg-neutral-100 dark:selection:text-neutral-950">
-      {!isSubscriptionPage && <div className="site-scroll-progress" aria-hidden="true"><span ref={scrollProgressRef} /></div>}
-      <Header
-        activePage={activePage}
-        isSubscriptionPage={isSubscriptionPage}
-        theme={theme}
-        language={language}
-        mobileOpen={mobileOpen}
-        searchItems={searchItems}
-        t={t}
-        tc={tc}
-        onNavigate={navigate}
-        onLanguageChange={setLanguage}
-        onDashboard={() => setDashboardOpen(true)}
-        onToggleTheme={() => setTheme((value) => (value === "light" ? "dark" : "light"))}
-        onToggleMobile={() => setMobileOpen((value) => !value)}
-      />
-
-      {isSubscriptionPage ? (
-        <main className="min-w-0 flex-1 overflow-hidden">
-          <SubscriptionPage
-            onApiPrices={() => navigate("API Prices")}
-            onSelectPlan={(planId, billingInterval) => {
-              // Checkout integration point: pass the plan id and billing interval to the future authenticated checkout flow.
-              notify(`Checkout is not connected yet. Selected plan: ${planId} (${billingInterval})`);
-            }}
-            onBuildTeam={(billingInterval) => notify(`Team checkout is not connected yet (${billingInterval}).`)}
-            onContactSales={(seatCount, seatPlanId, billingInterval) => notify(`Sales request saved for ${seatCount.toLocaleString("en-US")} ${seatPlanId} seats (${billingInterval}).`)}
-            proVariantKey={proVariantKey}
-            onProVariantChange={selectProVariant}
-          />
-        </main>
-      ) : (
-      <div className="flex">
-        <Sidebar
-          activePage={activePage}
-          collapsed={sidebarCollapsed}
-          mobileOpen={mobileOpen}
-          language={language}
-          t={t}
-          tc={tc}
-          onNavigate={navigate}
-          onLanguageChange={setLanguage}
-          onDashboard={() => {
-            setMobileOpen(false);
-            setDashboardOpen(true);
-          }}
-          onToggleCollapse={() => setSidebarCollapsed((value) => !value)}
-          onCloseMobile={() => setMobileOpen(false)}
-        />
-
-        <main className="min-w-0 flex-1 overflow-hidden px-4 py-6 sm:px-8 sm:py-10 lg:px-12">
-          <div className={`mx-auto grid max-w-7xl gap-10 ${activePage === "Pricing" ? "xl:grid-cols-[minmax(0,1fr)_15rem]" : ""}`}>
-            <div key={activePage} className="page-enter min-w-0">
-              {activePage === "Pricing" ? (
-                <PricingPage t={t} onDashboard={() => setDashboardOpen(true)} onOpenModel={navigate} />
-              ) : activePage === "Models" ? (
-                <ModelComparisonPage onOpenModel={navigate} />
-              ) : textModels.some((model) => model.model === activePage) ? (
-                <ModelDetailPage
-                  modelName={activePage}
-                  onBack={() => navigate("Models")}
-                  onCompare={() => {
-                    navigate("Models");
-                    window.setTimeout(() => document.getElementById("compare-models")?.scrollIntoView({ behavior: "smooth" }), 120);
-                  }}
-                  onOpenPlayground={() => notify(`${activePage} selected in the Playground.`)}
-                />
-              ) : (
-                <DocsPage activePage={activePage} t={t} tc={tc} onNavigate={navigate} onCopy={copySnippet} />
-              )}
-            </div>
-
-            {activePage === "Pricing" && <aside className="hidden xl:block">
-              <div className="sticky top-24 border-l border-neutral-200 pl-5 dark:border-white/10">
-                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-500">
-                  {t("onThisPage")}
-                </p>
-                <nav className="space-y-2 text-sm">
-                  {[
-                    ["product-demos", "Product demos"],
-                    ["text-models", t("textModels")],
-                    ["tts-models", t("ttsModels")],
-                    ["transcription-models", t("transcriptionModels")],
-                    ["dubbing-models", t("dubbingModels")],
-                    ["image-translation", t("imageTranslation")],
-                    ["pdf-extraction-and-editing", t("pdfExtractionEditing")],
-                    ["music-models", t("musicModels")],
-                    ["billing-notes", t("billingNotes")],
-                  ].map(([id, item]) => (
-                    <a
-                      key={id}
-                      href={`#${id}`}
-                      className="block text-neutral-500 hover:text-neutral-950 dark:text-neutral-500 dark:hover:text-neutral-100"
-                    >
-                      {item}
-                    </a>
-                  ))}
-                </nav>
-              </div>
-            </aside>}
-          </div>
-        </main>
-      </div>
-      )}
-
-      {dashboardOpen && (
-        <DashboardModal tc={tc} onClose={() => setDashboardOpen(false)} onNotify={notify} />
-      )}
-
-      {toast && (
-        <div className="toast-enter fixed bottom-4 left-4 right-4 z-50 rounded-lg border border-neutral-200 bg-white px-4 py-3 text-sm font-medium text-neutral-950 shadow-lg dark:border-white/10 dark:bg-[#161616] dark:text-neutral-100 sm:bottom-5 sm:left-auto sm:right-5">
-          {toast}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey) => string; onDashboard: () => void; onOpenModel: (model: string) => void }) {
-  const [currency, setCurrency] = useState<CurrencyCode>(() => {
-    const storedCurrency = window.localStorage.getItem("lingofusion-pricing-currency");
-    return currencies.some((item) => item.code === storedCurrency) ? (storedCurrency as CurrencyCode) : "USD";
-  });
-  const [currencyRates, setCurrencyRates] = useState(defaultCurrencyRates);
-  const [ratesUnavailable, setRatesUnavailable] = useState(false);
-  const [textPricingMode, setTextPricingMode] = useState<TextPricingMode>(() => {
-    const storedMode = window.localStorage.getItem("lingofusion-text-pricing-mode");
-    return storedMode === "batch" ? "batch" : "instant";
-  });
-  const [selectedModel, setSelectedModel] = useState("LingoFusion");
-  const [inputTokens, setInputTokens] = useState(1_000_000);
-  const [outputTokens, setOutputTokens] = useState(1_000_000);
-  const ttsCharacterModels = ttsModels.filter((model) => model.pricingUnit === "per_1k_characters");
-  const liveTranslateModel = ttsModels.find((model) => model.model === "LingoFusion Live Translate");
-  const [selectedTtsModel, setSelectedTtsModel] = useState(ttsCharacterModels[0]?.model ?? "");
-  const [ttsCharacters, setTtsCharacters] = useState(1000);
-  const [liveTranslateMinutes, setLiveTranslateMinutes] = useState(1);
-  const [selectedTranscriptionModel, setSelectedTranscriptionModel] = useState(transcriptionModels[0].model);
-  const [transcriptionMinutes, setTranscriptionMinutes] = useState(1);
-  const [selectedDubbingModel, setSelectedDubbingModel] = useState(dubbingModels[0].model);
-  const [dubbingMinutes, setDubbingMinutes] = useState(1);
-  const [selectedMusicModel, setSelectedMusicModel] = useState(musicModels[0].model);
-  const [musicMinutes, setMusicMinutes] = useState(1);
-  const [selectedImageSize, setSelectedImageSize] = useState(imageModels[0].size);
-  const [imageCount, setImageCount] = useState(1);
-  const [selectedPdfModel, setSelectedPdfModel] = useState(pdfModels[0].model);
-  const [pdfCount, setPdfCount] = useState(500);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    fetch("https://open.er-api.com/v6/latest/USD")
-      .then((response) => {
-        if (!response.ok) throw new Error("exchange_rates_unavailable");
-        return response.json() as Promise<{ rates?: Record<string, number> }>;
-      })
-      .then((data) => {
-        if (cancelled || !data.rates) return;
-        const liveRates = data.rates;
-        const nextRates = { ...defaultCurrencyRates };
-        currencies.forEach((item) => {
-          if (item.code !== "USD" && Number.isFinite(liveRates[item.code])) nextRates[item.code] = liveRates[item.code];
-        });
-        setCurrencyRates(nextRates);
-        setRatesUnavailable(false);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setRatesUnavailable(true);
-        setCurrency("USD");
-        window.localStorage.setItem("lingofusion-pricing-currency", "USD");
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const activeCurrency = currencyRates[currency] ? currency : "USD";
-  const activeRate = currencyRates[activeCurrency];
-  const currencyPresentationKey = `${activeCurrency}-${activeRate}`;
-  const displayCurrency = (usdAmount: number, precise = false) => formatCurrencyAmount(usdAmount, activeCurrency, activeRate, precise);
-  const displayPrice = (usdAmount: number | null, unit?: string) => {
-    if (usdAmount === null) return "TBD";
-    const suffix = unit === "per_minute" ? "/min" : unit === "per_500_extractions" ? " / 500 extractions" : "";
-    return `${displayCurrency(usdAmount)}${suffix}`;
-  };
-
-  const visibleTextModels = textModelsByPricingMode[textPricingMode];
-  const selectedTextModel = visibleTextModels.find((model) => model.model === selectedModel) ?? visibleTextModels[2];
-  const selectedTts = ttsCharacterModels.find((model) => model.model === selectedTtsModel) ?? ttsCharacterModels[0];
-  const selectedTranscription =
-    transcriptionModels.find((model) => model.model === selectedTranscriptionModel) ?? transcriptionModels[0];
-  const selectedDubbing = dubbingModels.find((model) => model.model === selectedDubbingModel) ?? dubbingModels[0];
-  const selectedMusic = musicModels.find((model) => model.model === selectedMusicModel) ?? musicModels[0];
-  const selectedImage = imageModels.find((model) => model.size === selectedImageSize) ?? imageModels[0];
-  const selectedPdf = pdfModels.find((model) => model.model === selectedPdfModel) ?? pdfModels[0];
-  const textPricingDescription =
-    textPricingMode === "instant"
-      ? "Real-time processing with immediate results."
-      : "Lower-cost asynchronous processing for large or non-urgent jobs. Results may take up to 24 hours.";
-  const pricingLabels = {
-    model: t("tableModel"),
-    input: t("tableInput"),
-    output: t("tableOutput"),
-    price: t("tablePrice"),
-    imageSize: t("tableImageSize"),
-    recommended: t("recommended"),
-  };
-
-  const displayedTextModels = visibleTextModels.map((model) => ({ ...model, input: displayCurrency(model.inputUsd), output: displayCurrency(model.outputUsd) }));
-  const displayedTtsModels = ttsModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
-  const displayedTranscriptionModels = transcriptionModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
-  const displayedDubbingModels = dubbingModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
-  const displayedMusicModels = musicModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
-  const displayedImageModels = imageModels.map((model) => ({ ...model, price: displayCurrency(model.priceUsd) }));
-  const displayedPdfModels = pdfModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
-
-  const textEstimate = useMemo(() => {
-    return (inputTokens / 1_000_000) * selectedTextModel.inputUsd + (outputTokens / 1_000_000) * selectedTextModel.outputUsd;
-  }, [inputTokens, outputTokens, selectedTextModel]);
-
-  const ttsEstimate = useMemo(() => {
-    return !selectedTts || selectedTts.priceUsd === null ? null : (ttsCharacters / 1000) * selectedTts.priceUsd;
-  }, [selectedTts, ttsCharacters]);
-
-  const liveTranslateEstimate = useMemo(() => {
-    return !liveTranslateModel || liveTranslateModel.priceUsd === null ? null : minuteNotationToMinutes(liveTranslateMinutes) * liveTranslateModel.priceUsd;
-  }, [liveTranslateModel, liveTranslateMinutes]);
-
-  const transcriptionEstimate = useMemo(() => {
-    return selectedTranscription.priceUsd === null ? null : minuteNotationToMinutes(transcriptionMinutes) * selectedTranscription.priceUsd;
-  }, [selectedTranscription, transcriptionMinutes]);
-
-  const dubbingEstimate = useMemo(() => {
-    return selectedDubbing.priceUsd === null ? null : minuteNotationToMinutes(dubbingMinutes) * selectedDubbing.priceUsd;
-  }, [selectedDubbing, dubbingMinutes]);
-
-  const musicEstimate = useMemo(() => {
-    return selectedMusic.priceUsd === null ? null : minuteNotationToMinutes(musicMinutes) * selectedMusic.priceUsd;
-  }, [selectedMusic, musicMinutes]);
-
-  const imageEstimate = useMemo(() => {
-    return imageCount * selectedImage.priceUsd;
-  }, [selectedImage, imageCount]);
-
-  const pdfEstimate = useMemo(() => {
-    if (selectedPdf.model === "PDF text extraction" && selectedPdf.priceUsd !== null) {
-      return Math.ceil(pdfCount / 500) * selectedPdf.priceUsd;
-    }
-
-    return null;
-  }, [selectedPdf, pdfCount]);
-
-  return (
-    <>
-      <section className="site-reveal section-enter max-w-3xl">
-        <p className="mb-4 text-sm font-medium text-neutral-600 dark:text-neutral-400">{t("lingoFusionApi")}</p>
-        <h1 className="text-3xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50 sm:text-6xl">
-          {t("pricing")}
-        </h1>
-        <p className="mt-4 text-base leading-7 text-neutral-700 dark:text-neutral-300 sm:mt-5 sm:text-lg sm:leading-8">{t("pricingHero")}</p>
-        <div className="mt-5 flex flex-wrap items-end gap-3">
-          <label className="text-sm">
-            <span className="mb-1.5 block font-medium text-neutral-700 dark:text-neutral-300">Currency</span>
-            <select
-              value={currency}
-              onChange={(event) => {
-                const nextCurrency = event.target.value as CurrencyCode;
-                setCurrency(nextCurrency);
-                window.localStorage.setItem("lingofusion-pricing-currency", nextCurrency);
-              }}
-              className="clean-select h-10 rounded-md border border-neutral-300 bg-white px-3 text-sm text-neutral-950 outline-none transition focus:border-neutral-600 dark:border-white/15 dark:bg-white/5 dark:text-neutral-100 dark:focus:border-neutral-400"
-              aria-label="Pricing display currency"
-            >
-              {currencies.map((item) => (
-                <option key={item.code} value={item.code}>{item.flag} {item.code}</option>
-              ))}
-            </select>
-          </label>
-          {ratesUnavailable && (
-            <p className="pb-2 text-sm text-neutral-500 dark:text-neutral-400" role="status">
-              Live exchange rates are temporarily unavailable. Showing USD.
-            </p>
-          )}
-        </div>
-        <div className="mt-6 grid gap-2.5 sm:mt-7 sm:flex sm:flex-wrap sm:gap-3">
-          <button
-            type="button"
-            onClick={onDashboard}
-            className="pressable w-full rounded-md bg-neutral-950 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200 sm:w-auto"
-          >
-            {t("openDashboard")}
-          </button>
-          <a
-            href="#text-models"
-            className="pressable inline-flex w-full items-center justify-center rounded-md border border-neutral-300 bg-white px-4 py-2.5 text-sm font-medium text-neutral-950 hover:bg-neutral-50 dark:border-white/15 dark:bg-white/5 dark:text-neutral-100 dark:hover:bg-white/10 sm:w-auto"
-          >
-            {t("comparePricing")}
-          </a>
-          <a
-            href="#product-demos"
-            className="pressable inline-flex w-full items-center justify-center rounded-md border border-neutral-300 bg-white px-4 py-2.5 text-sm font-medium text-neutral-950 hover:bg-neutral-50 dark:border-white/15 dark:bg-white/5 dark:text-neutral-100 dark:hover:bg-white/10 sm:w-auto"
-          >
-            View product demos
-          </a>
-        </div>
-      </section>
-
-      <div className="mt-8 space-y-9 sm:mt-12 sm:space-y-12">
-        <MediaShowcase />
-        <div id="text-models" className="site-reveal section-enter [--section-index:1]">
-          <TextModelGallery
-            models={visibleTextModels}
-            pricingMode={textPricingMode}
-            displayPrice={displayCurrency}
-            onOpenModel={onOpenModel}
-          />
-          <SectionCalculator title={t("textCalculator")} estimateLabel={t("estimate")} estimate={textEstimate === null ? "TBD" : displayCurrency(textEstimate, true)}>
-            <SelectField label={t("model")} value={selectedModel} onChange={setSelectedModel}>
-              {visibleTextModels.map((model) => (
-                <option key={model.model}>{model.model}</option>
-              ))}
-            </SelectField>
-            <NumberField
-              label={t("inputTokens")}
-              min={1}
-              max={1_000_000_000}
-              step={1}
-              value={inputTokens}
-              onChange={setInputTokens}
-            />
-            <NumberField
-              label={t("outputTokens")}
-              min={1}
-              max={1_000_000_000}
-              step={1}
-              value={outputTokens}
-              onChange={setOutputTokens}
-            />
-          </SectionCalculator>
-          <PricingCard
-            key={`text-${textPricingMode}-${currencyPresentationKey}`}
-            title={t("textModels")}
-            unit={t("pricesPer1MTokens")}
-            kind="text"
-            rows={displayedTextModels}
-            labels={pricingLabels}
-            tableClassName="pricing-table-change"
-            headerAction={
-              <div
-                role="group"
-                aria-label="Text model pricing mode"
-                className="inline-flex rounded-md border border-neutral-300 bg-neutral-100 p-0.5 dark:border-white/15 dark:bg-white/[0.06]"
-              >
-                {(["instant", "batch"] as const).map((mode) => {
-                  const selected = textPricingMode === mode;
-                  return (
-                    <button
-                      key={mode}
-                      type="button"
-                      aria-pressed={selected}
-                      onClick={() => {
-                        setTextPricingMode(mode);
-                        window.localStorage.setItem("lingofusion-text-pricing-mode", mode);
-                      }}
-                      className={`pressable rounded px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-950 focus-visible:ring-offset-2 dark:focus-visible:ring-white dark:focus-visible:ring-offset-[#0a0a0a] ${
-                        selected
-                          ? "bg-neutral-950 text-white shadow-sm dark:bg-white dark:text-neutral-950"
-                          : "text-neutral-600 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-100"
-                      }`}
-                    >
-                      {mode === "instant" ? "Default" : "Batch"}
-                    </button>
-                  );
-                })}
-              </div>
-            }
-            headerNote={textPricingDescription}
-          />
-        </div>
-        <div id="tts-models" className="site-reveal section-enter [--section-index:2]">
-          <SectionCalculator title={t("ttsCalculator")} estimateLabel={t("estimate")} estimate={ttsEstimate === null ? "TBD" : displayCurrency(ttsEstimate, true)}>
-            <SelectField label={t("model")} value={selectedTtsModel} onChange={setSelectedTtsModel}>
-              {ttsCharacterModels.map((model) => (
-                <option key={model.model}>{model.model}</option>
-              ))}
-            </SelectField>
-            <NumberField
-              label={t("characters")}
-              min={1}
-              max={100000000}
-              step={1}
-              value={ttsCharacters}
-              onChange={setTtsCharacters}
-            />
-          </SectionCalculator>
-          {liveTranslateModel && (
-            <SectionCalculator title={t("liveTranslateCalculator")} estimateLabel={t("estimate")} estimate={liveTranslateEstimate === null ? "TBD" : displayCurrency(liveTranslateEstimate, true)}>
-              <ReadOnlyField label={t("model")} value={liveTranslateModel.model} />
-              <NumberField
-                label={t("minutes")}
-                min={1}
-                max={1000000}
-                step={0.01}
-                value={liveTranslateMinutes}
-                onChange={setLiveTranslateMinutes}
-                minuteNotation
-                minuteHelp={t("minuteHelp")}
-              />
-            </SectionCalculator>
-          )}
-          <PricingCard
-            key={`tts-${currencyPresentationKey}`}
-            title={t("ttsModels")}
-            unit={t("pricesPer1KCharactersAndMinute")}
-            kind="simple"
-            rows={displayedTtsModels}
-            labels={pricingLabels}
-            tableClassName="pricing-table-change"
-          />
-        </div>
-        <div id="transcription-models" className="site-reveal section-enter [--section-index:3]">
-          <SectionCalculator title={t("transcriptionCalculator")} estimateLabel={t("estimate")} estimate={transcriptionEstimate === null ? "TBD" : displayCurrency(transcriptionEstimate, true)}>
-            <SelectField
-              label={t("model")}
-              value={selectedTranscriptionModel}
-              onChange={setSelectedTranscriptionModel}
-            >
-              {transcriptionModels.map((model) => (
-                <option key={model.model}>{model.model}</option>
-              ))}
-            </SelectField>
-            <NumberField
-              label={t("minutes")}
-              min={1}
-              max={1000000}
-              step={0.01}
-              value={transcriptionMinutes}
-              onChange={setTranscriptionMinutes}
-              minuteNotation
-              minuteHelp={t("minuteHelp")}
-            />
-          </SectionCalculator>
-          <PricingCard
-            key={`transcription-${currencyPresentationKey}`}
-            title={t("transcriptionModels")}
-            unit={t("pricesPerMinute")}
-            kind="simple"
-            rows={displayedTranscriptionModels}
-            labels={pricingLabels}
-            tableClassName="pricing-table-change"
-          />
-        </div>
-        <div id="dubbing-models" className="site-reveal section-enter [--section-index:4]">
-          <SectionCalculator title={t("dubbingCalculator")} estimateLabel={t("estimate")} estimate={dubbingEstimate === null ? "TBD" : displayCurrency(dubbingEstimate, true)}>
-            <SelectField label={t("model")} value={selectedDubbingModel} onChange={setSelectedDubbingModel}>
-              {dubbingModels.map((model) => (
-                <option key={model.model}>{model.model}</option>
-              ))}
-            </SelectField>
-            <NumberField
-              label={t("minutes")}
-              min={1}
-              max={1000000}
-              step={0.01}
-              value={dubbingMinutes}
-              onChange={setDubbingMinutes}
-              minuteNotation
-              minuteHelp={t("minuteHelp")}
-            />
-          </SectionCalculator>
-          <PricingCard
-            key={`dubbing-${currencyPresentationKey}`}
-            title={t("dubbingModels")}
-            unit={t("pricesPerMinute")}
-            kind="simple"
-            rows={displayedDubbingModels}
-            labels={pricingLabels}
-            tableClassName="pricing-table-change"
-          />
-        </div>
-        <div id="image-translation" className="site-reveal section-enter [--section-index:5]">
-          <SectionCalculator title={t("imageCalculator")} estimateLabel={t("estimate")} estimate={displayCurrency(imageEstimate, true)}>
-            <SelectField label={t("tableImageSize")} value={selectedImageSize} onChange={setSelectedImageSize}>
-              {imageModels.map((model) => (
-                <option key={model.size}>{model.size}</option>
-              ))}
-            </SelectField>
-            <NumberField
-              label={t("images")}
-              min={1}
-              max={1000000}
-              step={1}
-              value={imageCount}
-              onChange={setImageCount}
-            />
-          </SectionCalculator>
-          <PricingCard
-            key={`images-${currencyPresentationKey}`}
-            title={t("imageTranslation")}
-            unit={t("pricesPerImage")}
-            kind="image"
-            rows={displayedImageModels}
-            labels={pricingLabels}
-            tableClassName="pricing-table-change"
-          />
-        </div>
-        <div id="pdf-extraction-and-editing" className="site-reveal section-enter [--section-index:6]">
-          <SectionCalculator title={t("pdfCalculator")} estimateLabel={t("estimate")} estimate={pdfEstimate === null ? "TBD" : displayCurrency(pdfEstimate, true)}>
-            <SelectField label={t("workflow")} value={selectedPdfModel} onChange={setSelectedPdfModel}>
-              {pdfModels.map((model) => (
-                <option key={model.model}>{model.model}</option>
-              ))}
-            </SelectField>
-            <NumberField
-              label={selectedPdf.model === "PDF text extraction" ? t("extractions") : t("documents")}
-              min={1}
-              max={1000000}
-              step={1}
-              value={pdfCount}
-              onChange={setPdfCount}
-            />
-          </SectionCalculator>
-          <PricingCard
-            key={`pdf-${currencyPresentationKey}`}
-            title={t("pdfExtractionEditing")}
-            unit={t("pdfWorkflows")}
-            kind="simple"
-            rows={displayedPdfModels}
-            labels={pricingLabels}
-            tableClassName="pricing-table-change"
-          />
-        </div>
-        <div id="music-models" className="site-reveal section-enter [--section-index:7]">
-          <SectionCalculator title={t("musicCalculator")} estimateLabel={t("estimate")} estimate={musicEstimate === null ? "TBD" : displayCurrency(musicEstimate, true)}>
-            <SelectField label={t("model")} value={selectedMusicModel} onChange={setSelectedMusicModel}>
-              {musicModels.map((model) => (
-                <option key={model.model}>{model.model}</option>
-              ))}
-            </SelectField>
-            <NumberField
-              label={t("minutes")}
-              min={1}
-              max={1000000}
-              step={0.01}
-              value={musicMinutes}
-              onChange={setMusicMinutes}
-              minuteNotation
-              minuteHelp={t("minuteHelp")}
-            />
-          </SectionCalculator>
-          <PricingCard
-            key={`music-${currencyPresentationKey}`}
-            title={t("musicModels")}
-            unit={t("pricesPerMinute")}
-            kind="simple"
-            rows={displayedMusicModels}
-            labels={pricingLabels}
-            tableClassName="pricing-table-change"
-          />
-        </div>
-      </div>
-
-
-      <section id="billing-notes" className="site-reveal section-enter mt-12 border-t border-neutral-200 pt-8 dark:border-white/10 [--section-index:8]">
-        <h2 className="text-2xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50">{t("billingNotes")}</h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          {billingNotes.map((note) => {
-            const Icon = note.icon;
-
-            return (
-              <div
-                key={note.key}
-                className="surface-lift flex items-start gap-3 rounded-lg border border-neutral-200 bg-white p-4 text-sm text-neutral-600 dark:border-white/10 dark:bg-[#161616] dark:text-neutral-400"
-              >
-                <Icon className="mt-0.5 h-4 w-4 text-neutral-500 dark:text-neutral-500" />
-                {t(note.key)}
-              </div>
-            );
-          })}
-        </div>
-      </section>
-    </>
-  );
-}
-
-function TextModelGallery({ models, pricingMode, displayPrice, onOpenModel }: {
-  models: TextModel[];
-  pricingMode: TextPricingMode;
-  displayPrice: (usdAmount: number) => string;
-  onOpenModel: (model: string) => void;
-}) {
-  return (
-    <section className="mb-8" aria-labelledby="pricing-model-gallery-heading">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
-        <div>
-          <h2 id="pricing-model-gallery-heading" className="text-2xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50">LingoFusion models</h2>
-          <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">Our text models, designed for fast, capable multilingual work.</p>
-        </div>
-        <span className="text-xs font-medium text-neutral-500 dark:text-neutral-500">{pricingMode === "batch" ? "Batch" : "Default"} pricing Â· open a model for details</span>
-      </div>
-      <div className="mt-8 grid gap-x-12 gap-y-7 md:grid-cols-2">
-        {models.map((model) => {
-          const presentation = textModelPresentations[model.model];
-          return (
-            <button
-              key={model.model}
-              type="button"
-              onClick={() => onOpenModel(model.model)}
-              className="model-catalog-item pressable group flex min-w-0 items-start gap-5 rounded-lg p-2 text-left opacity-90 outline-none transition hover:opacity-100 focus-visible:ring-2 focus-visible:ring-neutral-950 focus-visible:ring-offset-4 dark:focus-visible:ring-white dark:focus-visible:ring-offset-[#0a0a0a]"
-            >
-              <ModelIcon presentation={presentation} />
-              <span className="min-w-0 flex-1 pt-0.5">
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className="text-xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50">{model.model}</span>
-                  {model.recommended && <span className="rounded-full bg-neutral-950 px-2 py-0.5 text-[10px] font-semibold text-white dark:bg-white dark:text-neutral-950">Recommended</span>}
-                </span>
-                <span className="mt-1 block text-base leading-6 text-neutral-600 dark:text-neutral-400">{presentation?.capability ?? modelDetails[model.model]}</span>
-                <span className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-sm text-neutral-500 dark:text-neutral-500">
-                  <span>Input <strong className="font-medium text-neutral-800 dark:text-neutral-200">{displayPrice(model.inputUsd)}</strong> / 1M</span>
-                  <span>Output <strong className="font-medium text-neutral-800 dark:text-neutral-200">{displayPrice(model.outputUsd)}</strong> / 1M</span>
-                </span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function MediaShowcase() {
-  return (
-    <section id="product-demos" className="site-reveal scroll-mt-24 border-y border-neutral-200 py-9 dark:border-white/10" aria-labelledby="media-showcase-heading">
-      <div className="max-w-3xl">
-        <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-500">LingoFusion in action</p>
-        <h2 id="media-showcase-heading" className="mt-2 text-2xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50 sm:text-3xl">
-          Show what the platform can do
-        </h2>
-        <p className="mt-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">
-          These media slots are ready for your final product images and videos. Each caption explains the result the demo should highlight.
-        </p>
-      </div>
-
-      <div className="mt-6 grid gap-5 md:grid-cols-2">
-        {showcaseItems.map((item, index) => {
-          const PlaceholderIcon = item.kind === "video" ? Play : Image;
-          return (
-            <figure
-              key={item.title}
-              className="media-showcase-card group overflow-hidden rounded-lg border border-neutral-200 bg-white dark:border-white/10 dark:bg-[#141414]"
-              style={{ "--media-index": index } as CSSProperties}
-            >
-              <div className="media-showcase-frame relative aspect-video overflow-hidden border-b border-neutral-200 bg-neutral-100 dark:border-white/10 dark:bg-[#101010]">
-                {item.src ? (
-                  item.kind === "video" ? (
-                    <video className="h-full w-full object-cover" controls preload="metadata" src={item.src} />
-                  ) : (
-                    <img className="h-full w-full object-cover" src={item.src} alt={item.title} />
-                  )
-                ) : (
-                  <div
-                    role="img"
-                    aria-label={`${item.title} ${item.kind} placeholder`}
-                    className="media-placeholder grid h-full w-full place-items-center"
-                  >
-                    <span className="media-placeholder-number">
-                      Media placeholder {String(index + 1).padStart(2, "0")}
-                    </span>
-                    <div className="text-center">
-                      <span className="media-placeholder-icon mx-auto grid h-10 w-10 place-items-center text-neutral-700 dark:text-neutral-300">
-                        <PlaceholderIcon className="h-8 w-8 stroke-[1.5]" />
-                      </span>
-                      <p className="mt-3 text-base font-semibold text-neutral-950 dark:text-neutral-100">
-                        Replace with {item.kind}
-                      </p>
-                      <p className="mt-1 text-xs font-medium uppercase tracking-wide text-neutral-600 dark:text-neutral-400">
-                        16:9 Â· JPG, PNG, WebP or MP4
-                      </p>
-                    </div>
-                    {item.kind === "video" && <span className="media-scan-line" aria-hidden="true" />}
-                  </div>
-                )}
-              </div>
-              <figcaption className="p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="font-semibold text-neutral-950 dark:text-neutral-50">{item.title}</h3>
-                  <span className="shrink-0 rounded-full border border-neutral-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-500 dark:border-white/10 dark:text-neutral-400">
-                    {item.label}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">{item.description}</p>
-              </figcaption>
-            </figure>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function ModelIcon({
-  presentation,
-  size = "catalog",
-}: {
-  presentation?: TextModelPresentation;
-  size?: "catalog" | "detail";
-}) {
-  const sizeClass = size === "detail" ? "h-24 w-24 rounded-2xl" : "h-16 w-16 rounded-2xl";
-  const imageScale = presentation?.imageScale ?? 1;
-  const resolvedImageScale = size === "detail" && imageScale > 1 ? imageScale - 0.04 : imageScale;
-
-  return (
-    <span
-      className={`model-icon-motion ${sizeClass} shrink-0 overflow-hidden`}
-      aria-hidden="true"
-    >
-      <img
-        src={`${import.meta.env.BASE_URL}${(presentation?.image ?? "/assets/models/lingofusion.png").replace(/^\/+/, "")}`}
-        alt=""
-        className="h-full w-full object-cover transition-transform duration-300"
-        style={{ transform: `scale(${resolvedImageScale})` }}
-      />
-    </span>
-  );
-}
-
-function ModelComparisonPage({ onOpenModel }: { onOpenModel: (model: string) => void }) {
-  const [pricingMode, setPricingMode] = useState<TextPricingMode>(() =>
-    window.localStorage.getItem("lingofusion-model-comparison-mode") === "batch" ? "batch" : "instant",
-  );
-  const [leftModelName, setLeftModelName] = useState("LingoFusion");
-  const [rightModelName, setRightModelName] = useState("LingoFusion Pro");
-  const models = textModelsByPricingMode[pricingMode];
-  const leftModel = models.find((model) => model.model === leftModelName) ?? models[2];
-  const rightModel = models.find((model) => model.model === rightModelName) ?? models[3];
-
-  const selectPricingMode = (mode: TextPricingMode) => {
-    setPricingMode(mode);
-    window.localStorage.setItem("lingofusion-model-comparison-mode", mode);
-  };
-
-  return (
-    <div className="max-w-6xl">
-      <button type="button" onClick={() => window.history.length > 1 ? window.history.back() : onOpenModel("Models")} className="pressable inline-flex items-center gap-2 text-sm font-medium text-neutral-600 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white"><ArrowLeft className="h-4 w-4" /> Models</button>
-      <section className="site-reveal mt-10 flex flex-col gap-5 border-b border-neutral-200 pb-8 dark:border-white/10 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-4xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50 sm:text-5xl">All models</h1>
-          <p className="mt-3 max-w-2xl text-base leading-7 text-neutral-600 dark:text-neutral-300">Browse all available LingoFusion models and compare their capabilities.</p>
-        </div>
-        <a href="#compare-models" className="pressable inline-flex min-h-11 items-center justify-center rounded-full bg-neutral-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200">Compare models</a>
-      </section>
-
-      <section className="site-reveal mt-10" aria-labelledby="model-gallery-heading">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:gap-3">
-          <h2 id="model-gallery-heading" className="text-lg font-semibold text-neutral-950 dark:text-neutral-50">Translation models</h2>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">LingoFusion's text models for multilingual tasks at every scale.</p>
-        </div>
-        <div className="mt-8 grid gap-x-12 gap-y-7 md:grid-cols-2">
-          {models.map((model) => <ModelGalleryItem key={model.model} model={model} onOpen={() => onOpenModel(model.model)} />)}
-        </div>
-      </section>
-
-      <section id="compare-models" className="site-reveal mt-12 scroll-mt-24 rounded-lg border border-neutral-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-[#161616] sm:p-6" aria-labelledby="model-comparison-heading">
-        <div className="flex flex-col gap-5 border-b border-neutral-200 pb-5 dark:border-white/10 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-500">API model comparison</p>
-            <h2 id="model-comparison-heading" className="mt-1 text-2xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50">Compare two models</h2>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <div role="group" aria-label="Model comparison pricing mode" className="inline-flex rounded-md border border-neutral-300 bg-neutral-100 p-0.5 dark:border-white/15 dark:bg-white/[0.06]">
-              {(["instant", "batch"] as const).map((mode) => {
-                const selected = pricingMode === mode;
-                return <button key={mode} type="button" aria-pressed={selected} onClick={() => selectPricingMode(mode)} className={`pressable rounded px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-950 focus-visible:ring-offset-2 dark:focus-visible:ring-white dark:focus-visible:ring-offset-[#161616] ${selected ? "bg-neutral-950 text-white shadow-sm dark:bg-white dark:text-neutral-950" : "text-neutral-600 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-100"}`}>{mode === "instant" ? "Default" : "Batch"}</button>;
-              })}
-            </div>
-          </div>
-        </div>
-        <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-end">
-          <SelectField label="First model" value={leftModel.model} onChange={setLeftModelName}>
-            {models.map((model) => <option key={model.model}>{model.model}</option>)}
-          </SelectField>
-          <button type="button" onClick={() => { setLeftModelName(rightModel.model); setRightModelName(leftModel.model); }} className="pressable min-h-10 rounded-md border border-neutral-300 bg-white px-4 py-2 text-sm font-medium text-neutral-950 hover:bg-neutral-50 dark:border-white/15 dark:bg-white/5 dark:text-neutral-100 dark:hover:bg-white/10">Swap</button>
-          <SelectField label="Second model" value={rightModel.model} onChange={setRightModelName}>
-            {models.map((model) => <option key={model.model}>{model.model}</option>)}
-          </SelectField>
-        </div>
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          <ModelComparisonCard model={leftModel} pricingMode={pricingMode} />
-          <ModelComparisonCard model={rightModel} pricingMode={pricingMode} />
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function ModelGalleryItem({ model, onOpen }: { model: TextModel; onOpen: () => void }) {
-  const presentation = textModelPresentations[model.model];
-
-  return (
-    <button type="button" onClick={onOpen} className="model-catalog-item pressable group flex min-w-0 items-start gap-5 rounded-lg p-2 text-left opacity-90 outline-none transition hover:opacity-100 focus-visible:ring-2 focus-visible:ring-neutral-950 focus-visible:ring-offset-4 dark:focus-visible:ring-white dark:focus-visible:ring-offset-[#0a0a0a]">
-      <ModelIcon presentation={presentation} />
-      <div className="min-w-0 flex-1 pt-0.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50">{model.model}</h3>
-          {model.recommended && <span className="rounded-full bg-neutral-900 px-2 py-0.5 text-[11px] font-semibold text-white dark:bg-white dark:text-neutral-950">Recommended</span>}
-        </div>
-        <p className="mt-1 text-base leading-6 text-neutral-600 dark:text-neutral-400">{presentation?.capability ?? modelDetails[model.model]}</p>
-      </div>
-    </button>
-  );
-}
-
-type ModelProfileSpec = {
-  reasoning: string;
-  reasoningLevel: number;
-  speed: string;
-  speedLevel: number;
-  contextWindow: string;
-  maxOutput: string;
-  quality: string;
-  description: string;
-  limitations: string[];
-};
-
-const modelProfileSpecs: Record<string, ModelProfileSpec> = {
-  "LingoFusion Nano": {
-    reasoning: "Light",
-    reasoningLevel: 1,
-    speed: "Fastest",
-    speedLevel: 4,
-    contextWindow: "400,000",
-    maxOutput: "128,000",
-    quality: "Utility",
-    description: "LingoFusion Nano is optimized for low-latency, high-volume language work where predictable structure and cost matter more than deep linguistic analysis.",
-    limitations: ["Best with short or clearly structured source text", "Limited terminology research", "Not intended for document-scale review"],
-  },
-  "LingoFusion Lite": {
-    reasoning: "Standard",
-    reasoningLevel: 2,
-    speed: "Very fast",
-    speedLevel: 4,
-    contextWindow: "400,000",
-    maxOutput: "128,000",
-    quality: "Efficient",
-    description: "LingoFusion Lite balances low cost with stronger multilingual comprehension for production translation, extraction, classification, and summarization.",
-    limitations: ["May simplify highly specialized language", "Limited cross-document consistency", "Complex tone may require review"],
-  },
-  LingoFusion: {
-    reasoning: "Balanced",
-    reasoningLevel: 3,
-    speed: "Fast",
-    speedLevel: 3,
-    contextWindow: "1,000,000",
-    maxOutput: "384,000",
-    quality: "High",
-    description: "LingoFusion is the recommended default for dependable translation and multilingual generation, balancing quality, latency, and cost across everyday workloads.",
-    limitations: ["Specialist terminology may benefit from supplied glossaries", "Long legal or medical documents should be reviewed", "Deep research is reserved for higher tiers"],
-  },
-  "LingoFusion Pro": {
-    reasoning: "Higher",
-    reasoningLevel: 4,
-    speed: "Moderate",
-    speedLevel: 3,
-    contextWindow: "1,000,000",
-    maxOutput: "384,000",
-    quality: "Advanced",
-    description: "LingoFusion Pro is designed for professional localization and complex translation where context, tone, ambiguity, and terminology must remain consistent.",
-    limitations: ["Higher latency than standard LingoFusion", "Very long jobs may be better suited to Batch", "Human review remains recommended for regulated content"],
-  },
-  ExplainFusion: {
-    reasoning: "Higher",
-    reasoningLevel: 4,
-    speed: "Moderate",
-    speedLevel: 3,
-    contextWindow: "1,000,000",
-    maxOutput: "384,000",
-    quality: "Explanatory",
-    description: "ExplainFusion specializes in translations that must also teach, explain, annotate, or clearly justify language choices for readers and reviewers.",
-    limitations: ["Explanations increase output length", "Not the lowest-cost choice for direct translation", "Concise mode is recommended for simple requests"],
-  },
-  "LingoFusion Ultra": {
-    reasoning: "Maximum",
-    reasoningLevel: 4,
-    speed: "Deliberate",
-    speedLevel: 2,
-    contextWindow: "1,000,000",
-    maxOutput: "384,000",
-    quality: "Highest",
-    description: "LingoFusion Ultra is built for the hardest multilingual work, combining deep reasoning, specialist terminology handling, and document-scale consistency review.",
-    limitations: ["Highest price in the LingoFusion text family", "Longer response time for deep analysis", "Batch is recommended for large non-urgent jobs"],
-  },
-};
-
-function RatingMarks({ value, icon: Icon }: { value: number; icon: typeof Zap }) {
-  return (
-    <span className="flex items-center justify-center gap-1" aria-label={`${value} out of 4`}>
-      {[1, 2, 3, 4].map((mark) => <Icon key={mark} className={`h-4 w-4 ${mark <= value ? "text-neutral-950 dark:text-white" : "text-neutral-300 dark:text-neutral-700"}`} fill={mark <= value ? "currentColor" : "none"} />)}
-    </span>
-  );
-}
-
-function ModelDetailPage({
-  modelName,
-  onBack,
-  onCompare,
-  onOpenPlayground,
-}: {
-  modelName: string;
-  onBack: () => void;
-  onCompare: () => void;
-  onOpenPlayground: () => void;
-}) {
-  const defaultModel = textModelsByPricingMode.instant.find((model) => model.model === modelName);
-  const batchModel = textModelsByPricingMode.batch.find((model) => model.model === modelName);
-  const presentation = textModelPresentations[modelName];
-  const profile = modelProfileSpecs[modelName];
-  const [pricingMode, setPricingMode] = useState<TextPricingMode>("instant");
-  const [comparisonMetric, setComparisonMetric] = useState<"input" | "output">("input");
-  const [copied, setCopied] = useState<"model" | "request" | null>(null);
-  if (!defaultModel || !batchModel || !presentation || !profile) return null;
-
-  const price = (value: number) => new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: value < 1 ? 2 : 0,
-    maximumFractionDigits: 2,
-  }).format(value);
-  const apiModelId = modelSlug(modelName);
-  const activePrice = pricingMode === "batch" ? batchModel : defaultModel;
-  const comparisonModels = textModelsByPricingMode[pricingMode];
-  const comparisonMax = Math.max(...comparisonModels.map((model) => model[comparisonMetric === "input" ? "inputUsd" : "outputUsd"]));
-  const requestSnippet = `curl https://api.lingofusion.ai/v1/translate \\
-  -H "Authorization: Bearer $LINGOFUSION_API_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "model": "${apiModelId}",
-    "source_language": "en",
-    "target_language": "fr",
-    "input": "Build for every language."
-  }'`;
-
-  const copyText = async (text: string, target: "model" | "request") => {
-    try {
-      if (!navigator.clipboard?.writeText) throw new Error("Clipboard API unavailable");
-      await navigator.clipboard.writeText(text);
-    } catch {
-      const textarea = document.createElement("textarea");
-      textarea.value = text;
-      textarea.style.position = "fixed";
-      textarea.style.opacity = "0";
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand("copy");
-      textarea.remove();
-    }
-    setCopied(target);
-    window.setTimeout(() => setCopied(null), 1500);
-  };
-
-  return (
-    <div className="mx-auto max-w-6xl pb-20">
-      <button type="button" onClick={onBack} className="pressable inline-flex items-center gap-2 text-sm font-medium text-neutral-600 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white"><ArrowLeft className="h-4 w-4" /> All models</button>
-
-      <header className="site-reveal mt-8">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center">
-            <ModelIcon presentation={presentation} size="detail" />
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="min-w-0 break-words text-3xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50 xl:text-4xl">{modelName}</h1>
-                <select
-                  value={pricingMode}
-                  onChange={(event) => setPricingMode(event.target.value as TextPricingMode)}
-                  aria-label="Processing mode"
-                  className="h-9 rounded-full border border-neutral-300 bg-white px-3 text-sm font-medium text-neutral-800 outline-none focus:border-neutral-600 dark:border-white/20 dark:bg-[#111] dark:text-neutral-100"
-                >
-                  <option value="instant">Default</option>
-                  <option value="batch">Batch</option>
-                </select>
-                <button type="button" onClick={() => copyText(apiModelId, "model")} aria-label="Copy model ID" className="pressable rounded-md p-2 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-950 dark:hover:bg-white/10 dark:hover:text-white"><Copy className="h-4 w-4" /></button>
-                {copied === "model" && <span className="text-xs font-medium text-neutral-500">Copied</span>}
-              </div>
-              <p className="mt-1 max-w-3xl break-words text-base leading-7 text-neutral-600 dark:text-neutral-400">{presentation.capability}</p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2 xl:shrink-0">
-            <button type="button" onClick={onCompare} className="pressable inline-flex min-h-11 items-center justify-center rounded-full border border-neutral-300 px-5 py-2.5 text-sm font-semibold text-neutral-950 hover:bg-neutral-50 dark:border-white/20 dark:text-white dark:hover:bg-white/10">Compare</button>
-            <button type="button" onClick={onOpenPlayground} className="pressable inline-flex min-h-11 items-center justify-center rounded-full bg-neutral-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200">Try in Playground</button>
-          </div>
-        </div>
-      </header>
-
-      <section className="site-reveal mt-10 overflow-hidden rounded-lg border border-neutral-200 dark:border-white/10" aria-label="Model summary">
-        <div className="grid grid-cols-2 divide-x divide-y divide-neutral-200 dark:divide-white/10 sm:grid-cols-3 2xl:grid-cols-5 2xl:divide-y-0">
-          <div className="p-5 text-center"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Reasoning</p><div className="mt-3"><RatingMarks value={profile.reasoningLevel} icon={BrainCircuit} /></div><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">{profile.reasoning}</p></div>
-          <div className="p-5 text-center"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Speed</p><div className="mt-3"><RatingMarks value={profile.speedLevel} icon={Zap} /></div><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">{profile.speed}</p></div>
-          <div className="p-5 text-center"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Price</p><p className="mt-3 text-lg font-semibold text-neutral-950 dark:text-white">{price(activePrice.inputUsd)} Â· {price(activePrice.outputUsd)}</p><p className="mt-1 text-sm text-neutral-500">Input Â· Output</p></div>
-          <div className="p-5 text-center"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Input</p><Type className="mx-auto mt-3 h-5 w-5 text-neutral-800 dark:text-neutral-200" /><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">Text</p></div>
-          <div className="col-span-2 p-5 text-center sm:col-span-1"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Output</p><FileText className="mx-auto mt-3 h-5 w-5 text-neutral-800 dark:text-neutral-200" /><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">Text</p></div>
-        </div>
-      </section>
-
-      <section className="site-reveal grid gap-8 border-b border-neutral-200 py-10 dark:border-white/10 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.6fr)]">
-        <p className="text-base leading-8 text-neutral-700 dark:text-neutral-300">{profile.description}</p>
-        <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-1">
-          <div className="flex items-center gap-3"><Layers3 className="h-5 w-5 text-neutral-500" /><div><dt className="text-neutral-500">Context window</dt><dd className="font-medium text-neutral-950 dark:text-white">{profile.contextWindow} tokens</dd></div></div>
-          <div className="flex items-center gap-3"><Gauge className="h-5 w-5 text-neutral-500" /><div><dt className="text-neutral-500">Maximum output</dt><dd className="font-medium text-neutral-950 dark:text-white">{profile.maxOutput} tokens</dd></div></div>
-          <div className="flex items-center gap-3"><Globe2 className="h-5 w-5 text-neutral-500" /><div><dt className="text-neutral-500">Translation quality</dt><dd className="font-medium text-neutral-950 dark:text-white">{profile.quality}</dd></div></div>
-          <div className="flex items-center gap-3"><Clock3 className="h-5 w-5 text-neutral-500" /><div><dt className="text-neutral-500">Processing</dt><dd className="font-medium text-neutral-950 dark:text-white">Default, streaming, Batch</dd></div></div>
-        </dl>
-      </section>
-
-      <section className="site-reveal grid gap-8 border-b border-neutral-200 py-12 dark:border-white/10 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-labelledby="model-pricing-heading">
-        <h2 id="model-pricing-heading" className="text-xl font-semibold text-neutral-950 dark:text-white">Pricing</h2>
-        <div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <p className="max-w-2xl text-sm leading-6 text-neutral-600 dark:text-neutral-400">Pricing is based on tokens processed. API billing remains in USD, and Batch offers lower-cost asynchronous processing for non-urgent work.</p>
-            <span className="shrink-0 text-sm text-neutral-500">Per 1M tokens</span>
-          </div>
-          <div className="mt-6 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-5 dark:border-white/10 dark:bg-white/[0.04]"><p className="text-sm text-neutral-500">Input</p><p className="mt-2 text-2xl font-semibold text-neutral-950 dark:text-white">{price(activePrice.inputUsd)}</p></div>
-            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-5 dark:border-white/10 dark:bg-white/[0.04]"><p className="text-sm text-neutral-500">Output</p><p className="mt-2 text-2xl font-semibold text-neutral-950 dark:text-white">{price(activePrice.outputUsd)}</p></div>
-            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-5 dark:border-white/10 dark:bg-white/[0.04]"><p className="text-sm text-neutral-500">{pricingMode === "batch" ? "Turnaround" : "Response"}</p><p className="mt-2 text-2xl font-semibold text-neutral-950 dark:text-white">{pricingMode === "batch" ? "Up to 24h" : "Immediate"}</p></div>
-          </div>
-
-          <div className="mt-8 flex items-center justify-between gap-4">
-            <h3 className="text-sm font-semibold text-neutral-950 dark:text-white">Quick comparison</h3>
-            <div role="group" aria-label="Comparison metric" className="inline-flex rounded-md border border-neutral-200 p-0.5 dark:border-white/10">
-              {(["input", "output"] as const).map((metric) => <button key={metric} type="button" aria-pressed={comparisonMetric === metric} onClick={() => setComparisonMetric(metric)} className={`rounded px-3 py-1 text-xs font-medium capitalize ${comparisonMetric === metric ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950" : "text-neutral-500"}`}>{metric}</button>)}
-            </div>
-          </div>
-          <div className="mt-4 space-y-3 rounded-lg border border-neutral-200 p-5 dark:border-white/10">
-            {comparisonModels.map((model) => {
-              const value = model[comparisonMetric === "input" ? "inputUsd" : "outputUsd"];
-              const visualWidth = Math.max(10, Math.cbrt(value / comparisonMax) * 100);
-              return (
-                <div key={model.model} className="grid grid-cols-[8rem_minmax(4rem,1fr)_4rem] items-center gap-3 text-sm">
-                  <span className={`truncate ${model.model === modelName ? "font-semibold text-neutral-950 dark:text-white" : "text-neutral-600 dark:text-neutral-400"}`}>{model.model.replace("LingoFusion ", "")}</span>
-                  <span className="h-2 overflow-hidden rounded-full bg-neutral-200 dark:bg-white/10"><span className={`block h-full rounded-full ${model.model === modelName ? "bg-neutral-950 dark:bg-white" : "bg-neutral-500"}`} style={{ width: `${visualWidth}%` }} /></span>
-                  <span className="text-right font-mono text-xs text-neutral-600 dark:text-neutral-400">{price(value)}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      <section className="site-reveal grid gap-8 border-b border-neutral-200 py-12 dark:border-white/10 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-labelledby="capabilities-heading">
-        <h2 id="capabilities-heading" className="text-xl font-semibold text-neutral-950 dark:text-white">Capabilities</h2>
-        <div>
-          <p className="max-w-3xl text-base leading-7 text-neutral-600 dark:text-neutral-300">{presentation.bestFor}</p>
-          <ul className="mt-7 grid gap-px overflow-hidden rounded-lg border border-neutral-200 bg-neutral-200 dark:border-white/10 dark:bg-white/10 sm:grid-cols-2">
-            {presentation.features.map((feature) => <li key={feature} className="flex items-start gap-3 bg-white p-5 text-sm text-neutral-700 dark:bg-[#111] dark:text-neutral-300"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-neutral-500" /> {feature}</li>)}
-          </ul>
-        </div>
-      </section>
-
-      <section className="site-reveal grid gap-8 border-b border-neutral-200 py-12 dark:border-white/10 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-labelledby="api-usage-heading">
-        <h2 id="api-usage-heading" className="text-xl font-semibold text-neutral-950 dark:text-white">API usage</h2>
-        <div>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><p className="text-sm text-neutral-500">Model ID</p><code className="mt-1 block font-mono text-sm text-neutral-950 dark:text-white">{apiModelId}</code></div>
-            <button type="button" onClick={() => copyText(requestSnippet, "request")} className="pressable inline-flex items-center gap-2 rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50 dark:border-white/20 dark:text-neutral-200 dark:hover:bg-white/10"><Copy className="h-4 w-4" /> {copied === "request" ? "Copied" : "Copy request"}</button>
-          </div>
-          <pre className="mt-5 overflow-x-auto rounded-lg bg-neutral-950 p-5 text-sm leading-6 text-neutral-100"><code>{requestSnippet}</code></pre>
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            {["/v1/responses", "/v1/translate", "/v1/batch"].map((endpoint) => <div key={endpoint} className="rounded-lg border border-neutral-200 p-4 dark:border-white/10"><p className="font-mono text-sm text-neutral-950 dark:text-white">{endpoint}</p><p className="mt-1 text-xs text-neutral-500">Available</p></div>)}
-          </div>
-        </div>
-      </section>
-
-      <section className="site-reveal grid gap-8 border-b border-neutral-200 py-12 dark:border-white/10 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-labelledby="guidance-heading">
-        <h2 id="guidance-heading" className="text-xl font-semibold text-neutral-950 dark:text-white">Usage guidance</h2>
-        <div className="grid gap-8 md:grid-cols-2">
-          <div>
-            <h3 className="text-sm font-semibold text-neutral-950 dark:text-white">Best for</h3>
-            <p className="mt-3 text-sm leading-7 text-neutral-600 dark:text-neutral-400">{presentation.bestFor}</p>
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-neutral-950 dark:text-white">Considerations</h3>
-            <ul className="mt-3 space-y-3">
-              {profile.limitations.map((limitation) => <li key={limitation} className="flex items-start gap-3 text-sm leading-6 text-neutral-600 dark:text-neutral-400"><span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-400" />{limitation}</li>)}
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      <section className="site-reveal grid gap-8 py-12 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-labelledby="operations-heading">
-        <h2 id="operations-heading" className="text-xl font-semibold text-neutral-950 dark:text-white">Operations</h2>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <article className="rounded-lg border border-neutral-200 p-5 dark:border-white/10"><Activity className="h-5 w-5 text-neutral-500" /><h3 className="mt-4 font-semibold text-neutral-950 dark:text-white">Streaming</h3><p className="mt-2 text-sm leading-6 text-neutral-500">Receive text as it is generated for responsive interfaces and live translation workflows.</p></article>
-          <article className="rounded-lg border border-neutral-200 p-5 dark:border-white/10"><Layers3 className="h-5 w-5 text-neutral-500" /><h3 className="mt-4 font-semibold text-neutral-950 dark:text-white">Batch processing</h3><p className="mt-2 text-sm leading-6 text-neutral-500">Queue large or non-urgent jobs at reduced token prices with completion within 24 hours.</p></article>
-          <article className="rounded-lg border border-neutral-200 p-5 dark:border-white/10"><BadgeDollarSign className="h-5 w-5 text-neutral-500" /><h3 className="mt-4 font-semibold text-neutral-950 dark:text-white">Usage reporting</h3><p className="mt-2 text-sm leading-6 text-neutral-500">Every response reports input tokens, output tokens, processing mode, and exact USD cost.</p></article>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function ModelComparisonCard({ model, pricingMode }: { model: TextModel; pricingMode: TextPricingMode }) {
-  const price = (value: number) => new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: value < 1 ? 2 : 0,
-    maximumFractionDigits: 2,
-  }).format(value);
-
-  return (
-    <article className={`comparison-card-motion rounded-lg border p-5 ${model.recommended ? "border-neutral-950 bg-neutral-50 dark:border-white/50 dark:bg-white/[0.05]" : "border-neutral-200 bg-white dark:border-white/10 dark:bg-[#111111]"}`}>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h3 className="text-xl font-semibold text-neutral-950 dark:text-neutral-50">{model.model}</h3>
-          <p className="mt-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">{modelDetails[model.model] ?? "A LingoFusion API model for translation and language workflows."}</p>
-        </div>
-        {model.recommended && <span className="rounded-full bg-neutral-950 px-2 py-1 text-xs font-semibold text-white dark:bg-white dark:text-neutral-950">Recommended</span>}
-      </div>
-      <dl className="mt-5 grid gap-3 border-t border-neutral-200 pt-5 text-sm dark:border-white/10 sm:grid-cols-2">
-        <div><dt className="text-neutral-500 dark:text-neutral-500">Input per 1M tokens</dt><dd className="mt-1 text-lg font-semibold text-neutral-950 dark:text-neutral-50">{price(model.inputUsd)}</dd></div>
-        <div><dt className="text-neutral-500 dark:text-neutral-500">Output per 1M tokens</dt><dd className="mt-1 text-lg font-semibold text-neutral-950 dark:text-neutral-50">{price(model.outputUsd)}</dd></div>
-        <div className="sm:col-span-2"><dt className="text-neutral-500 dark:text-neutral-500">Pricing mode</dt><dd className="mt-1 font-medium text-neutral-950 dark:text-neutral-50">{pricingMode === "batch" ? "Batch, asynchronous processing" : "Default, real-time processing"}</dd></div>
-      </dl>
-    </article>
-  );
-}
-
-function SectionCalculator({
-  title,
-  estimateLabel,
-  estimate,
-  children,
-}: {
-  title: string;
-  estimateLabel: string;
-  estimate: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="calculator-motion surface-lift mb-4 rounded-lg border border-neutral-200 bg-neutral-50 p-3 dark:border-white/10 dark:bg-white/[0.03] sm:p-4">
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-sm font-semibold text-neutral-950 dark:text-neutral-50">{title}</h3>
-        <div className="rounded-md border border-neutral-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-[#111111] sm:text-right">
-          <div className="text-[11px] font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-500">
-            {estimateLabel}
-          </div>
-          <div key={estimate} className="estimate-pop mt-0.5 break-all font-mono text-base font-semibold text-neutral-950 dark:text-neutral-50">
-            {estimate}
-          </div>
-        </div>
-      </div>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{children}</div>
-    </div>
-  );
-}
-
-function SelectField({
-  label,
-  value,
-  onChange,
-  children,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  children: ReactNode;
-}) {
-  return (
-    <label className="min-w-0 text-sm">
-      <span className="mb-1.5 block font-medium text-neutral-700 dark:text-neutral-300">{label}</span>
-      <div className="relative">
-        <select
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          className="clean-select h-10 w-full appearance-none rounded-md border border-neutral-300 bg-white px-3 pr-9 text-sm text-neutral-950 outline-none transition focus:border-neutral-600 dark:border-white/15 dark:bg-[#111111] dark:text-neutral-100 dark:focus:border-neutral-400"
-        >
-          {children}
-        </select>
-        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 dark:text-neutral-500">
-          <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor">
-            <path d="M5.7 7.5a1 1 0 0 1 1.4 0L10 10.4l2.9-2.9a1 1 0 1 1 1.4 1.4l-3.6 3.6a1 1 0 0 1-1.4 0L5.7 8.9a1 1 0 0 1 0-1.4Z" />
-          </svg>
-        </span>
-      </div>
-    </label>
-  );
-}
-
-function NumberField({
-  label,
-  min,
-  max,
-  step,
-  value,
-  onChange,
-  minuteNotation = false,
-  minuteHelp,
-}: {
-  label: string;
-  min: number;
-  max: number;
-  step: number;
-  value: number;
-  onChange: (value: number) => void;
-  minuteNotation?: boolean;
-  minuteHelp?: string;
-}) {
-  return (
-    <label className="text-sm">
-      <span className="mb-1.5 block font-medium text-neutral-700 dark:text-neutral-300">{label}</span>
-      <input
-        type="number"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(event) =>
-          onChange(
-            minuteNotation
-              ? clampMinuteNotation(Number(event.target.value), min, max)
-              : clampNumber(Number(event.target.value), min, max),
-          )
-        }
-        className="h-10 w-full rounded-md border border-neutral-300 bg-white px-3 text-sm text-neutral-950 outline-none transition focus:border-neutral-600 dark:border-white/15 dark:bg-[#111111] dark:text-neutral-100 dark:focus:border-neutral-400"
-      />
-      {minuteNotation && (
-        <span className="mt-1 block text-xs text-neutral-500 dark:text-neutral-500">
-          {minuteHelp}
-        </span>
-      )}
-    </label>
-  );
-}
-
-function ReadOnlyField({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 text-sm">
-      <span className="mb-1.5 block font-medium text-neutral-700 dark:text-neutral-300">{label}</span>
-      <div className="flex h-10 items-center truncate rounded-md border border-neutral-200 bg-white px-3 text-sm text-neutral-700 dark:border-white/10 dark:bg-[#111111] dark:text-neutral-300">
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function DocsPage({
-  activePage,
-  t,
-  tc,
-  onNavigate,
-  onCopy,
-}: {
-  activePage: string;
-  t: (key: TranslationKey) => string;
-  tc: (text: string) => string;
-  onNavigate: (page: string) => void;
-  onCopy: () => void;
-}) {
-  const isModel = Boolean(modelDetails[activePage]);
-  const summary = modelDetails[activePage] ?? pageSummaries[activePage] ?? pageSummaries.Overview;
-
-  return (
-    <div>
-      <section className="site-reveal max-w-3xl">
-        <p className="mb-4 text-sm font-medium text-neutral-600 dark:text-neutral-400">
-          {isModel ? t("modelReference") : t("developerDocs")}
-        </p>
-        <h1 className="text-5xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50 sm:text-6xl">
-          {modelDetails[activePage] ? activePage : tc(activePage)}
-        </h1>
-        <p className="mt-5 text-lg leading-8 text-neutral-700 dark:text-neutral-300">{tc(summary)}</p>
-        <div className="mt-7 flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={() => onNavigate("Pricing")}
-            className="pressable inline-flex items-center gap-2 rounded-md bg-neutral-950 px-4 py-2.5 text-sm font-medium text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
-          >
-            {t("viewPricing")}
-            <BadgeDollarSign className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={onCopy}
-            className="pressable inline-flex items-center gap-2 rounded-md border border-neutral-300 bg-white px-4 py-2.5 text-sm font-medium text-neutral-950 hover:bg-neutral-50 dark:border-white/15 dark:bg-white/5 dark:text-neutral-100 dark:hover:bg-white/10"
-          >
-            {t("copyQuickstart")}
-            <Copy className="h-4 w-4" />
-          </button>
-        </div>
-      </section>
-
-      <div className="site-reveal mt-12 grid gap-4 lg:grid-cols-3">
-        <DocCard icon={Play} title={t("startFast")} tc={tc}>
-          Generate a scoped key, pick a model, and send your first request from the
-          dashboard or an SDK.
-        </DocCard>
-        <DocCard icon={Activity} title={t("monitorUsage")} tc={tc}>
-          Track token, character, image, and minute usage with budget alerts and invoices.
-        </DocCard>
-        <DocCard icon={CheckCircle2} title={t("shipReliably")} tc={tc}>
-          Production retries, status visibility, and clear error responses keep integrations predictable.
-        </DocCard>
-      </div>
-
-      <section className="site-reveal mt-8 border-t border-neutral-200 pt-8 dark:border-white/10">
-        <h2 className="text-2xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50">{t("relatedPages")}</h2>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {sidebarSections
-            .flatMap((section) => section.items)
-            .filter((item) => item !== activePage)
-            .slice(0, 8)
-            .map((item) => (
-              <button
-                type="button"
-                key={item}
-                onClick={() => onNavigate(item)}
-                className="pressable rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-50 hover:text-neutral-950 dark:border-white/15 dark:bg-white/5 dark:text-neutral-300 dark:hover:bg-white/10 dark:hover:text-neutral-100"
-              >
-                {tc(item)}
-              </button>
-            ))}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function DocCard({
-  icon: Icon,
-  title,
-  tc,
-  children,
-}: {
-  icon: typeof Activity;
-  title: string;
-  tc: (text: string) => string;
-  children: ReactNode;
-}) {
-  return (
-    <article className="surface-lift rounded-lg border border-neutral-200 bg-white p-5 dark:border-white/10 dark:bg-[#161616]">
-      <Icon className="mb-4 h-5 w-5 text-neutral-500 dark:text-neutral-500" />
-      <h2 className="font-semibold text-neutral-950 dark:text-neutral-50">{title}</h2>
-      <p className="mt-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">
-        {typeof children === "string" ? tc(children) : children}
-      </p>
-    </article>
-  );
-}
+Õø¥yÈZâ)ìz»b¢{>Õ×¥zØ¨¥µÁ½ÉÐì(Ñ¥Ù¥Ñä°(ÉÉ½Ý1Ð°(	½±±ÉM¥¸°(	É¥¹¥ÉÕ¥Ð°(¡­¥É±È°(±½¬Ì°(½Áä°(¥±QáÐ°(Õ°(±½È°(%µ°(1åÉÌÌ°(5¥°(5ÕÍ¥°(A±ä°(QåÁ°(Y¥¼°(iÀ°)ôÉ½´±Õ¥µÉÐì)¥µÁ½ÉÐìÕÍÐ°ÕÍ5µ¼°ÕÍI°ÕÍMÑÑôÉ½´ÉÐì)¥µÁ½ÉÐÑåÁìMMAÉ½ÁÉÑ¥Ì°IÑ9½ôÉ½´ÉÐì)¥µÁ½ÉÐìÍ¡½É5½°ôÉ½´¸½½µÁ½¹¹ÑÌ½Í¡½É5½°ì)¥µÁ½ÉÐì!ÈôÉ½´¸½½µÁ½¹¹ÑÌ½!Èì)¥µÁ½ÉÐìAÉ¥¥¹ÉôÉ½´¸½½µÁ½¹¹ÑÌ½AÉ¥¥¹Éì)¥µÁ½ÉÐìM¥ÈôÉ½´¸½½µÁ½¹¹ÑÌ½M¥Èì)¥µÁ½ÉÐìMÕÍÉ¥ÁÑ¥½¹AôÉ½´¸½½µÁ½¹¹ÑÌ½MÕÍÉ¥ÁÑ¥½¹Aì)¥µÁ½ÉÐìÉÑ½¹Ñ¹ÑQÉ¹Í±Ñ½È°ÉÑQÉ¹Í±Ñ½È°Ñ1¹ÕôÉ½´¸½Ñ½¤Äá¸ì)¥µÁ½ÉÐÑåÁì1¹Õ½°QÉ¹Í±Ñ¥½¹-äôÉ½´¸½Ñ½¤Äá¸ì)¥µÁ½ÉÐìÕÉÉ¹¥Ì°Õ±ÑÕÉÉ¹åIÑÌ°½ÉµÑÕÉÉ¹åµ½Õ¹ÐôÉ½´¸½Ñ½ÕÉÉ¹äì)¥µÁ½ÉÐÑåÁìÕÉÉ¹å½ôÉ½´¸½Ñ½ÕÉÉ¹äì)¥µÁ½ÉÐì(Õ¥¹5½±Ì°(¥µ5½±Ì°(±ÑÍÑ5½±Ì°(µ½±Ñ¥±Ì°(µÕÍ¥5½±Ì°(ÁMÕµµÉ¥Ì°(Á5½±Ì°(Í¥ÉMÑ¥½¹Ì°(ÑáÑ5½±Ì°(ÑáÑ5½±Í	åAÉ¥¥¹5½°(ÑáÑ5½±AÉÍ¹ÑÑ¥½¹Ì°(ÑÉ¹ÍÉ¥ÁÑ¥½¹5½±Ì°(ÑÑÍ5½±Ì°)ôÉ½´¸½Ñ½ÁÉ¥¥¹ì)¥µÁ½ÉÐÑåÁìQáÑ5½°°QáÑ5½±AÉÍ¹ÑÑ¥½¸°QáÑAÉ¥¥¹5½ôÉ½´¸½Ñ½ÁÉ¥¥¹ì)¥µÁ½ÉÐÑåÁìAÉ½YÉ¥¹Ñ-äôÉ½´¸½Ñ½ÍÕÍÉ¥ÁÑ¥½¹Ìì()½¹ÍÐ¥±±¥¹9½ÑÌôl(ì(¥½¸è¥±QáÐ°(­äè¥±±¥¹QáÐ°(ô°(ì(¥½¸è5¥°(­äè¥±±¥¹QÑÌ°(ô°(ì(¥½¸è¥±QáÐ°(­äè¥±±¥¹QÉ¹ÍÉ¥ÁÑ¥½¸°(ô°(ì(¥½¸èY¥¼°(­äè¥±±¥¹Õ¥¹°(ô°(ì(¥½¸è5ÕÍ¥°(­äè¥±±¥¹5ÕÍ¥°(ô°(ì(¥½¸è%µ°(­äè¥±±¥¹%µ°(ô°(ì(¥½¸è¥±QáÐ°(­äè¥±±¥¹A°(ô°)tÌ½¹ÍÐì()½¹ÍÐÍ¡½ÝÍ%ÑµÌôl(ì(­¥¹è¥µ°(Ñ¥Ñ±è½Õµ¹ÐÑÉ¹Í±Ñ¥½¸°(±°è	½É¹ÑÈ°(ÍÉ¥ÁÑ¥½¸èµ½¹ÍÑÉÑÌ1¥¹½ÕÍ¥½¸ÑÉ¹Í±Ñ¥¹Õ±°½Õµ¹ÐÝ¡¥±ÁÉÍÉÙ¥¹¡¥¹Ì°±¥ÍÑÌ°ÑÉµ¥¹½±½ä°¹Ñ½¹¸°(ÍÉè°(ô°(ì(­¥¹èÙ¥¼°(Ñ¥Ñ±è1¥Ù½¹ÙÉÍÑ¥½¸°(±°èI°µÑ¥µµ¼°(ÍÉ¥ÁÑ¥½¸èµ½¹ÍÑÉÑÌ1¥¹½ÕÍ¥½¸1¥ÙQÉ¹Í±Ñ¥¹ÑÉÁÉÑ¥¹½¹ÙÉÍÑ¥½¸Ý¥Ñ ±½Ü±Ñ¹ä¹¹ÑÕÉ°ÑÕÉ¸µÑ­¥¹¸°(ÍÉè°(ô°(ì(­¥¹èÙ¥¼°(Ñ¥Ñ±èY¥¼Õ¥¹°(±°èÕ¥¹µ¼°(ÍÉ¥ÁÑ¥½¸èµ½¹ÍÑÉÑÌÑÉ¹Í±ÑÍÁ ±¥¹Ñ¼Ñ¡½É¥¥¹°Ù¥¼Ý¥Ñ ½¹Í¥ÍÑ¹ÐÙ½¥Ì¹Ñ¥µ¥¹¸°(ÍÉè°(ô°(ì(­¥¹è¥µ°(Ñ¥Ñ±èA±½±¥éÑ¥½¸°(±°è1å½ÕÐÁÉÍÉÙÑ¥½¸°(ÍÉ¥ÁÑ¥½¸èµ½¹ÍÑÉÑÌáÑÉÑ¥¹¹ÑÉ¹Í±Ñ¥¹A½¹Ñ¹ÐÝ¥Ñ¡½ÕÐ±½Í¥¹Ñ¡½Õµ¹ÐÌÙ¥ÍÕ°ÍÑÉÕÑÕÉ¸°(ÍÉè°(ô°(ì(­¥¹è¥µ°(Ñ¥Ñ±è%µÑÉ¹Í±Ñ¥½¸°(±°èY¥ÍÕ°ÑáÐÉÁ±µ¹Ð°(ÍÉ¥ÁÑ¥½¸èµ½¹ÍÑÉÑÌÑÑ¥¹ÑáÐ¥¹Í¥¸¥µ°ÑÉ¹Í±Ñ¥¹¥Ð°¹Á±¥¹Ñ¡ÉÍÕ±Ð¬¥¹Ñ¼Ñ¡Í¥¸¸°(ÍÉè°(ô°(ì(­¥¹èÙ¥¼°(Ñ¥Ñ±èÕÉ½ÉµÕÍ¥¹ÉÑ¥½¸°(±°èAÉ½µÁÐÑ¼µÕÍ¥°(ÍÉ¥ÁÑ¥½¸èµ½¹ÍÑÉÑÌÕÉ½ÉÑÕÉ¹¥¹ÝÉ¥ÑÑ¸ÉÑ¥Ù¥ÉÑ¥½¸¥¹Ñ¼½µÁ±Ñ°ÁÉ½ÕÑ¥½¸µÉäµÕÍ¥ÍµÁ±¸°(ÍÉè°(ô°)tÌ½¹ÍÐì()½¹ÍÐÍÉ¡%ÑµÌôÉÉä¹É½´ (¹ÜMÐ¡l(A$AÉ¥Ì°(MÕÍÉ¥ÁÑ¥½¸AÉ¥Ì°(¸¸¹=©Ð¹­åÌ¡ÁMÕµµÉ¥Ì¤°(¸¸¹±ÑÍÑ5½±Ì°(¸¸¹ÑáÑ5½±Ì¹µÀ ¡µ½°¤ôøµ½°¹µ½°¤°(¸¸¹ÑÑÍ5½±Ì¹µÀ ¡µ½°¤ôøµ½°¹µ½°¤°(¸¸¹ÑÉ¹ÍÉ¥ÁÑ¥½¹5½±Ì¹µÀ ¡µ½°¤ôøµ½°¹µ½°¤°(¸¸¹Õ¥¹5½±Ì¹µÀ ¡µ½°¤ôøµ½°¹µ½°¤°(¸¸¹µÕÍ¥5½±Ì¹µÀ ¡µ½°¤ôøµ½°¹µ½°¤°(¸¸¹¥µ5½±Ì¹µÀ ¡µ½°¤ôøµ½°¹Í¥é¤°(¸¸¹Á5½±Ì¹µÀ ¡µ½°¤ôøµ½°¹µ½°¤°(t¤°(¤ì()Õ¹Ñ¥½¸±µÁ9ÕµÈ¡Ù±Õè¹ÕµÈ°µ¥¸è¹ÕµÈ°µàè¹ÕµÈ¤ì(¥ 9ÕµÈ¹¥Í¥¹¥Ñ¡Ù±Õ¤¤ì(ÉÑÕÉ¸µ¥¸ì(ô((ÉÑÕÉ¸5Ñ ¹µ¥¸¡µà°5Ñ ¹µà¡µ¥¸°Ù±Õ¤¤ì)ô()Õ¹Ñ¥½¸±µÁ5¥¹ÕÑ9½ÑÑ¥½¸¡Ù±Õè¹ÕµÈ°µ¥¸è¹ÕµÈ°µàè¹ÕµÈ¤ì(½¹ÍÐ±µÁô±µÁ9ÕµÈ¡Ù±Õ°µ¥¸°µà¤ì(½¹ÍÐÝ¡½±5¥¹ÕÑÌô5Ñ ¹ÑÉÕ¹¡±µÁ¤ì(½¹ÍÐÍ½¹Ìô5Ñ ¹µ¥¸ Ôä°5Ñ ¹É½Õ¹ ¡±µÁ´Ý¡½±5¥¹ÕÑÌ¤¨ÄÀÀ¤¤ì((ÉÑÕÉ¸9ÕµÈ ¡Ý¡½±5¥¹ÕÑÌ¬Í½¹Ì¼ÄÀÀ¤¹Ñ½¥á È¤¤ì)ô()Õ¹Ñ¥½¸µ¥¹ÕÑ9½ÑÑ¥½¹Q½5¥¹ÕÑÌ¡Ù±Õè¹ÕµÈ¤ì(½¹ÍÐÝ¡½±5¥¹ÕÑÌô5Ñ ¹ÑÉÕ¹¡Ù±Õ¤ì(½¹ÍÐÍ½¹Ìô5Ñ ¹É½Õ¹ ¡Ù±Õ´Ý¡½±5¥¹ÕÑÌ¤¨ÄÀÀ¤ì((ÉÑÕÉ¸Ý¡½±5¥¹ÕÑÌ¬Í½¹Ì¼ØÀì)ô()Õ¹Ñ¥½¸µ½±M±Õ¡µ½±9µèÍÑÉ¥¹¤ì(ÉÑÕÉ¸µ½±9µ¹Ñ½1½ÝÉÍ ¤¹ÉÁ± ½myµèÀ´åt¬½°´¤¹ÉÁ± ¼¡xµð´¤½°¤ì)ô()½¹ÍÐÁÁ	ÍAÑ ô¥µÁ½ÉÐ¹µÑ¹¹Ø¹	M}UI0¹ÉÁ± ½p¼¼°¤ì()Õ¹Ñ¥½¸ÍÑÉ¥Á	ÍAÑ ¡ÁÑ¡¹µèÍÑÉ¥¹¤ì(¥ ÁÁ	ÍAÑ ñðÁÑ¡¹µ¹ÍÑÉÑÍ]¥Ñ ¡ÁÁ	ÍAÑ ¤¤ÉÑÕÉ¸ÁÑ¡¹µì(ÉÑÕÉ¸ÁÑ¡¹µ¹Í±¥¡ÁÁ	ÍAÑ ¹±¹Ñ ¤ñð¼ì)ô()Õ¹Ñ¥½¸Ý¥Ñ¡	ÍAÑ ¡ÁÑ¡¹µèÍÑÉ¥¹¤ì(ÉÑÕÉ¸íÁÁ	ÍAÑ¡ôíÁÑ¡¹µõì)ô()Õ¹Ñ¥½¸µ½±9µÉ½µAÑ ¡ÁÑ¡¹µèÍÑÉ¥¹¤ì(½¹ÍÐÍ±ÕôÍÑÉ¥Á	ÍAÑ ¡ÁÑ¡¹µ¤¹µÑ  ½yp½µ½±Íp¼¡mx½t¬¥p¼ü¼¤ü¹lÅtì(ÉÑÕÉ¸Í±ÕüÑáÑ5½±Ì¹¥¹ ¡µ½°¤ôøµ½±M±Õ¡µ½°¹µ½°¤ôôôÍ±Õ¤ü¹µ½°èÕ¹¥¹ì)ô()Õ¹Ñ¥½¸ÁÉ½µAÑ ¡ÁÑ¡¹µèÍÑÉ¥¹¤ì(½¹ÍÐÁÁAÑ ôÍÑÉ¥Á	ÍAÑ ¡ÁÑ¡¹µ¤ì(¥¡ÁÁAÑ ôôô½ÍÕÍÉ¥ÁÑ¥½¹Ì¤ÉÑÕÉ¸MÕÍÉ¥ÁÑ¥½¸AÉ¥Ìì(¥¡ÁÁAÑ ôôô½µ½±ÌñðÁÁAÑ ôôô½µ½±Ì¼¤ÉÑÕÉ¸5½±Ìì(ÉÑÕÉ¸µ½±9µÉ½µAÑ ¡ÁÑ¡¹µ¤üüAÉ¥¥¹ì)ô()áÁ½ÉÐÕ±ÐÕ¹Ñ¥½¸ÁÀ ¤ì(½¹ÍÐmÑ¥ÙA°ÍÑÑ¥ÙAtôÕÍMÑÑ  ¤ôøÁÉ½µAÑ ¡Ý¥¹½Ü¹±½Ñ¥½¸¹ÁÑ¡¹µ¤¤ì(½¹ÍÐmÍ¥É½±±ÁÍ°ÍÑM¥É½±±ÁÍtôÕÍMÑÑ¡±Í¤ì(½¹ÍÐmµ½¥±=Á¸°ÍÑ5½¥±=Á¹tôÕÍMÑÑ¡±Í¤ì(½¹ÍÐmÑ¡µ°ÍÑQ¡µtôÕÍMÑÑð±¥¡ÐðÉ¬ø ±¥¡Ð¤ì(½¹ÍÐm±¹Õ°ÍÑ1¹ÕtôÕÍMÑÑñ1¹Õ½ø ¸¤ì(½¹ÍÐmÍ¡½É=Á¸°ÍÑÍ¡½É=Á¹tôÕÍMÑÑ¡±Í¤ì(½¹ÍÐmÁÉ½YÉ¥¹Ñ-ä°ÍÑAÉ½YÉ¥¹Ñ-åtôÕÍMÑÑñAÉ½YÉ¥¹Ñ-äø  ¤ôø(Ý¥¹½Ü¹±½±MÑ½É¹Ñ%Ñ´ ±¥¹½ÕÍ¥½¸µÁÉ¼µÙÉ¥¹Ð¤ôôôÅ´üÅ´èÔÀÁ¬°(¤ì(½¹ÍÐmÑ½ÍÐ°ÍÑQ½ÍÑtôÕÍMÑÑñÍÑÉ¥¹ð¹Õ±°ø¡¹Õ±°¤ì(½¹ÍÐÍÉ½±±AÉ½ÉÍÍIôÕÍIñ!Q51MÁ¹±µ¹Ðø¡¹Õ±°¤ì(½¹ÍÐÐôÕÍ5µ¼  ¤ôøÉÑQÉ¹Í±Ñ½È¡±¹Õ¤°m±¹Õt¤ì(½¹ÍÐÑôÕÍ5µ¼  ¤ôøÉÑ½¹Ñ¹ÑQÉ¹Í±Ñ½È¡±¹Õ¤°m±¹Õt¤ì(½¹ÍÐÑ¥Ù1¹ÕôÑ1¹Õ¡±¹Õ¤ì(½¹ÍÐ¥ÍMÕÍÉ¥ÁÑ¥½¹AôÑ¥ÙAôôôMÕÍÉ¥ÁÑ¥½¸AÉ¥Ìì((½¹ÍÐ¹Ù¥Ñô¡ÁèÍÑÉ¥¹¤ôøì(½¹ÍÐ¹áÑAôÁôôôA$AÉ¥ÌüAÉ¥¥¹èÁì(½¹ÍÐ¹áÑAÑ ô¹áÑAôôôMÕÍÉ¥ÁÑ¥½¸AÉ¥Ì(ü½ÍÕÍÉ¥ÁÑ¥½¹Ì(è¹áÑAôôô5½±Ì(ü½µ½±Ì(èÑáÑ5½±Ì¹Í½µ ¡µ½°¤ôøµ½°¹µ½°ôôô¹áÑA¤(ü½µ½±Ì¼íµ½±M±Õ¡¹áÑA¥õ(è¼ì(½¹ÍÐÁ±½åAÑ ôÝ¥Ñ¡	ÍAÑ ¡¹áÑAÑ ¤ì(¥¡Ý¥¹½Ü¹±½Ñ¥½¸¹ÁÑ¡¹µôôÁ±½åAÑ ¤Ý¥¹½Ü¹¡¥ÍÑ½Éä¹ÁÕÍ¡MÑÑ¡íô°°Á±½åAÑ ¤ì(ÍÑÑ¥ÙA¡¹áÑA¤ì(ÍÑ5½¥±=Á¸¡±Í¤ì(Ý¥¹½Ü¹ÍÉ½±±Q¼¡ìÑ½ÀèÀ°¡Ù¥½ÈèÍµ½½Ñ ô¤ì(ôì((½¹ÍÐ¹½Ñ¥äô¡µÍÍèÍÑÉ¥¹¤ôøì(ÍÑQ½ÍÐ¡µÍÍ¤ì(Ý¥¹½Ü¹ÍÑQ¥µ½ÕÐ  ¤ôøÍÑQ½ÍÐ¡¹Õ±°¤°ÈÈÀÀ¤ì(ôì(½¹ÍÐÍ±ÑAÉ½YÉ¥¹Ðô¡ÙÉ¥¹ÐèAÉ½YÉ¥¹Ñ-ä¤ôøì(ÍÑAÉ½YÉ¥¹Ñ-ä¡ÙÉ¥¹Ð¤ì(Ý¥¹½Ü¹±½±MÑ½É¹ÍÑ%Ñ´ ±¥¹½ÕÍ¥½¸µÁÉ¼µÙÉ¥¹Ð°ÙÉ¥¹Ð¤ì(ôì((½¹ÍÐ½ÁåM¹¥ÁÁÐôÍå¹ ¤ôøì(ÑÉäì(Ý¥Ð¹Ù¥Ñ½È¹±¥Á½É¹ÝÉ¥ÑQáÐ (ÕÉ°¡ÑÑÁÌè¼½Á¤¹±¥¹½ÕÍ¥½¸¹Ø½ØÄ½ÉÍÁ½¹ÍÌµ ÕÑ¡½É¥éÑ¥½¸è	ÉÈ1%9=UM%=9}A%}-d°(¤ì(¹½Ñ¥ä¡íÐ ½ÁåEÕ¥­ÍÑÉÐ¥ô½Á¥¤ì(ôÑ ì(¹½Ñ¥ä ±¥Á½ÉÁÉµ¥ÍÍ¥½¸ÝÌ±½­¤ì(ô(ôì((ÕÍÐ  ¤ôøì(½Õµ¹Ð¹½Õµ¹Ñ±µ¹Ð¹±ÍÍ1¥ÍÐ¹Ñ½± É¬°Ñ¡µôôôÉ¬¤ì(½Õµ¹Ð¹½Õµ¹Ñ±µ¹Ð¹ÍÑå±¹½±½ÉM¡µôÑ¡µì(½Õµ¹Ð¹½ä¹ÍÑå±¹­É½Õ¹ôÑ¡µôôôÉ¬üÁÁÁèì(ô°mÑ¡µt¤ì((ÕÍÐ  ¤ôøì(½Õµ¹Ð¹½Õµ¹Ñ±µ¹Ð¹±¹ô±¹Õì(½Õµ¹Ð¹½Õµ¹Ñ±µ¹Ð¹¥ÈôÑ¥Ù1¹Õ¹¥Èì(ô°mÑ¥Ù1¹Õ¹¥È°±¹Õt¤ì((ÕÍÐ  ¤ôøì(½¹ÍÐ¡¹±A½ÁMÑÑô ¤ôøì(ÍÑÑ¥ÙA¡ÁÉ½µAÑ ¡Ý¥¹½Ü¹±½Ñ¥½¸¹ÁÑ¡¹µ¤¤ì(ÍÑ5½¥±=Á¸¡±Í¤ì(ôì(Ý¥¹½Ü¹Ù¹Ñ1¥ÍÑ¹È Á½ÁÍÑÑ°¡¹±A½ÁMÑÑ¤ì(ÉÑÕÉ¸ ¤ôøÝ¥¹½Ü¹Éµ½ÙÙ¹Ñ1¥ÍÑ¹È Á½ÁÍÑÑ°¡¹±A½ÁMÑÑ¤ì(ô°mt¤ì((ÕÍÐ  ¤ôøì(¥¡¥ÍMÕÍÉ¥ÁÑ¥½¹A¤ÉÑÕÉ¸ì(½Õµ¹Ð¹Ñ¥Ñ±ôÑ¥ÙAôôôAÉ¥¥¹üA$AÉ¥Ìð1¥¹½ÕÍ¥½¸Ù±½ÁÉÌèíÑ¥ÙAôð1¥¹½ÕÍ¥½¸Ù±½ÁÉÍì(½¹ÍÐÍÉ¥ÁÑ¥½¸ôÑ¥ÙAôôôAÉ¥¥¹(ü1¥¹½ÕÍ¥½¸A$ÁÉ¥¥¹½ÈÑáÐ°ÍÁ °ÑÉ¹ÍÉ¥ÁÑ¥½¸°Õ¥¹°¥µ°A°¹µÕÍ¥µ½±Ì¸(èÁMÕµµÉ¥ÍmÑ¥ÙAtüüÁMÕµµÉ¥Ì¹=ÙÉÙ¥Üì(±ÐµÑô½Õµ¹Ð¹ÅÕÉåM±Ñ½Èñ!Q515Ñ±µ¹Ðø µÑm¹µôÍÉ¥ÁÑ¥½¸t¤ì(¥ µÑ¤ì(µÑô½Õµ¹Ð¹ÉÑ±µ¹Ð µÑ¤ì(µÑ¹¹µôÍÉ¥ÁÑ¥½¸ì(½Õµ¹Ð¹¡¹ÁÁ¹¡µÑ¤ì(ô(µÑ¹½¹Ñ¹ÐôÍÉ¥ÁÑ¥½¸ì(±Ð¹½¹¥°ô½Õµ¹Ð¹ÅÕÉåM±Ñ½Èñ!Q511¥¹­±µ¹Ðø ±¥¹­mÉ°ô¹½¹¥°t¤ì(¥ ¹½¹¥°¤ì(¹½¹¥°ô½Õµ¹Ð¹ÉÑ±µ¹Ð ±¥¹¬¤ì(¹½¹¥°¹É°ô¹½¹¥°ì(½Õµ¹Ð¹¡¹ÁÁ¹¡¹½¹¥°¤ì(ô(¹½¹¥°¹¡ÉôíÝ¥¹½Ü¹±½Ñ¥½¸¹½É¥¥¹ôíÝ¥¹½Ü¹±½Ñ¥½¸¹ÁÑ¡¹µõì(ô°mÑ¥ÙA°¥ÍMÕÍÉ¥ÁÑ¥½¹At¤ì((ÕÍÐ  ¤ôøì(¥¡¥ÍMÕÍÉ¥ÁÑ¥½¹A¤ÉÑÕÉ¸ì(±ÐÉµôÀì((½¹ÍÐÕÁÑAÉ½ÉÍÌô ¤ôøì(ÉµôÀì(½¹ÍÐÍÉ½±±±!¥¡Ðô½Õµ¹Ð¹½Õµ¹Ñ±µ¹Ð¹ÍÉ½±±!¥¡Ð´Ý¥¹½Ü¹¥¹¹É!¥¡Ðì(½¹ÍÐÁÉ½ÉÍÌôÍÉ½±±±!¥¡ÐøÀü5Ñ ¹µ¥¸¡5Ñ ¹µà¡Ý¥¹½Ü¹ÍÉ½±±d¼ÍÉ½±±±!¥¡Ð°À¤°Ä¤èÀì(¥¡ÍÉ½±±AÉ½ÉÍÍI¹ÕÉÉ¹Ð¤ì(ÍÉ½±±AÉ½ÉÍÍI¹ÕÉÉ¹Ð¹ÍÑå±¹ÑÉ¹Í½É´ôÍ±` íÁÉ½ÉÍÍô¥ì(ô(ôì(½¹ÍÐ¡¹±MÉ½±°ô ¤ôøì(¥ Éµ¤ÉµôÝ¥¹½Ü¹ÉÅÕÍÑ¹¥µÑ¥½¹Éµ¡ÕÁÑAÉ½ÉÍÌ¤ì(ôì((ÕÁÑAÉ½ÉÍÌ ¤ì(Ý¥¹½Ü¹Ù¹Ñ1¥ÍÑ¹È ÍÉ½±°°¡¹±MÉ½±°°ìÁÍÍ¥ÙèÑÉÕô¤ì(Ý¥¹½Ü¹Ù¹Ñ1¥ÍÑ¹È ÉÍ¥é°¡¹±MÉ½±°¤ì(ÉÑÕÉ¸ ¤ôøì(Ý¥¹½Ü¹Éµ½ÙÙ¹Ñ1¥ÍÑ¹È ÍÉ½±°°¡¹±MÉ½±°¤ì(Ý¥¹½Ü¹Éµ½ÙÙ¹Ñ1¥ÍÑ¹È ÉÍ¥é°¡¹±MÉ½±°¤ì(¥¡Éµ¤Ý¥¹½Ü¹¹±¹¥µÑ¥½¹Éµ¡Éµ¤ì(ôì(ô°mÑ¥ÙA°¥ÍMÕÍÉ¥ÁÑ¥½¹At¤ì((ÕÍÐ  ¤ôøì(¥¡¥ÍMÕÍÉ¥ÁÑ¥½¹A¤ÉÑÕÉ¸ì(½¹ÍÐÉÕ5½Ñ¥½¸ôÝ¥¹½Ü¹µÑ¡5¥ ¡ÁÉÉÌµÉÕµµ½Ñ¥½¸èÉÕ¤¤¹µÑ¡Ìì(½¹ÍÐ±µ¹ÑÌôÉÉä¹É½´¡½Õµ¹Ð¹ÅÕÉåM±Ñ½É±°ñ!Q51±µ¹Ðø ¹Í¥ÑµÉÙ°¤¤ì((¥¡ÉÕ5½Ñ¥½¸ñð %¹ÑÉÍÑ¥½¹=ÍÉÙÈ¥¸Ý¥¹½Ü¤¤ì(±µ¹ÑÌ¹½É  ¡±µ¹Ð¤ôø±µ¹Ð¹±ÍÍ1¥ÍÐ¹ Í¥ÑµÉÙ°µÙ¥Í¥±¤¤ì(ÉÑÕÉ¸ì(ô((±µ¹ÑÌ¹½É  ¡±µ¹Ð¤ôø±µ¹Ð¹±ÍÍ1¥ÍÐ¹ Í¥ÑµÉÙ°µÉä¤¤ì(½¹ÍÐ½ÍÉÙÈô¹Ü%¹ÑÉÍÑ¥½¹=ÍÉÙÈ ¡¹ÑÉ¥Ì¤ôøì(¹ÑÉ¥Ì¹½É  ¡¹ÑÉä¤ôøì(¥ ¹ÑÉä¹¥Í%¹ÑÉÍÑ¥¹¤ÉÑÕÉ¸ì(¹ÑÉä¹ÑÉÐ¹±ÍÍ1¥ÍÐ¹ Í¥ÑµÉÙ°µÙ¥Í¥±¤ì(½ÍÉÙÈ¹Õ¹½ÍÉÙ¡¹ÑÉä¹ÑÉÐ¤ì(ô¤ì(ô°ìÉ½½Ñ5É¥¸èÁÁàÁÁà´àÁÁà°Ñ¡ÉÍ¡½±èÀ¸Ààô¤ì((±µ¹ÑÌ¹½É  ¡±µ¹Ð¤ôø½ÍÉÙÈ¹½ÍÉÙ¡±µ¹Ð¤¤ì(ÉÑÕÉ¸ ¤ôø½ÍÉÙÈ¹¥Í½¹¹Ð ¤ì(ô°mÑ¥ÙA°¥ÍMÕÍÉ¥ÁÑ¥½¹At¤ì((ÉÑÕÉ¸ (ñ¥Ø±ÍÍ9µôµ¥¸µ µÍÉ¸µÝ¡¥ÑÑáÐµ¹ÕÑÉ°´äÔÀÍ±Ñ¥½¸éµ¹ÕÑÉ°´äÀÀÍ±Ñ¥½¸éÑáÐµÝ¡¥ÑÉ¬éµlÁÁÁtÉ¬éÑáÐµ¹ÕÑÉ°´ÄÀÀÉ¬éÍ±Ñ¥½¸éµ¹ÕÑÉ°´ÄÀÀÉ¬éÍ±Ñ¥½¸éÑáÐµ¹ÕÑÉ°´äÔÀø(ì¥ÍMÕÍÉ¥ÁÑ¥½¹Añ¥Ø±ÍÍ9µôÍ¥ÑµÍÉ½±°µÁÉ½ÉÍÌÉ¥µ¡¥¸ôÑÉÕøñÍÁ¸ÉõíÍÉ½±±AÉ½ÉÍÍIô¼øð½¥Øùô(ñ!È(Ñ¥ÙAõíÑ¥ÙAô(¥ÍMÕÍÉ¥ÁÑ¥½¹Aõí¥ÍMÕÍÉ¥ÁÑ¥½¹Aô(Ñ¡µõíÑ¡µô(±¹Õõí±¹Õô(µ½¥±=Á¸õíµ½¥±=Á¹ô(ÍÉ¡%ÑµÌõíÍÉ¡%ÑµÍô(ÐõíÑô(ÑõíÑô(½¹9Ù¥Ñõí¹Ù¥Ñô(½¹1¹Õ¡¹õíÍÑ1¹Õô(½¹Í¡½Éõì ¤ôøÍÑÍ¡½É=Á¸¡ÑÉÕ¥ô(½¹Q½±Q¡µõì ¤ôøÍÑQ¡µ ¡Ù±Õ¤ôø¡Ù±Õôôô±¥¡ÐüÉ¬è±¥¡Ð¤¥ô(½¹Q½±5½¥±õì ¤ôøÍÑ5½¥±=Á¸ ¡Ù±Õ¤ôøÙ±Õ¥ô(¼ø((í¥ÍMÕÍÉ¥ÁÑ¥½¹Aü (ñµ¥¸±ÍÍ9µôµ¥¸µÜ´À±à´Ä½ÙÉ±½Üµ¡¥¸ø(ñMÕÍÉ¥ÁÑ¥½¹A(½¹Á¥AÉ¥Ìõì ¤ôø¹Ù¥Ñ A$AÉ¥Ì¥ô(½¹M±ÑA±¸õì¡Á±¹%°¥±±¥¹%¹ÑÉÙ°¤ôøì(¼¼¡­½ÕÐ¥¹ÑÉÑ¥½¸Á½¥¹ÐèÁÍÌÑ¡Á±¸¥¹¥±±¥¹¥¹ÑÉÙ°Ñ¼Ñ¡ÕÑÕÉÕÑ¡¹Ñ¥Ñ¡­½ÕÐ±½Ü¸(¹½Ñ¥ä¡¡­½ÕÐ¥Ì¹½Ð½¹¹ÑåÐ¸M±ÑÁ±¸èíÁ±¹%ô í¥±±¥¹%¹ÑÉÙ±ô¥¤ì(õô(½¹	Õ¥±Q´õì¡¥±±¥¹%¹ÑÉÙ°¤ôø¹½Ñ¥ä¡Q´¡­½ÕÐ¥Ì¹½Ð½¹¹ÑåÐ í¥±±¥¹%¹ÑÉÙ±ô¤¹¥ô(½¹½¹ÑÑM±Ìõì¡ÍÑ½Õ¹Ð°ÍÑA±¹%°¥±±¥¹%¹ÑÉÙ°¤ôø¹½Ñ¥ä¡M±ÌÉÅÕÍÐÍÙ½ÈíÍÑ½Õ¹Ð¹Ñ½1½±MÑÉ¥¹ ¸µUL¥ôíÍÑA±¹%ôÍÑÌ í¥±±¥¹%¹ÑÉÙ±ô¤¹¥ô(ÁÉ½YÉ¥¹Ñ-äõíÁÉ½YÉ¥¹Ñ-åô(½¹AÉ½YÉ¥¹Ñ¡¹õíÍ±ÑAÉ½YÉ¥¹Ñô(¼ø(ð½µ¥¸ø(¤è (ñ¥Ø±ÍÍ9µô±àø(ñM¥È(Ñ¥ÙAõíÑ¥ÙAô(½±±ÁÍõíÍ¥É½±±ÁÍô(µ½¥±=Á¸õíµ½¥±=Á¹ô(±¹Õõí±¹Õô(ÐõíÑô(ÑõíÑô(½¹9Ù¥Ñõí¹Ù¥Ñô(½¹1¹Õ¡¹õíÍÑ1¹Õô(½¹Í¡½Éõì ¤ôøì(ÍÑ5½¥±=Á¸¡±Í¤ì(ÍÑÍ¡½É=Á¸¡ÑÉÕ¤ì(õô(½¹Q½±½±±ÁÍõì ¤ôøÍÑM¥É½±±ÁÍ ¡Ù±Õ¤ôøÙ±Õ¥ô(½¹±½Í5½¥±õì ¤ôøÍÑ5½¥±=Á¸¡±Í¥ô(¼ø((ñµ¥¸±ÍÍ9µôµ¥¸µÜ´À±à´Ä½ÙÉ±½Üµ¡¥¸Áà´ÐÁä´ØÍ´éÁà´àÍ´éÁä´ÄÀ±éÁà´ÄÈø(ñ¥Ø±ÍÍ9µõíµàµÕÑ¼É¥µàµÜ´Ýá°À´ÄÀíÑ¥ÙAôôôAÉ¥¥¹üá°éÉ¥µ½±Ìµmµ¥¹µà À°ÅÈ¥|ÄÕÉµtèõôø(ñ¥Ø­äõíÑ¥ÙAô±ÍÍ9µôÁµ¹ÑÈµ¥¸µÜ´Àø(íÑ¥ÙAôôôAÉ¥¥¹ü (ñAÉ¥¥¹AÐõíÑô½¹Í¡½Éõì ¤ôøÍÑÍ¡½É=Á¸¡ÑÉÕ¥ô½¹=Á¹5½°õí¹Ù¥Ñô¼ø(¤èÑ¥ÙAôôô5½±Ìü (ñ5½±½µÁÉ¥Í½¹A½¹=Á¹5½°õí¹Ù¥Ñô¼ø(¤èÑáÑ5½±Ì¹Í½µ ¡µ½°¤ôøµ½°¹µ½°ôôôÑ¥ÙA¤ü (ñ5½±Ñ¥±A(µ½±9µõíÑ¥ÙAô(½¹	¬õì ¤ôø¹Ù¥Ñ 5½±Ì¥ô(½¹½µÁÉõì ¤ôøì(¹Ù¥Ñ 5½±Ì¤ì(Ý¥¹½Ü¹ÍÑQ¥µ½ÕÐ  ¤ôø½Õµ¹Ð¹Ñ±µ¹Ñ	å% ½µÁÉµµ½±Ì¤ü¹ÍÉ½±±%¹Ñ½Y¥Ü¡ì¡Ù¥½ÈèÍµ½½Ñ ô¤°ÄÈÀ¤ì(õô(½¹=Á¹A±åÉ½Õ¹õì ¤ôø¹½Ñ¥ä¡íÑ¥ÙAôÍ±Ñ¥¸Ñ¡A±åÉ½Õ¹¹¥ô(¼ø(¤è (ñ½ÍAÑ¥ÙAõíÑ¥ÙAôÐõíÑôÑõíÑô½¹9Ù¥Ñõí¹Ù¥Ñô½¹½Áäõí½ÁåM¹¥ÁÁÑô¼ø(¥ô(ð½¥Øø((íÑ¥ÙAôôôAÉ¥¥¹ñÍ¥±ÍÍ9µô¡¥¸á°é±½¬ø(ñ¥Ø±ÍÍ9µôÍÑ¥­äÑ½À´ÈÐ½ÉÈµ°½ÉÈµ¹ÕÑÉ°´ÈÀÀÁ°´ÔÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀø(ñÀ±ÍÍ9µôµ´ÌÑáÐµáÌ½¹ÐµÍµ¥½±ÕÁÁÉÍÑÉ­¥¹µÝ¥ÑáÐµ¹ÕÑÉ°´ÔÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀÀø(íÐ ½¹Q¡¥ÍA¥ô(ð½Àø(ñ¹Ø±ÍÍ9µôÍÁµä´ÈÑáÐµÍ´ø(íl(lÁÉ½ÕÐµµ½Ì°AÉ½ÕÐµ½Ìt°(lÑáÐµµ½±Ì°Ð ÑáÑ5½±Ì¥t°(lÑÑÌµµ½±Ì°Ð ÑÑÍ5½±Ì¥t°(lÑÉ¹ÍÉ¥ÁÑ¥½¸µµ½±Ì°Ð ÑÉ¹ÍÉ¥ÁÑ¥½¹5½±Ì¥t°(lÕ¥¹µµ½±Ì°Ð Õ¥¹5½±Ì¥t°(l¥µµÑÉ¹Í±Ñ¥½¸°Ð ¥µQÉ¹Í±Ñ¥½¸¥t°(lÁµáÑÉÑ¥½¸µ¹µ¥Ñ¥¹°Ð ÁáÑÉÑ¥½¹¥Ñ¥¹¥t°(lµÕÍ¥µµ½±Ì°Ð µÕÍ¥5½±Ì¥t°(l¥±±¥¹µ¹½ÑÌ°Ð ¥±±¥¹9½ÑÌ¥t°(t¹µÀ ¡m¥°¥Ñµt¤ôø (ñ(­äõí¥ô(¡Éõíí¥õô(±ÍÍ9µô±½¬ÑáÐµ¹ÕÑÉ°´ÔÀÀ¡½ÙÈéÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀÀÉ¬é¡½ÙÈéÑáÐµ¹ÕÑÉ°´ÄÀÀ(ø(í¥Ñµô(ð½ø(¤¥ô(ð½¹Øø(ð½¥Øø(ð½Í¥ùô(ð½¥Øø(ð½µ¥¸ø(ð½¥Øø(¥ô((íÍ¡½É=Á¸ (ñÍ¡½É5½°ÑõíÑô½¹±½Íõì ¤ôøÍÑÍ¡½É=Á¸¡±Í¥ô½¹9½Ñ¥äõí¹½Ñ¥åô¼ø(¥ô((íÑ½ÍÐ (ñ¥Ø±ÍÍ9µôÑ½ÍÐµ¹ÑÈ¥á½ÑÑ½´´Ð±Ð´ÐÉ¥¡Ð´Ðè´ÔÀÉ½Õ¹µ±½ÉÈ½ÉÈµ¹ÕÑÉ°´ÈÀÀµÝ¡¥ÑÁà´ÐÁä´ÌÑáÐµÍ´½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´äÔÀÍ¡½Üµ±É¬é½ÉÈµÝ¡¥Ñ¼ÄÀÉ¬éµlÄØÄØÄÙtÉ¬éÑáÐµ¹ÕÑÉ°´ÄÀÀÍ´é½ÑÑ½´´ÔÍ´é±ÐµÕÑ¼Í´éÉ¥¡Ð´Ôø(íÑ½ÍÑô(ð½¥Øø(¥ô(ð½¥Øø(¤ì)ô()Õ¹Ñ¥½¸AÉ¥¥¹A¡ìÐ°½¹Í¡½É°½¹=Á¹5½°ôèìÐè¡­äèQÉ¹Í±Ñ¥½¹-ä¤ôøÍÑÉ¥¹ì½¹Í¡½Éè ¤ôøÙ½¥ì½¹=Á¹5½°è¡µ½°èÍÑÉ¥¹¤ôøÙ½¥ô¤ì(½¹ÍÐmÕÉÉ¹ä°ÍÑÕÉÉ¹åtôÕÍMÑÑñÕÉÉ¹å½ø  ¤ôøì(½¹ÍÐÍÑ½ÉÕÉÉ¹äôÝ¥¹½Ü¹±½±MÑ½É¹Ñ%Ñ´ ±¥¹½ÕÍ¥½¸µÁÉ¥¥¹µÕÉÉ¹ä¤ì(ÉÑÕÉ¸ÕÉÉ¹¥Ì¹Í½µ ¡¥Ñ´¤ôø¥Ñ´¹½ôôôÍÑ½ÉÕÉÉ¹ä¤ü¡ÍÑ½ÉÕÉÉ¹äÌÕÉÉ¹å½¤èUMì(ô¤ì(½¹ÍÐmÕÉÉ¹åIÑÌ°ÍÑÕÉÉ¹åIÑÍtôÕÍMÑÑ¡Õ±ÑÕÉÉ¹åIÑÌ¤ì(½¹ÍÐmÉÑÍU¹Ù¥±±°ÍÑIÑÍU¹Ù¥±±tôÕÍMÑÑ¡±Í¤ì(½¹ÍÐmÑáÑAÉ¥¥¹5½°ÍÑQáÑAÉ¥¥¹5½tôÕÍMÑÑñQáÑAÉ¥¥¹5½ø  ¤ôøì(½¹ÍÐÍÑ½É5½ôÝ¥¹½Ü¹±½±MÑ½É¹Ñ%Ñ´ ±¥¹½ÕÍ¥½¸µÑáÐµÁÉ¥¥¹µµ½¤ì(ÉÑÕÉ¸ÍÑ½É5½ôôôÑ üÑ è¥¹ÍÑ¹Ðì(ô¤ì(½¹ÍÐmÍ±Ñ5½°°ÍÑM±Ñ5½±tôÕÍMÑÑ 1¥¹½ÕÍ¥½¸¤ì(½¹ÍÐm¥¹ÁÕÑQ½­¹Ì°ÍÑ%¹ÁÕÑQ½­¹ÍtôÕÍMÑÑ Å|ÀÀÁ|ÀÀÀ¤ì(½¹ÍÐm½ÕÑÁÕÑQ½­¹Ì°ÍÑ=ÕÑÁÕÑQ½­¹ÍtôÕÍMÑÑ Å|ÀÀÁ|ÀÀÀ¤ì(½¹ÍÐÑÑÍ¡ÉÑÉ5½±ÌôÑÑÍ5½±Ì¹¥±ÑÈ ¡µ½°¤ôøµ½°¹ÁÉ¥¥¹U¹¥ÐôôôÁÉ|Å­}¡ÉÑÉÌ¤ì(½¹ÍÐ±¥ÙQÉ¹Í±Ñ5½°ôÑÑÍ5½±Ì¹¥¹ ¡µ½°¤ôøµ½°¹µ½°ôôô1¥¹½ÕÍ¥½¸1¥ÙQÉ¹Í±Ñ¤ì(½¹ÍÐmÍ±ÑQÑÍ5½°°ÍÑM±ÑQÑÍ5½±tôÕÍMÑÑ¡ÑÑÍ¡ÉÑÉ5½±ÍlÁtü¹µ½°üü¤ì(½¹ÍÐmÑÑÍ¡ÉÑÉÌ°ÍÑQÑÍ¡ÉÑÉÍtôÕÍMÑÑ ÄÀÀÀ¤ì(½¹ÍÐm±¥ÙQÉ¹Í±Ñ5¥¹ÕÑÌ°ÍÑ1¥ÙQÉ¹Í±Ñ5¥¹ÕÑÍtôÕÍMÑÑ Ä¤ì(½¹ÍÐmÍ±ÑQÉ¹ÍÉ¥ÁÑ¥½¹5½°°ÍÑM±ÑQÉ¹ÍÉ¥ÁÑ¥½¹5½±tôÕÍMÑÑ¡ÑÉ¹ÍÉ¥ÁÑ¥½¹5½±ÍlÁt¹µ½°¤ì(½¹ÍÐmÑÉ¹ÍÉ¥ÁÑ¥½¹5¥¹ÕÑÌ°ÍÑQÉ¹ÍÉ¥ÁÑ¥½¹5¥¹ÕÑÍtôÕÍMÑÑ Ä¤ì(½¹ÍÐmÍ±ÑÕ¥¹5½°°ÍÑM±ÑÕ¥¹5½±tôÕÍMÑÑ¡Õ¥¹5½±ÍlÁt¹µ½°¤ì(½¹ÍÐmÕ¥¹5¥¹ÕÑÌ°ÍÑÕ¥¹5¥¹ÕÑÍtôÕÍMÑÑ Ä¤ì(½¹ÍÐmÍ±Ñ5ÕÍ¥5½°°ÍÑM±Ñ5ÕÍ¥5½±tôÕÍMÑÑ¡µÕÍ¥5½±ÍlÁt¹µ½°¤ì(½¹ÍÐmµÕÍ¥5¥¹ÕÑÌ°ÍÑ5ÕÍ¥5¥¹ÕÑÍtôÕÍMÑÑ Ä¤ì(½¹ÍÐmÍ±Ñ%µM¥é°ÍÑM±Ñ%µM¥étôÕÍMÑÑ¡¥µ5½±ÍlÁt¹Í¥é¤ì(½¹ÍÐm¥µ½Õ¹Ð°ÍÑ%µ½Õ¹ÑtôÕÍMÑÑ Ä¤ì(½¹ÍÐmÍ±ÑA5½°°ÍÑM±ÑA5½±tôÕÍMÑÑ¡Á5½±ÍlÁt¹µ½°¤ì(½¹ÍÐmÁ½Õ¹Ð°ÍÑA½Õ¹ÑtôÕÍMÑÑ ÔÀÀ¤ì((ÕÍÐ  ¤ôøì(±Ð¹±±ô±Íì((Ñ  ¡ÑÑÁÌè¼½½Á¸¹ÈµÁ¤¹½´½ØØ½±ÑÍÐ½UM¤(¹Ñ¡¸ ¡ÉÍÁ½¹Í¤ôøì(¥ ÉÍÁ½¹Í¹½¬¤Ñ¡É½Ü¹ÜÉÉ½È á¡¹}ÉÑÍ}Õ¹Ù¥±±¤ì(ÉÑÕÉ¸ÉÍÁ½¹Í¹©Í½¸ ¤ÌAÉ½µ¥ÍñìÉÑÌüèI½ÉñÍÑÉ¥¹°¹ÕµÈøôøì(ô¤(¹Ñ¡¸ ¡Ñ¤ôøì(¥¡¹±±ñðÑ¹ÉÑÌ¤ÉÑÕÉ¸ì(½¹ÍÐ±¥ÙIÑÌôÑ¹ÉÑÌì(½¹ÍÐ¹áÑIÑÌôì¸¸¹Õ±ÑÕÉÉ¹åIÑÌôì(ÕÉÉ¹¥Ì¹½É  ¡¥Ñ´¤ôøì(¥¡¥Ñ´¹½ôôUM9ÕµÈ¹¥Í¥¹¥Ñ¡±¥ÙIÑÍm¥Ñ´¹½t¤¤¹áÑIÑÍm¥Ñ´¹½tô±¥ÙIÑÍm¥Ñ´¹½tì(ô¤ì(ÍÑÕÉÉ¹åIÑÌ¡¹áÑIÑÌ¤ì(ÍÑIÑÍU¹Ù¥±±¡±Í¤ì(ô¤(¹Ñ   ¤ôøì(¥¡¹±±¤ÉÑÕÉ¸ì(ÍÑIÑÍU¹Ù¥±±¡ÑÉÕ¤ì(ÍÑÕÉÉ¹ä UM¤ì(Ý¥¹½Ü¹±½±MÑ½É¹ÍÑ%Ñ´ ±¥¹½ÕÍ¥½¸µÁÉ¥¥¹µÕÉÉ¹ä°UM¤ì(ô¤ì((ÉÑÕÉ¸ ¤ôøì(¹±±ôÑÉÕì(ôì(ô°mt¤ì((½¹ÍÐÑ¥ÙÕÉÉ¹äôÕÉÉ¹åIÑÍmÕÉÉ¹åtüÕÉÉ¹äèUMì(½¹ÍÐÑ¥ÙIÑôÕÉÉ¹åIÑÍmÑ¥ÙÕÉÉ¹åtì(½¹ÍÐÕÉÉ¹åAÉÍ¹ÑÑ¥½¹-äôíÑ¥ÙÕÉÉ¹åô´íÑ¥ÙIÑõì(½¹ÍÐ¥ÍÁ±åÕÉÉ¹äô¡ÕÍµ½Õ¹Ðè¹ÕµÈ°ÁÉ¥Íô±Í¤ôø½ÉµÑÕÉÉ¹åµ½Õ¹Ð¡ÕÍµ½Õ¹Ð°Ñ¥ÙÕÉÉ¹ä°Ñ¥ÙIÑ°ÁÉ¥Í¤ì(½¹ÍÐ¥ÍÁ±åAÉ¥ô¡ÕÍµ½Õ¹Ðè¹ÕµÈð¹Õ±°°Õ¹¥ÐüèÍÑÉ¥¹¤ôøì(¥¡ÕÍµ½Õ¹Ðôôô¹Õ±°¤ÉÑÕÉ¸Q	ì(½¹ÍÐÍÕ¥àôÕ¹¥ÐôôôÁÉ}µ¥¹ÕÑü½µ¥¸èÕ¹¥ÐôôôÁÉ|ÔÀÁ}áÑÉÑ¥½¹Ìü¼ÔÀÀáÑÉÑ¥½¹Ìèì(ÉÑÕÉ¸í¥ÍÁ±åÕÉÉ¹ä¡ÕÍµ½Õ¹Ð¥ôíÍÕ¥áõì(ôì((½¹ÍÐÙ¥Í¥±QáÑ5½±ÌôÑáÑ5½±Í	åAÉ¥¥¹5½mÑáÑAÉ¥¥¹5½tì(½¹ÍÐÍ±ÑQáÑ5½°ôÙ¥Í¥±QáÑ5½±Ì¹¥¹ ¡µ½°¤ôøµ½°¹µ½°ôôôÍ±Ñ5½°¤üüÙ¥Í¥±QáÑ5½±ÍlÉtì(½¹ÍÐÍ±ÑQÑÌôÑÑÍ¡ÉÑÉ5½±Ì¹¥¹ ¡µ½°¤ôøµ½°¹µ½°ôôôÍ±ÑQÑÍ5½°¤üüÑÑÍ¡ÉÑÉ5½±ÍlÁtì(½¹ÍÐÍ±ÑQÉ¹ÍÉ¥ÁÑ¥½¸ô(ÑÉ¹ÍÉ¥ÁÑ¥½¹5½±Ì¹¥¹ ¡µ½°¤ôøµ½°¹µ½°ôôôÍ±ÑQÉ¹ÍÉ¥ÁÑ¥½¹5½°¤üüÑÉ¹ÍÉ¥ÁÑ¥½¹5½±ÍlÁtì(½¹ÍÐÍ±ÑÕ¥¹ôÕ¥¹5½±Ì¹¥¹ ¡µ½°¤ôøµ½°¹µ½°ôôôÍ±ÑÕ¥¹5½°¤üüÕ¥¹5½±ÍlÁtì(½¹ÍÐÍ±Ñ5ÕÍ¥ôµÕÍ¥5½±Ì¹¥¹ ¡µ½°¤ôøµ½°¹µ½°ôôôÍ±Ñ5ÕÍ¥5½°¤üüµÕÍ¥5½±ÍlÁtì(½¹ÍÐÍ±Ñ%µô¥µ5½±Ì¹¥¹ ¡µ½°¤ôøµ½°¹Í¥éôôôÍ±Ñ%µM¥é¤üü¥µ5½±ÍlÁtì(½¹ÍÐÍ±ÑAôÁ5½±Ì¹¥¹ ¡µ½°¤ôøµ½°¹µ½°ôôôÍ±ÑA5½°¤üüÁ5½±ÍlÁtì(½¹ÍÐÑáÑAÉ¥¥¹ÍÉ¥ÁÑ¥½¸ô(ÑáÑAÉ¥¥¹5½ôôô¥¹ÍÑ¹Ð(üI°µÑ¥µÁÉ½ÍÍ¥¹Ý¥Ñ ¥µµ¥ÑÉÍÕ±ÑÌ¸(è1½ÝÈµ½ÍÐÍå¹¡É½¹½ÕÌÁÉ½ÍÍ¥¹½È±É½È¹½¸µÕÉ¹Ð©½Ì¸IÍÕ±ÑÌµäÑ­ÕÀÑ¼ÈÐ¡½ÕÉÌ¸ì(½¹ÍÐÁÉ¥¥¹1±Ìôì(µ½°èÐ Ñ±5½°¤°(¥¹ÁÕÐèÐ Ñ±%¹ÁÕÐ¤°(½ÕÑÁÕÐèÐ Ñ±=ÕÑÁÕÐ¤°(ÁÉ¥èÐ Ñ±AÉ¥¤°(¥µM¥éèÐ Ñ±%µM¥é¤°(É½µµ¹èÐ É½µµ¹¤°(ôì((½¹ÍÐ¥ÍÁ±åQáÑ5½±ÌôÙ¥Í¥±QáÑ5½±Ì¹µÀ ¡µ½°¤ôø¡ì¸¸¹µ½°°¥¹ÁÕÐè¥ÍÁ±åÕÉÉ¹ä¡µ½°¹¥¹ÁÕÑUÍ¤°½ÕÑÁÕÐè¥ÍÁ±åÕÉÉ¹ä¡µ½°¹½ÕÑÁÕÑUÍ¤ô¤¤ì(½¹ÍÐ¥ÍÁ±åQÑÍ5½±ÌôÑÑÍ5½±Ì¹µÀ ¡µ½°¤ôø¡ì¸¸¹µ½°°ÁÉ¥è¥ÍÁ±åAÉ¥¡µ½°¹ÁÉ¥UÍ°µ½°¹ÁÉ¥¥¹U¹¥Ð¤ô¤¤ì(½¹ÍÐ¥ÍÁ±åQÉ¹ÍÉ¥ÁÑ¥½¹5½±ÌôÑÉ¹ÍÉ¥ÁÑ¥½¹5½±Ì¹µÀ ¡µ½°¤ôø¡ì¸¸¹µ½°°ÁÉ¥è¥ÍÁ±åAÉ¥¡µ½°¹ÁÉ¥UÍ°µ½°¹ÁÉ¥¥¹U¹¥Ð¤ô¤¤ì(½¹ÍÐ¥ÍÁ±åÕ¥¹5½±ÌôÕ¥¹5½±Ì¹µÀ ¡µ½°¤ôø¡ì¸¸¹µ½°°ÁÉ¥è¥ÍÁ±åAÉ¥¡µ½°¹ÁÉ¥UÍ°µ½°¹ÁÉ¥¥¹U¹¥Ð¤ô¤¤ì(½¹ÍÐ¥ÍÁ±å5ÕÍ¥5½±ÌôµÕÍ¥5½±Ì¹µÀ ¡µ½°¤ôø¡ì¸¸¹µ½°°ÁÉ¥è¥ÍÁ±åAÉ¥¡µ½°¹ÁÉ¥UÍ°µ½°¹ÁÉ¥¥¹U¹¥Ð¤ô¤¤ì(½¹ÍÐ¥ÍÁ±å%µ5½±Ìô¥µ5½±Ì¹µÀ ¡µ½°¤ôø¡ì¸¸¹µ½°°ÁÉ¥è¥ÍÁ±åÕÉÉ¹ä¡µ½°¹ÁÉ¥UÍ¤ô¤¤ì(½¹ÍÐ¥ÍÁ±åA5½±ÌôÁ5½±Ì¹µÀ ¡µ½°¤ôø¡ì¸¸¹µ½°°ÁÉ¥è¥ÍÁ±åAÉ¥¡µ½°¹ÁÉ¥UÍ°µ½°¹ÁÉ¥¥¹U¹¥Ð¤ô¤¤ì((½¹ÍÐÑáÑÍÑ¥µÑôÕÍ5µ¼  ¤ôøì(ÉÑÕÉ¸¡¥¹ÁÕÑQ½­¹Ì¼Å|ÀÀÁ|ÀÀÀ¤¨Í±ÑQáÑ5½°¹¥¹ÁÕÑUÍ¬¡½ÕÑÁÕÑQ½­¹Ì¼Å|ÀÀÁ|ÀÀÀ¤¨Í±ÑQáÑ5½°¹½ÕÑÁÕÑUÍì(ô°m¥¹ÁÕÑQ½­¹Ì°½ÕÑÁÕÑQ½­¹Ì°Í±ÑQáÑ5½±t¤ì((½¹ÍÐÑÑÍÍÑ¥µÑôÕÍ5µ¼  ¤ôøì(ÉÑÕÉ¸Í±ÑQÑÌñðÍ±ÑQÑÌ¹ÁÉ¥UÍôôô¹Õ±°ü¹Õ±°è¡ÑÑÍ¡ÉÑÉÌ¼ÄÀÀÀ¤¨Í±ÑQÑÌ¹ÁÉ¥UÍì(ô°mÍ±ÑQÑÌ°ÑÑÍ¡ÉÑÉÍt¤ì((½¹ÍÐ±¥ÙQÉ¹Í±ÑÍÑ¥µÑôÕÍ5µ¼  ¤ôøì(ÉÑÕÉ¸±¥ÙQÉ¹Í±Ñ5½°ñð±¥ÙQÉ¹Í±Ñ5½°¹ÁÉ¥UÍôôô¹Õ±°ü¹Õ±°èµ¥¹ÕÑ9½ÑÑ¥½¹Q½5¥¹ÕÑÌ¡±¥ÙQÉ¹Í±Ñ5¥¹ÕÑÌ¤¨±¥ÙQÉ¹Í±Ñ5½°¹ÁÉ¥UÍì(ô°m±¥ÙQÉ¹Í±Ñ5½°°±¥ÙQÉ¹Í±Ñ5¥¹ÕÑÍt¤ì((½¹ÍÐÑÉ¹ÍÉ¥ÁÑ¥½¹ÍÑ¥µÑôÕÍ5µ¼  ¤ôøì(ÉÑÕÉ¸Í±ÑQÉ¹ÍÉ¥ÁÑ¥½¸¹ÁÉ¥UÍôôô¹Õ±°ü¹Õ±°èµ¥¹ÕÑ9½ÑÑ¥½¹Q½5¥¹ÕÑÌ¡ÑÉ¹ÍÉ¥ÁÑ¥½¹5¥¹ÕÑÌ¤¨Í±ÑQÉ¹ÍÉ¥ÁÑ¥½¸¹ÁÉ¥UÍì(ô°mÍ±ÑQÉ¹ÍÉ¥ÁÑ¥½¸°ÑÉ¹ÍÉ¥ÁÑ¥½¹5¥¹ÕÑÍt¤ì((½¹ÍÐÕ¥¹ÍÑ¥µÑôÕÍ5µ¼  ¤ôøì(ÉÑÕÉ¸Í±ÑÕ¥¹¹ÁÉ¥UÍôôô¹Õ±°ü¹Õ±°èµ¥¹ÕÑ9½ÑÑ¥½¹Q½5¥¹ÕÑÌ¡Õ¥¹5¥¹ÕÑÌ¤¨Í±ÑÕ¥¹¹ÁÉ¥UÍì(ô°mÍ±ÑÕ¥¹°Õ¥¹5¥¹ÕÑÍt¤ì((½¹ÍÐµÕÍ¥ÍÑ¥µÑôÕÍ5µ¼  ¤ôøì(ÉÑÕÉ¸Í±Ñ5ÕÍ¥¹ÁÉ¥UÍôôô¹Õ±°ü¹Õ±°èµ¥¹ÕÑ9½ÑÑ¥½¹Q½5¥¹ÕÑÌ¡µÕÍ¥5¥¹ÕÑÌ¤¨Í±Ñ5ÕÍ¥¹ÁÉ¥UÍì(ô°mÍ±Ñ5ÕÍ¥°µÕÍ¥5¥¹ÕÑÍt¤ì((½¹ÍÐ¥µÍÑ¥µÑôÕÍ5µ¼  ¤ôøì(ÉÑÕÉ¸¥µ½Õ¹Ð¨Í±Ñ%µ¹ÁÉ¥UÍì(ô°mÍ±Ñ%µ°¥µ½Õ¹Ñt¤ì((½¹ÍÐÁÍÑ¥µÑôÕÍ5µ¼  ¤ôøì(¥¡Í±ÑA¹µ½°ôôôAÑáÐáÑÉÑ¥½¸Í±ÑA¹ÁÉ¥UÍôô¹Õ±°¤ì(ÉÑÕÉ¸5Ñ ¹¥°¡Á½Õ¹Ð¼ÔÀÀ¤¨Í±ÑA¹ÁÉ¥UÍì(ô((ÉÑÕÉ¸¹Õ±°ì(ô°mÍ±ÑA°Á½Õ¹Ñt¤ì((ÉÑÕÉ¸ (ðø(ñÍÑ¥½¸±ÍÍ9µôÍ¥ÑµÉÙ°ÍÑ¥½¸µ¹ÑÈµàµÜ´Íá°ø(ñÀ±ÍÍ9µôµ´ÐÑáÐµÍ´½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´ØÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀùíÐ ±¥¹½ÕÍ¥½¹Á¤¥ôð½Àø(ñ Ä±ÍÍ9µôÑáÐ´Íá°½¹ÐµÍµ¥½±ÑÉ­¥¹µÑ¥¡ÐÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀÍ´éÑáÐ´Ùá°ø(íÐ ÁÉ¥¥¹¥ô(ð½ Äø(ñÀ±ÍÍ9µôµÐ´ÐÑáÐµÍ±¥¹´ÜÑáÐµ¹ÕÑÉ°´ÜÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÌÀÀÍ´éµÐ´ÔÍ´éÑáÐµ±Í´é±¥¹´àùíÐ ÁÉ¥¥¹!É¼¥ôð½Àø(ñ¥Ø±ÍÍ9µôµÐ´Ô±à±àµÝÉÀ¥ÑµÌµ¹À´Ìø(ñ±°±ÍÍ9µôÑáÐµÍ´ø(ñÍÁ¸±ÍÍ9µôµ´Ä¸Ô±½¬½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´ÜÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÌÀÀùÕÉÉ¹äð½ÍÁ¸ø(ñÍ±Ð(Ù±ÕõíÕÉÉ¹åô(½¹¡¹õì¡Ù¹Ð¤ôøì(½¹ÍÐ¹áÑÕÉÉ¹äôÙ¹Ð¹ÑÉÐ¹Ù±ÕÌÕÉÉ¹å½ì(ÍÑÕÉÉ¹ä¡¹áÑÕÉÉ¹ä¤ì(Ý¥¹½Ü¹±½±MÑ½É¹ÍÑ%Ñ´ ±¥¹½ÕÍ¥½¸µÁÉ¥¥¹µÕÉÉ¹ä°¹áÑÕÉÉ¹ä¤ì(õô(±ÍÍ9µô±¸µÍ±Ð ´ÄÀÉ½Õ¹µµ½ÉÈ½ÉÈµ¹ÕÑÉ°´ÌÀÀµÝ¡¥ÑÁà´ÌÑáÐµÍ´ÑáÐµ¹ÕÑÉ°´äÔÀ½ÕÑ±¥¹µ¹½¹ÑÉ¹Í¥Ñ¥½¸½ÕÌé½ÉÈµ¹ÕÑÉ°´ØÀÀÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÔÉ¬éµÝ¡¥Ñ¼ÔÉ¬éÑáÐµ¹ÕÑÉ°´ÄÀÀÉ¬é½ÕÌé½ÉÈµ¹ÕÑÉ°´ÐÀÀ(É¥µ±°ôAÉ¥¥¹¥ÍÁ±äÕÉÉ¹ä(ø(íÕÉÉ¹¥Ì¹µÀ ¡¥Ñ´¤ôø (ñ½ÁÑ¥½¸­äõí¥Ñ´¹½ôÙ±Õõí¥Ñ´¹½ôùí¥Ñ´¹±ôí¥Ñ´¹½ôð½½ÁÑ¥½¸ø(¤¥ô(ð½Í±Ðø(ð½±°ø(íÉÑÍU¹Ù¥±± (ñÀ±ÍÍ9µôÁ´ÈÑáÐµÍ´ÑáÐµ¹ÕÑÉ°´ÔÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀÉ½±ôÍÑÑÕÌø(1¥Ùá¡¹ÉÑÌÉÑµÁ½ÉÉ¥±äÕ¹Ù¥±±¸M¡½Ý¥¹UM¸(ð½Àø(¥ô(ð½¥Øø(ñ¥Ø±ÍÍ9µôµÐ´ØÉ¥À´È¸ÔÍ´éµÐ´ÜÍ´é±àÍ´é±àµÝÉÀÍ´éÀ´Ìø(ñÕÑÑ½¸(ÑåÁôÕÑÑ½¸(½¹±¥¬õí½¹Í¡½Éô(±ÍÍ9µôÁÉÍÍ±ÜµÕ±°É½Õ¹µµµ¹ÕÑÉ°´äÔÀÁà´ÐÁä´È¸ÔÑáÐµÍ´½¹Ðµµ¥Õ´ÑáÐµÝ¡¥Ñ¡½ÙÈéµ¹ÕÑÉ°´àÀÀÉ¬éµÝ¡¥ÑÉ¬éÑáÐµ¹ÕÑÉ°´äÔÀÉ¬é¡½ÙÈéµ¹ÕÑÉ°´ÈÀÀÍ´éÜµÕÑ¼(ø(íÐ ½Á¹Í¡½É¥ô(ð½ÕÑÑ½¸ø(ñ(¡ÉôÑáÐµµ½±Ì(±ÍÍ9µôÁÉÍÍ±¥¹±¥¹µ±àÜµÕ±°¥ÑµÌµ¹ÑÈ©ÕÍÑ¥äµ¹ÑÈÉ½Õ¹µµ½ÉÈ½ÉÈµ¹ÕÑÉ°´ÌÀÀµÝ¡¥ÑÁà´ÐÁä´È¸ÔÑáÐµÍ´½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´äÔÀ¡½ÙÈéµ¹ÕÑÉ°´ÔÀÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÔÉ¬éµÝ¡¥Ñ¼ÔÉ¬éÑáÐµ¹ÕÑÉ°´ÄÀÀÉ¬é¡½ÙÈéµÝ¡¥Ñ¼ÄÀÍ´éÜµÕÑ¼(ø(íÐ ½µÁÉAÉ¥¥¹¥ô(ð½ø(ñ(¡ÉôÁÉ½ÕÐµµ½Ì(±ÍÍ9µôÁÉÍÍ±¥¹±¥¹µ±àÜµÕ±°¥ÑµÌµ¹ÑÈ©ÕÍÑ¥äµ¹ÑÈÉ½Õ¹µµ½ÉÈ½ÉÈµ¹ÕÑÉ°´ÌÀÀµÝ¡¥ÑÁà´ÐÁä´È¸ÔÑáÐµÍ´½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´äÔÀ¡½ÙÈéµ¹ÕÑÉ°´ÔÀÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÔÉ¬éµÝ¡¥Ñ¼ÔÉ¬éÑáÐµ¹ÕÑÉ°´ÄÀÀÉ¬é¡½ÙÈéµÝ¡¥Ñ¼ÄÀÍ´éÜµÕÑ¼(ø(Y¥ÜÁÉ½ÕÐµ½Ì(ð½ø(ð½¥Øø(ð½ÍÑ¥½¸ø((ñ¥Ø±ÍÍ9µôµÐ´àÍÁµä´äÍ´éµÐ´ÄÈÍ´éÍÁµä´ÄÈø(ñ5¥M¡½ÝÍ¼ø(ñ¥Ø¥ôÑáÐµµ½±Ì±ÍÍ9µôÍ¥ÑµÉÙ°ÍÑ¥½¸µ¹ÑÈl´µÍÑ¥½¸µ¥¹àèÅtø(ñQáÑ5½±±±Éä(µ½±ÌõíÙ¥Í¥±QáÑ5½±Íô(ÁÉ¥¥¹5½õíÑáÑAÉ¥¥¹5½ô(¥ÍÁ±åAÉ¥õí¥ÍÁ±åÕÉÉ¹åô(½¹=Á¹5½°õí½¹=Á¹5½±ô(¼ø(ñMÑ¥½¹±Õ±Ñ½ÈÑ¥Ñ±õíÐ ÑáÑ±Õ±Ñ½È¥ôÍÑ¥µÑ1°õíÐ ÍÑ¥µÑ¥ôÍÑ¥µÑõíÑáÑÍÑ¥µÑôôô¹Õ±°üQ	è¥ÍÁ±åÕÉÉ¹ä¡ÑáÑÍÑ¥µÑ°ÑÉÕ¥ôø(ñM±Ñ¥±±°õíÐ µ½°¥ôÙ±ÕõíÍ±Ñ5½±ô½¹¡¹õíÍÑM±Ñ5½±ôø(íÙ¥Í¥±QáÑ5½±Ì¹µÀ ¡µ½°¤ôø (ñ½ÁÑ¥½¸­äõíµ½°¹µ½±ôùíµ½°¹µ½±ôð½½ÁÑ¥½¸ø(¤¥ô(ð½M±Ñ¥±ø(ñ9ÕµÉ¥±(±°õíÐ ¥¹ÁÕÑQ½­¹Ì¥ô(µ¥¸õìÅô(µàõìÅ|ÀÀÁ|ÀÀÁ|ÀÀÁô(ÍÑÀõìÅô(Ù±Õõí¥¹ÁÕÑQ½­¹Íô(½¹¡¹õíÍÑ%¹ÁÕÑQ½­¹Íô(¼ø(ñ9ÕµÉ¥±(±°õíÐ ½ÕÑÁÕÑQ½­¹Ì¥ô(µ¥¸õìÅô(µàõìÅ|ÀÀÁ|ÀÀÁ|ÀÀÁô(ÍÑÀõìÅô(Ù±Õõí½ÕÑÁÕÑQ½­¹Íô(½¹¡¹õíÍÑ=ÕÑÁÕÑQ½­¹Íô(¼ø(ð½MÑ¥½¹±Õ±Ñ½Èø(ñAÉ¥¥¹É(­äõíÑáÐ´íÑáÑAÉ¥¥¹5½ô´íÕÉÉ¹åAÉÍ¹ÑÑ¥½¹-åõô(Ñ¥Ñ±õíÐ ÑáÑ5½±Ì¥ô(Õ¹¥ÐõíÐ ÁÉ¥ÍAÈÅ5Q½­¹Ì¥ô(­¥¹ôÑáÐ(É½ÝÌõí¥ÍÁ±åQáÑ5½±Íô(±±ÌõíÁÉ¥¥¹1±Íô(Ñ±±ÍÍ9µôÁÉ¥¥¹µÑ±µ¡¹(¡ÉÑ¥½¸õì(ñ¥Ø(É½±ôÉ½ÕÀ(É¥µ±°ôQáÐµ½°ÁÉ¥¥¹µ½(±ÍÍ9µô¥¹±¥¹µ±àÉ½Õ¹µµ½ÉÈ½ÉÈµ¹ÕÑÉ°´ÌÀÀµ¹ÕÑÉ°´ÄÀÀÀ´À¸ÔÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÔÉ¬éµÝ¡¥Ñ½lÀ¸ÀÙt(ø(ì¡l¥¹ÍÑ¹Ð°Ñ tÌ½¹ÍÐ¤¹µÀ ¡µ½¤ôøì(½¹ÍÐÍ±ÑôÑáÑAÉ¥¥¹5½ôôôµ½ì(ÉÑÕÉ¸ (ñÕÑÑ½¸(­äõíµ½ô(ÑåÁôÕÑÑ½¸(É¥µÁÉÍÍõíÍ±Ñô(½¹±¥¬õì ¤ôøì(ÍÑQáÑAÉ¥¥¹5½¡µ½¤ì(Ý¥¹½Ü¹±½±MÑ½É¹ÍÑ%Ñ´ ±¥¹½ÕÍ¥½¸µÑáÐµÁÉ¥¥¹µµ½°µ½¤ì(õô(±ÍÍ9µõíÁÉÍÍ±É½Õ¹Áà´ÌÁä´Ä¸ÔÑáÐµÍ´½¹Ðµµ¥Õ´½ÕÌµÙ¥Í¥±é½ÕÑ±¥¹µ¹½¹½ÕÌµÙ¥Í¥±éÉ¥¹´È½ÕÌµÙ¥Í¥±éÉ¥¹µ¹ÕÑÉ°´äÔÀ½ÕÌµÙ¥Í¥±éÉ¥¹µ½ÍÐ´ÈÉ¬é½ÕÌµÙ¥Í¥±éÉ¥¹µÝ¡¥ÑÉ¬é½ÕÌµÙ¥Í¥±éÉ¥¹µ½ÍÐµlÁÁÁtì(Í±Ñ(üµ¹ÕÑÉ°´äÔÀÑáÐµÝ¡¥ÑÍ¡½ÜµÍ´É¬éµÝ¡¥ÑÉ¬éÑáÐµ¹ÕÑÉ°´äÔÀ(èÑáÐµ¹ÕÑÉ°´ØÀÀ¡½ÙÈéÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀÉ¬é¡½ÙÈéÑáÐµ¹ÕÑÉ°´ÄÀÀ(õô(ø(íµ½ôôô¥¹ÍÑ¹ÐüÕ±Ðè	Ñ ô(ð½ÕÑÑ½¸ø(¤ì(ô¥ô(ð½¥Øø(ô(¡É9½ÑõíÑáÑAÉ¥¥¹ÍÉ¥ÁÑ¥½¹ô(¼ø(ð½¥Øø(ñ¥Ø¥ôÑÑÌµµ½±Ì±ÍÍ9µôÍ¥ÑµÉÙ°ÍÑ¥½¸µ¹ÑÈl´µÍÑ¥½¸µ¥¹àèÉtø(ñMÑ¥½¹±Õ±Ñ½ÈÑ¥Ñ±õíÐ ÑÑÍ±Õ±Ñ½È¥ôÍÑ¥µÑ1°õíÐ ÍÑ¥µÑ¥ôÍÑ¥µÑõíÑÑÍÍÑ¥µÑôôô¹Õ±°üQ	è¥ÍÁ±åÕÉÉ¹ä¡ÑÑÍÍÑ¥µÑ°ÑÉÕ¥ôø(ñM±Ñ¥±±°õíÐ µ½°¥ôÙ±ÕõíÍ±ÑQÑÍ5½±ô½¹¡¹õíÍÑM±ÑQÑÍ5½±ôø(íÑÑÍ¡ÉÑÉ5½±Ì¹µÀ ¡µ½°¤ôø (ñ½ÁÑ¥½¸­äõíµ½°¹µ½±ôùíµ½°¹µ½±ôð½½ÁÑ¥½¸ø(¤¥ô(ð½M±Ñ¥±ø(ñ9ÕµÉ¥±(±°õíÐ ¡ÉÑÉÌ¥ô(µ¥¸õìÅô(µàõìÄÀÀÀÀÀÀÀÁô(ÍÑÀõìÅô(Ù±ÕõíÑÑÍ¡ÉÑÉÍô(½¹¡¹õíÍÑQÑÍ¡ÉÑÉÍô(¼ø(ð½MÑ¥½¹±Õ±Ñ½Èø(í±¥ÙQÉ¹Í±Ñ5½° (ñMÑ¥½¹±Õ±Ñ½ÈÑ¥Ñ±õíÐ ±¥ÙQÉ¹Í±Ñ±Õ±Ñ½È¥ôÍÑ¥µÑ1°õíÐ ÍÑ¥µÑ¥ôÍÑ¥µÑõí±¥ÙQÉ¹Í±ÑÍÑ¥µÑôôô¹Õ±°üQ	è¥ÍÁ±åÕÉÉ¹ä¡±¥ÙQÉ¹Í±ÑÍÑ¥µÑ°ÑÉÕ¥ôø(ñI=¹±å¥±±°õíÐ µ½°¥ôÙ±Õõí±¥ÙQÉ¹Í±Ñ5½°¹µ½±ô¼ø(ñ9ÕµÉ¥±(±°õíÐ µ¥¹ÕÑÌ¥ô(µ¥¸õìÅô(µàõìÄÀÀÀÀÀÁô(ÍÑÀõìÀ¸ÀÅô(Ù±Õõí±¥ÙQÉ¹Í±Ñ5¥¹ÕÑÍô(½¹¡¹õíÍÑ1¥ÙQÉ¹Í±Ñ5¥¹ÕÑÍô(µ¥¹ÕÑ9½ÑÑ¥½¸(µ¥¹ÕÑ!±ÀõíÐ µ¥¹ÕÑ!±À¥ô(¼ø(ð½MÑ¥½¹±Õ±Ñ½Èø(¥ô(ñAÉ¥¥¹É(­äõíÑÑÌ´íÕÉÉ¹åAÉÍ¹ÑÑ¥½¹-åõô(Ñ¥Ñ±õíÐ ÑÑÍ5½±Ì¥ô(Õ¹¥ÐõíÐ ÁÉ¥ÍAÈÅ-¡ÉÑÉÍ¹5¥¹ÕÑ¥ô(­¥¹ôÍ¥µÁ±(É½ÝÌõí¥ÍÁ±åQÑÍ5½±Íô(±±ÌõíÁÉ¥¥¹1±Íô(Ñ±±ÍÍ9µôÁÉ¥¥¹µÑ±µ¡¹(¼ø(ð½¥Øø(ñ¥Ø¥ôÑÉ¹ÍÉ¥ÁÑ¥½¸µµ½±Ì±ÍÍ9µôÍ¥ÑµÉÙ°ÍÑ¥½¸µ¹ÑÈl´µÍÑ¥½¸µ¥¹àèÍtø(ñMÑ¥½¹±Õ±Ñ½ÈÑ¥Ñ±õíÐ ÑÉ¹ÍÉ¥ÁÑ¥½¹±Õ±Ñ½È¥ôÍÑ¥µÑ1°õíÐ ÍÑ¥µÑ¥ôÍÑ¥µÑõíÑÉ¹ÍÉ¥ÁÑ¥½¹ÍÑ¥µÑôôô¹Õ±°üQ	è¥ÍÁ±åÕÉÉ¹ä¡ÑÉ¹ÍÉ¥ÁÑ¥½¹ÍÑ¥µÑ°ÑÉÕ¥ôø(ñM±Ñ¥±(±°õíÐ µ½°¥ô(Ù±ÕõíÍ±ÑQÉ¹ÍÉ¥ÁÑ¥½¹5½±ô(½¹¡¹õíÍÑM±ÑQÉ¹ÍÉ¥ÁÑ¥½¹5½±ô(ø(íÑÉ¹ÍÉ¥ÁÑ¥½¹5½±Ì¹µÀ ¡µ½°¤ôø (ñ½ÁÑ¥½¸­äõíµ½°¹µ½±ôùíµ½°¹µ½±ôð½½ÁÑ¥½¸ø(¤¥ô(ð½M±Ñ¥±ø(ñ9ÕµÉ¥±(±°õíÐ µ¥¹ÕÑÌ¥ô(µ¥¸õìÅô(µàõìÄÀÀÀÀÀÁô(ÍÑÀõìÀ¸ÀÅô(Ù±ÕõíÑÉ¹ÍÉ¥ÁÑ¥½¹5¥¹ÕÑÍô(½¹¡¹õíÍÑQÉ¹ÍÉ¥ÁÑ¥½¹5¥¹ÕÑÍô(µ¥¹ÕÑ9½ÑÑ¥½¸(µ¥¹ÕÑ!±ÀõíÐ µ¥¹ÕÑ!±À¥ô(¼ø(ð½MÑ¥½¹±Õ±Ñ½Èø(ñAÉ¥¥¹É(­äõíÑÉ¹ÍÉ¥ÁÑ¥½¸´íÕÉÉ¹åAÉÍ¹ÑÑ¥½¹-åõô(Ñ¥Ñ±õíÐ ÑÉ¹ÍÉ¥ÁÑ¥½¹5½±Ì¥ô(Õ¹¥ÐõíÐ ÁÉ¥ÍAÉ5¥¹ÕÑ¥ô(­¥¹ôÍ¥µÁ±(É½ÝÌõí¥ÍÁ±åQÉ¹ÍÉ¥ÁÑ¥½¹5½±Íô(±±ÌõíÁÉ¥¥¹1±Íô(Ñ±±ÍÍ9µôÁÉ¥¥¹µÑ±µ¡¹(¼ø(ð½¥Øø(ñ¥Ø¥ôÕ¥¹µµ½±Ì±ÍÍ9µôÍ¥ÑµÉÙ°ÍÑ¥½¸µ¹ÑÈl´µÍÑ¥½¸µ¥¹àèÑtø(ñMÑ¥½¹±Õ±Ñ½ÈÑ¥Ñ±õíÐ Õ¥¹±Õ±Ñ½È¥ôÍÑ¥µÑ1°õíÐ ÍÑ¥µÑ¥ôÍÑ¥µÑõíÕ¥¹ÍÑ¥µÑôôô¹Õ±°üQ	è¥ÍÁ±åÕÉÉ¹ä¡Õ¥¹ÍÑ¥µÑ°ÑÉÕ¥ôø(ñM±Ñ¥±±°õíÐ µ½°¥ôÙ±ÕõíÍ±ÑÕ¥¹5½±ô½¹¡¹õíÍÑM±ÑÕ¥¹5½±ôø(íÕ¥¹5½±Ì¹µÀ ¡µ½°¤ôø (ñ½ÁÑ¥½¸­äõíµ½°¹µ½±ôùíµ½°¹µ½±ôð½½ÁÑ¥½¸ø(¤¥ô(ð½M±Ñ¥±ø(ñ9ÕµÉ¥±(±°õíÐ µ¥¹ÕÑÌ¥ô(µ¥¸õìÅô(µàõìÄÀÀÀÀÀÁô(ÍÑÀõìÀ¸ÀÅô(Ù±ÕõíÕ¥¹5¥¹ÕÑÍô(½¹¡¹õíÍÑÕ¥¹5¥¹ÕÑÍô(µ¥¹ÕÑ9½ÑÑ¥½¸(µ¥¹ÕÑ!±ÀõíÐ µ¥¹ÕÑ!±À¥ô(¼ø(ð½MÑ¥½¹±Õ±Ñ½Èø(ñAÉ¥¥¹É(­äõíÕ¥¹´íÕÉÉ¹åAÉÍ¹ÑÑ¥½¹-åõô(Ñ¥Ñ±õíÐ Õ¥¹5½±Ì¥ô(Õ¹¥ÐõíÐ ÁÉ¥ÍAÉ5¥¹ÕÑ¥ô(­¥¹ôÍ¥µÁ±(É½ÝÌõí¥ÍÁ±åÕ¥¹5½±Íô(±±ÌõíÁÉ¥¥¹1±Íô(Ñ±±ÍÍ9µôÁÉ¥¥¹µÑ±µ¡¹(¼ø(ð½¥Øø(ñ¥Ø¥ô¥µµÑÉ¹Í±Ñ¥½¸±ÍÍ9µôÍ¥ÑµÉÙ°ÍÑ¥½¸µ¹ÑÈl´µÍÑ¥½¸µ¥¹àèÕtø(ñMÑ¥½¹±Õ±Ñ½ÈÑ¥Ñ±õíÐ ¥µ±Õ±Ñ½È¥ôÍÑ¥µÑ1°õíÐ ÍÑ¥µÑ¥ôÍÑ¥µÑõí¥ÍÁ±åÕÉÉ¹ä¡¥µÍÑ¥µÑ°ÑÉÕ¥ôø(ñM±Ñ¥±±°õíÐ Ñ±%µM¥é¥ôÙ±ÕõíÍ±Ñ%µM¥éô½¹¡¹õíÍÑM±Ñ%µM¥éôø(í¥µ5½±Ì¹µÀ ¡µ½°¤ôø (ñ½ÁÑ¥½¸­äõíµ½°¹Í¥éôùíµ½°¹Í¥éôð½½ÁÑ¥½¸ø(¤¥ô(ð½M±Ñ¥±ø(ñ9ÕµÉ¥±(±°õíÐ ¥µÌ¥ô(µ¥¸õìÅô(µàõìÄÀÀÀÀÀÁô(ÍÑÀõìÅô(Ù±Õõí¥µ½Õ¹Ñô(½¹¡¹õíÍÑ%µ½Õ¹Ñô(¼ø(ð½MÑ¥½¹±Õ±Ñ½Èø(ñAÉ¥¥¹É(­äõí¥µÌ´íÕÉÉ¹åAÉÍ¹ÑÑ¥½¹-åõô(Ñ¥Ñ±õíÐ ¥µQÉ¹Í±Ñ¥½¸¥ô(Õ¹¥ÐõíÐ ÁÉ¥ÍAÉ%µ¥ô(­¥¹ô¥µ(É½ÝÌõí¥ÍÁ±å%µ5½±Íô(±±ÌõíÁÉ¥¥¹1±Íô(Ñ±±ÍÍ9µôÁÉ¥¥¹µÑ±µ¡¹(¼ø(ð½¥Øø(ñ¥Ø¥ôÁµáÑÉÑ¥½¸µ¹µ¥Ñ¥¹±ÍÍ9µôÍ¥ÑµÉÙ°ÍÑ¥½¸µ¹ÑÈl´µÍÑ¥½¸µ¥¹àèÙtø(ñMÑ¥½¹±Õ±Ñ½ÈÑ¥Ñ±õíÐ Á±Õ±Ñ½È¥ôÍÑ¥µÑ1°õíÐ ÍÑ¥µÑ¥ôÍÑ¥µÑõíÁÍÑ¥µÑôôô¹Õ±°üQ	è¥ÍÁ±åÕÉÉ¹ä¡ÁÍÑ¥µÑ°ÑÉÕ¥ôø(ñM±Ñ¥±±°õíÐ Ý½É­±½Ü¥ôÙ±ÕõíÍ±ÑA5½±ô½¹¡¹õíÍÑM±ÑA5½±ôø(íÁ5½±Ì¹µÀ ¡µ½°¤ôø (ñ½ÁÑ¥½¸­äõíµ½°¹µ½±ôùíµ½°¹µ½±ôð½½ÁÑ¥½¸ø(¤¥ô(ð½M±Ñ¥±ø(ñ9ÕµÉ¥±(±°õíÍ±ÑA¹µ½°ôôôAÑáÐáÑÉÑ¥½¸üÐ áÑÉÑ¥½¹Ì¤èÐ ½Õµ¹ÑÌ¥ô(µ¥¸õìÅô(µàõìÄÀÀÀÀÀÁô(ÍÑÀõìÅô(Ù±ÕõíÁ½Õ¹Ñô(½¹¡¹õíÍÑA½Õ¹Ñô(¼ø(ð½MÑ¥½¹±Õ±Ñ½Èø(ñAÉ¥¥¹É(­äõíÁ´íÕÉÉ¹åAÉÍ¹ÑÑ¥½¹-åõô(Ñ¥Ñ±õíÐ ÁáÑÉÑ¥½¹¥Ñ¥¹¥ô(Õ¹¥ÐõíÐ Á]½É­±½ÝÌ¥ô(­¥¹ôÍ¥µÁ±(É½ÝÌõí¥ÍÁ±åA5½±Íô(±±ÌõíÁÉ¥¥¹1±Íô(Ñ±±ÍÍ9µôÁÉ¥¥¹µÑ±µ¡¹(¼ø(ð½¥Øø(ñ¥Ø¥ôµÕÍ¥µµ½±Ì±ÍÍ9µôÍ¥ÑµÉÙ°ÍÑ¥½¸µ¹ÑÈl´µÍÑ¥½¸µ¥¹àèÝtø(ñMÑ¥½¹±Õ±Ñ½ÈÑ¥Ñ±õíÐ µÕÍ¥±Õ±Ñ½È¥ôÍÑ¥µÑ1°õíÐ ÍÑ¥µÑ¥ôÍÑ¥µÑõíµÕÍ¥ÍÑ¥µÑôôô¹Õ±°üQ	è¥ÍÁ±åÕÉÉ¹ä¡µÕÍ¥ÍÑ¥µÑ°ÑÉÕ¥ôø(ñM±Ñ¥±±°õíÐ µ½°¥ôÙ±ÕõíÍ±Ñ5ÕÍ¥5½±ô½¹¡¹õíÍÑM±Ñ5ÕÍ¥5½±ôø(íµÕÍ¥5½±Ì¹µÀ ¡µ½°¤ôø (ñ½ÁÑ¥½¸­äõíµ½°¹µ½±ôùíµ½°¹µ½±ôð½½ÁÑ¥½¸ø(¤¥ô(ð½M±Ñ¥±ø(ñ9ÕµÉ¥±(±°õíÐ µ¥¹ÕÑÌ¥ô(µ¥¸õìÅô(µàõìÄÀÀÀÀÀÁô(ÍÑÀõìÀ¸ÀÅô(Ù±ÕõíµÕÍ¥5¥¹ÕÑÍô(½¹¡¹õíÍÑ5ÕÍ¥5¥¹ÕÑÍô(µ¥¹ÕÑ9½ÑÑ¥½¸(µ¥¹ÕÑ!±ÀõíÐ µ¥¹ÕÑ!±À¥ô(¼ø(ð½MÑ¥½¹±Õ±Ñ½Èø(ñAÉ¥¥¹É(­äõíµÕÍ¥´íÕÉÉ¹åAÉÍ¹ÑÑ¥½¹-åõô(Ñ¥Ñ±õíÐ µÕÍ¥5½±Ì¥ô(Õ¹¥ÐõíÐ ÁÉ¥ÍAÉ5¥¹ÕÑ¥ô(­¥¹ôÍ¥µÁ±(É½ÝÌõí¥ÍÁ±å5ÕÍ¥5½±Íô(±±ÌõíÁÉ¥¥¹1±Íô(Ñ±±ÍÍ9µôÁÉ¥¥¹µÑ±µ¡¹(¼ø(ð½¥Øø(ð½¥Øø(((ñÍÑ¥½¸¥ô¥±±¥¹µ¹½ÑÌ±ÍÍ9µôÍ¥ÑµÉÙ°ÍÑ¥½¸µ¹ÑÈµÐ´ÄÈ½ÉÈµÐ½ÉÈµ¹ÕÑÉ°´ÈÀÀÁÐ´àÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀl´µÍÑ¥½¸µ¥¹àèátø(ñ È±ÍÍ9µôÑáÐ´Éá°½¹ÐµÍµ¥½±ÑÉ­¥¹µÑ¥¡ÐÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀùíÐ ¥±±¥¹9½ÑÌ¥ôð½ Èø(ñ¥Ø±ÍÍ9µôµÐ´ÐÉ¥À´ÌÍ´éÉ¥µ½±Ì´Èø(í¥±±¥¹9½ÑÌ¹µÀ ¡¹½Ñ¤ôøì(½¹ÍÐ%½¸ô¹½Ñ¹¥½¸ì((ÉÑÕÉ¸ (ñ¥Ø(­äõí¹½Ñ¹­åô(±ÍÍ9µôÍÕÉµ±¥Ð±à¥ÑµÌµÍÑÉÐÀ´ÌÉ½Õ¹µ±½ÉÈ½ÉÈµ¹ÕÑÉ°´ÈÀÀµÝ¡¥ÑÀ´ÐÑáÐµÍ´ÑáÐµ¹ÕÑÉ°´ØÀÀÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀÉ¬éµlÄØÄØÄÙtÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀ(ø(ñ%½¸±ÍÍ9µôµÐ´À¸Ô ´ÐÜ´ÐÑáÐµ¹ÕÑÉ°´ÔÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀÀ¼ø(íÐ¡¹½Ñ¹­ä¥ô(ð½¥Øø(¤ì(ô¥ô(ð½¥Øø(ð½ÍÑ¥½¸ø(ð¼ø(¤ì)ô()Õ¹Ñ¥½¸QáÑ5½±±±Éä¡ìµ½±Ì°ÁÉ¥¥¹5½°¥ÍÁ±åAÉ¥°½¹=Á¹5½°ôèì(µ½±ÌèQáÑ5½±mtì(ÁÉ¥¥¹5½èQáÑAÉ¥¥¹5½ì(¥ÍÁ±åAÉ¥è¡ÕÍµ½Õ¹Ðè¹ÕµÈ¤ôøÍÑÉ¥¹ì(½¹=Á¹5½°è¡µ½°èÍÑÉ¥¹¤ôøÙ½¥ì)ô¤ì(ÉÑÕÉ¸ (ñÍÑ¥½¸±ÍÍ9µôµ´àÉ¥µ±±±äôÁÉ¥¥¹µµ½°µ±±Éäµ¡¥¹ø(ñ¥Ø±ÍÍ9µô±à±àµ½°À´ÈÍ´é±àµÉ½ÜÍ´é¥ÑµÌµÍ±¥¹Í´é©ÕÍÑ¥äµÑÝ¸ø(ñ¥Øø(ñ È¥ôÁÉ¥¥¹µµ½°µ±±Éäµ¡¥¹±ÍÍ9µôÑáÐ´Éá°½¹ÐµÍµ¥½±ÑÉ­¥¹µÑ¥¡ÐÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀù1¥¹½ÕÍ¥½¸µ½±Ìð½ Èø(ñÀ±ÍÍ9µôµÐ´ÄÑáÐµÍ´ÑáÐµ¹ÕÑÉ°´ØÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀù=ÕÈÑáÐµ½±Ì°Í¥¹½ÈÍÐ°Á±µÕ±Ñ¥±¥¹Õ°Ý½É¬¸ð½Àø(ð½¥Øø(ñÍÁ¸±ÍÍ9µôÑáÐµáÌ½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´ÔÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀÀùíÁÉ¥¥¹5½ôôôÑ ü	Ñ èÕ±ÐôÁÉ¥¥¹
+Ü½Á¸µ½°½ÈÑ¥±Ìð½ÍÁ¸ø(ð½¥Øø(ñ¥Ø±ÍÍ9µôµÐ´àÉ¥Àµà´ÄÈÀµä´ÜµéÉ¥µ½±Ì´Èø(íµ½±Ì¹µÀ ¡µ½°¤ôøì(½¹ÍÐÁÉÍ¹ÑÑ¥½¸ôÑáÑ5½±AÉÍ¹ÑÑ¥½¹Ímµ½°¹µ½±tì(ÉÑÕÉ¸ (ñÕÑÑ½¸(­äõíµ½°¹µ½±ô(ÑåÁôÕÑÑ½¸(½¹±¥¬õì ¤ôø½¹=Á¹5½°¡µ½°¹µ½°¥ô(±ÍÍ9µôµ½°µÑ±½µ¥Ñ´ÁÉÍÍ±É½ÕÀ±àµ¥¸µÜ´À¥ÑµÌµÍÑÉÐÀ´ÔÉ½Õ¹µ±À´ÈÑáÐµ±Ð½Á¥Ñä´äÀ½ÕÑ±¥¹µ¹½¹ÑÉ¹Í¥Ñ¥½¸¡½ÙÈé½Á¥Ñä´ÄÀÀ½ÕÌµÙ¥Í¥±éÉ¥¹´È½ÕÌµÙ¥Í¥±éÉ¥¹µ¹ÕÑÉ°´äÔÀ½ÕÌµÙ¥Í¥±éÉ¥¹µ½ÍÐ´ÐÉ¬é½ÕÌµÙ¥Í¥±éÉ¥¹µÝ¡¥ÑÉ¬é½ÕÌµÙ¥Í¥±éÉ¥¹µ½ÍÐµlÁÁÁt(ø(ñ5½±%½¸ÁÉÍ¹ÑÑ¥½¸õíÁÉÍ¹ÑÑ¥½¹ô¼ø(ñÍÁ¸±ÍÍ9µôµ¥¸µÜ´À±à´ÄÁÐ´À¸Ôø(ñÍÁ¸±ÍÍ9µô±à±àµÝÉÀ¥ÑµÌµ¹ÑÈÀ´Èø(ñÍÁ¸±ÍÍ9µôÑáÐµá°½¹ÐµÍµ¥½±ÑÉ­¥¹µÑ¥¡ÐÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀùíµ½°¹µ½±ôð½ÍÁ¸ø(íµ½°¹É½µµ¹ñÍÁ¸±ÍÍ9µôÉ½Õ¹µÕ±°µ¹ÕÑÉ°´äÔÀÁà´ÈÁä´À¸ÔÑáÐµlÄÁÁát½¹ÐµÍµ¥½±ÑáÐµÝ¡¥ÑÉ¬éµÝ¡¥ÑÉ¬éÑáÐµ¹ÕÑÉ°´äÔÀùI½µµ¹ð½ÍÁ¸ùô(ð½ÍÁ¸ø(ñÍÁ¸±ÍÍ9µôµÐ´Ä±½¬ÑáÐµÍ±¥¹´ØÑáÐµ¹ÕÑÉ°´ØÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀùíÁÉÍ¹ÑÑ¥½¸ü¹Á¥±¥Ñäüüµ½±Ñ¥±Ímµ½°¹µ½±uôð½ÍÁ¸ø(ñÍÁ¸±ÍÍ9µôµÐ´È±à±àµÝÉÀÀµà´ÌÀµä´ÄÑáÐµÍ´ÑáÐµ¹ÕÑÉ°´ÔÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀÀø(ñÍÁ¸ù%¹ÁÕÐñÍÑÉ½¹±ÍÍ9µô½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´àÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÈÀÀùí¥ÍÁ±åAÉ¥¡µ½°¹¥¹ÁÕÑUÍ¥ôð½ÍÑÉ½¹ø¼Å4ð½ÍÁ¸ø(ñÍÁ¸ù=ÕÑÁÕÐñÍÑÉ½¹±ÍÍ9µô½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´àÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÈÀÀùí¥ÍÁ±åAÉ¥¡µ½°¹½ÕÑÁÕÑUÍ¥ôð½ÍÑÉ½¹ø¼Å4ð½ÍÁ¸ø(ð½ÍÁ¸ø(ð½ÍÁ¸ø(ð½ÕÑÑ½¸ø(¤ì(ô¥ô(ð½¥Øø(ð½ÍÑ¥½¸ø(¤ì)ô()Õ¹Ñ¥½¸5¥M¡½ÝÍ ¤ì(ÉÑÕÉ¸ (ñÍÑ¥½¸¥ôÁÉ½ÕÐµµ½Ì±ÍÍ9µôÍ¥ÑµÉÙ°ÍÉ½±°µµÐ´ÈÐ½ÉÈµä½ÉÈµ¹ÕÑÉ°´ÈÀÀÁä´äÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀÉ¥µ±±±äôµ¥µÍ¡½ÝÍµ¡¥¹ø(ñ¥Ø±ÍÍ9µôµàµÜ´Íá°ø(ñÀ±ÍÍ9µôÑáÐµáÌ½¹ÐµÍµ¥½±ÕÁÁÉÍÑÉ­¥¹µÝ¥ÑáÐµ¹ÕÑÉ°´ÔÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀÀù1¥¹½ÕÍ¥½¸¥¸Ñ¥½¸ð½Àø(ñ È¥ôµ¥µÍ¡½ÝÍµ¡¥¹±ÍÍ9µôµÐ´ÈÑáÐ´Éá°½¹ÐµÍµ¥½±ÑÉ­¥¹µÑ¥¡ÐÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀÍ´éÑáÐ´Íá°ø(M¡½ÜÝ¡ÐÑ¡Á±Ñ½É´¸¼(ð½ Èø(ñÀ±ÍÍ9µôµÐ´ÈÑáÐµÍ´±¥¹´ØÑáÐµ¹ÕÑÉ°´ØÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀø(Q¡Íµ¥Í±½ÑÌÉÉä½Èå½ÕÈ¥¹°ÁÉ½ÕÐ¥µÌ¹Ù¥½Ì¸ ÁÑ¥½¸áÁ±¥¹ÌÑ¡ÉÍÕ±ÐÑ¡µ¼Í¡½Õ±¡¥¡±¥¡Ð¸(ð½Àø(ð½¥Øø((ñ¥Ø±ÍÍ9µôµÐ´ØÉ¥À´ÔµéÉ¥µ½±Ì´Èø(íÍ¡½ÝÍ%ÑµÌ¹µÀ ¡¥Ñ´°¥¹à¤ôøì(½¹ÍÐA±¡½±É%½¸ô¥Ñ´¹­¥¹ôôôÙ¥¼üA±äè%µì(ÉÑÕÉ¸ (ñ¥ÕÉ(­äõí¥Ñ´¹Ñ¥Ñ±ô(±ÍÍ9µôµ¥µÍ¡½ÝÍµÉÉ½ÕÀ½ÙÉ±½Üµ¡¥¸É½Õ¹µ±½ÉÈ½ÉÈµ¹ÕÑÉ°´ÈÀÀµÝ¡¥ÑÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀÉ¬éµlÄÐÄÐÄÑt(ÍÑå±õíì´µµ¥µ¥¹àè¥¹àôÌMMAÉ½ÁÉÑ¥Íô(ø(ñ¥Ø±ÍÍ9µôµ¥µÍ¡½ÝÍµÉµÉ±Ñ¥ÙÍÁÐµÙ¥¼½ÙÉ±½Üµ¡¥¸½ÉÈµ½ÉÈµ¹ÕÑÉ°´ÈÀÀµ¹ÕÑÉ°´ÄÀÀÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀÉ¬éµlÄÀÄÀÄÁtø(í¥Ñ´¹ÍÉü (¥Ñ´¹­¥¹ôôôÙ¥¼ü (ñÙ¥¼±ÍÍ9µô µÕ±°ÜµÕ±°½©Ðµ½ÙÈ½¹ÑÉ½±ÌÁÉ±½ôµÑÑÍÉõí¥Ñ´¹ÍÉô¼ø(¤è (ñ¥µ±ÍÍ9µô µÕ±°ÜµÕ±°½©Ðµ½ÙÈÍÉõí¥Ñ´¹ÍÉô±Ðõí¥Ñ´¹Ñ¥Ñ±ô¼ø(¤(¤è (ñ¥Ø(É½±ô¥µ(É¥µ±°õíí¥Ñ´¹Ñ¥Ñ±ôí¥Ñ´¹­¥¹ôÁ±¡½±Éô(±ÍÍ9µôµ¥µÁ±¡½±ÈÉ¥ µÕ±°ÜµÕ±°Á±µ¥ÑµÌµ¹ÑÈ(ø(ñÍÁ¸±ÍÍ9µôµ¥µÁ±¡½±Èµ¹ÕµÈø(5¥Á±¡½±ÈíMÑÉ¥¹¡¥¹à¬Ä¤¹ÁMÑÉÐ È°À¥ô(ð½ÍÁ¸ø(ñ¥Ø±ÍÍ9µôÑáÐµ¹ÑÈø(ñÍÁ¸±ÍÍ9µôµ¥µÁ±¡½±Èµ¥½¸µàµÕÑ¼É¥ ´ÄÀÜ´ÄÀÁ±µ¥ÑµÌµ¹ÑÈÑáÐµ¹ÕÑÉ°´ÜÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÌÀÀø(ñA±¡½±É%½¸±ÍÍ9µô ´àÜ´àÍÑÉ½­µlÄ¸Õt¼ø(ð½ÍÁ¸ø(ñÀ±ÍÍ9µôµÐ´ÌÑáÐµÍ½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÄÀÀø(IÁ±Ý¥Ñ í¥Ñ´¹­¥¹ô(ð½Àø(ñÀ±ÍÍ9µôµÐ´ÄÑáÐµáÌ½¹Ðµµ¥Õ´ÕÁÁÉÍÑÉ­¥¹µÝ¥ÑáÐµ¹ÕÑÉ°´ØÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀø(ÄØèä
+Ü)A°A9°]@½È5@Ð(ð½Àø(ð½¥Øø(í¥Ñ´¹­¥¹ôôôÙ¥¼ñÍÁ¸±ÍÍ9µôµ¥µÍ¸µ±¥¹É¥µ¡¥¸ôÑÉÕ¼ùô(ð½¥Øø(¥ô(ð½¥Øø(ñ¥ÁÑ¥½¸±ÍÍ9µôÀ´Ðø(ñ¥Ø±ÍÍ9µô±à¥ÑµÌµ¹ÑÈ©ÕÍÑ¥äµÑÝ¸À´Ìø(ñ Ì±ÍÍ9µô½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀùí¥Ñ´¹Ñ¥Ñ±ôð½ Ìø(ñÍÁ¸±ÍÍ9µôÍ¡É¥¹¬´ÀÉ½Õ¹µÕ±°½ÉÈ½ÉÈµ¹ÕÑÉ°´ÈÀÀÁà´ÈÁä´À¸ÔÑáÐµlÄÁÁát½¹ÐµÍµ¥½±ÕÁÁÉÍÑÉ­¥¹µÝ¥ÑáÐµ¹ÕÑÉ°´ÔÀÀÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀø(í¥Ñ´¹±±ô(ð½ÍÁ¸ø(ð½¥Øø(ñÀ±ÍÍ9µôµÐ´ÈÑáÐµÍ´±¥¹´ØÑáÐµ¹ÕÑÉ°´ØÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀùí¥Ñ´¹ÍÉ¥ÁÑ¥½¹ôð½Àø(ð½¥ÁÑ¥½¸ø(ð½¥ÕÉø(¤ì(ô¥ô(ð½¥Øø(ð½ÍÑ¥½¸ø(¤ì)ô()Õ¹Ñ¥½¸5½±%½¸¡ì(ÁÉÍ¹ÑÑ¥½¸°(Í¥éôÑ±½°)ôèì(ÁÉÍ¹ÑÑ¥½¸üèQáÑ5½±AÉÍ¹ÑÑ¥½¸ì(Í¥éüèÑ±½ðÑ¥°ì)ô¤ì(½¹ÍÐÍ¥é±ÍÌôÍ¥éôôôÑ¥°ü ´ÈÐÜ´ÈÐÉ½Õ¹´Éá°è ´ÄØÜ´ÄØÉ½Õ¹´Éá°ì(½¹ÍÐ¥µM±ôÁÉÍ¹ÑÑ¥½¸ü¹¥µM±üüÄì(½¹ÍÐÉÍ½±Ù%µM±ôÍ¥éôôôÑ¥°¥µM±øÄü¥µM±´À¸ÀÐè¥µM±ì(½¹ÍÐ¥µQÉ¹Í½É´ôÍ¥éôôôÑ¥°¥µM±øÄ(üÑÉ¹Í±Ñd Ä¸ÕÁà¤Í± íÉÍ½±Ù%µM±ô¥(èÍ± íÉÍ½±Ù%µM±ô¥ì((ÉÑÕÉ¸ (ñÍÁ¸(±ÍÍ9µõíµ½°µ¥½¸µµ½Ñ¥½¸íÍ¥é±ÍÍôÍ¡É¥¹¬´À½ÙÉ±½Üµ¡¥¹ô(É¥µ¡¥¸ôÑÉÕ(ø(ñ¥µ(ÍÉõíí¥µÁ½ÉÐ¹µÑ¹¹Ø¹	M}UI1ôì¡ÁÉÍ¹ÑÑ¥½¸ü¹¥µüü½ÍÍÑÌ½µ½±Ì½±¥¹½ÕÍ¥½¸¹Á¹¤¹ÉÁ± ½yp¼¬¼°¥õô(±Ðô(±ÍÍ9µô µÕ±°ÜµÕ±°½©Ðµ½ÙÈÑÉ¹Í¥Ñ¥½¸µÑÉ¹Í½É´ÕÉÑ¥½¸´ÌÀÀ(ÍÑå±õíìÑÉ¹Í½É´è¥µQÉ¹Í½É´õô(¼ø(ð½ÍÁ¸ø(¤ì)ô()Õ¹Ñ¥½¸5½±½µÁÉ¥Í½¹A¡ì½¹=Á¹5½°ôèì½¹=Á¹5½°è¡µ½°èÍÑÉ¥¹¤ôøÙ½¥ô¤ì(½¹ÍÐmÁÉ¥¥¹5½°ÍÑAÉ¥¥¹5½tôÕÍMÑÑñQáÑAÉ¥¥¹5½ø  ¤ôø(Ý¥¹½Ü¹±½±MÑ½É¹Ñ%Ñ´ ±¥¹½ÕÍ¥½¸µµ½°µ½µÁÉ¥Í½¸µµ½¤ôôôÑ üÑ è¥¹ÍÑ¹Ð°(¤ì(½¹ÍÐm±Ñ5½±9µ°ÍÑ1Ñ5½±9µtôÕÍMÑÑ 1¥¹½ÕÍ¥½¸¤ì(½¹ÍÐmÉ¥¡Ñ5½±9µ°ÍÑI¥¡Ñ5½±9µtôÕÍMÑÑ 1¥¹½ÕÍ¥½¸AÉ¼¤ì(½¹ÍÐµ½±ÌôÑáÑ5½±Í	åAÉ¥¥¹5½mÁÉ¥¥¹5½tì(½¹ÍÐ±Ñ5½°ôµ½±Ì¹¥¹ ¡µ½°¤ôøµ½°¹µ½°ôôô±Ñ5½±9µ¤üüµ½±ÍlÉtì(½¹ÍÐÉ¥¡Ñ5½°ôµ½±Ì¹¥¹ ¡µ½°¤ôøµ½°¹µ½°ôôôÉ¥¡Ñ5½±9µ¤üüµ½±ÍlÍtì((½¹ÍÐÍ±ÑAÉ¥¥¹5½ô¡µ½èQáÑAÉ¥¥¹5½¤ôøì(ÍÑAÉ¥¥¹5½¡µ½¤ì(Ý¥¹½Ü¹±½±MÑ½É¹ÍÑ%Ñ´ ±¥¹½ÕÍ¥½¸µµ½°µ½µÁÉ¥Í½¸µµ½°µ½¤ì(ôì((ÉÑÕÉ¸ (ñ¥Ø±ÍÍ9µôµàµÜ´Ùá°ø(ñÕÑÑ½¸ÑåÁôÕÑÑ½¸½¹±¥¬õì ¤ôøÝ¥¹½Ü¹¡¥ÍÑ½Éä¹±¹Ñ øÄüÝ¥¹½Ü¹¡¥ÍÑ½Éä¹¬ ¤è½¹=Á¹5½° 5½±Ì¥ô±ÍÍ9µôÁÉÍÍ±¥¹±¥¹µ±à¥ÑµÌµ¹ÑÈÀ´ÈÑáÐµÍ´½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´ØÀÀ¡½ÙÈéÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀÉ¬é¡½ÙÈéÑáÐµÝ¡¥ÑøñÉÉ½Ý1Ð±ÍÍ9µô ´ÐÜ´Ð¼ø5½±Ìð½ÕÑÑ½¸ø(ñÍÑ¥½¸±ÍÍ9µôÍ¥ÑµÉÙ°µÐ´ÄÀ±à±àµ½°À´Ô½ÉÈµ½ÉÈµ¹ÕÑÉ°´ÈÀÀÁ´àÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀÍ´é±àµÉ½ÜÍ´é¥ÑµÌµ¹Í´é©ÕÍÑ¥äµÑÝ¸ø(ñ¥Øø(ñ Ä±ÍÍ9µôÑáÐ´Ñá°½¹ÐµÍµ¥½±ÑÉ­¥¹µÑ¥¡ÐÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀÍ´éÑáÐ´Õá°ù±°µ½±Ìð½ Äø(ñÀ±ÍÍ9µôµÐ´ÌµàµÜ´Éá°ÑáÐµÍ±¥¹´ÜÑáÐµ¹ÕÑÉ°´ØÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÌÀÀù	É½ÝÍ±°Ù¥±±1¥¹½ÕÍ¥½¸µ½±Ì¹½µÁÉÑ¡¥ÈÁ¥±¥Ñ¥Ì¸ð½Àø(ð½¥Øø(ñ¡Éô½µÁÉµµ½±Ì±ÍÍ9µôÁÉÍÍ±¥¹±¥¹µ±àµ¥¸µ ´ÄÄ¥ÑµÌµ¹ÑÈ©ÕÍÑ¥äµ¹ÑÈÉ½Õ¹µÕ±°µ¹ÕÑÉ°´äÔÀÁà´ÔÁä´È¸ÔÑáÐµÍ´½¹ÐµÍµ¥½±ÑáÐµÝ¡¥Ñ¡½ÙÈéµ¹ÕÑÉ°´àÀÀÉ¬éµÝ¡¥ÑÉ¬éÑáÐµ¹ÕÑÉ°´äÔÀÉ¬é¡½ÙÈéµ¹ÕÑÉ°´ÈÀÀù½µÁÉµ½±Ìð½ø(ð½ÍÑ¥½¸ø((ñÍÑ¥½¸±ÍÍ9µôÍ¥ÑµÉÙ°µÐ´ÄÀÉ¥µ±±±äôµ½°µ±±Éäµ¡¥¹ø(ñ¥Ø±ÍÍ9µô±à±àµ½°À´ÈÍ´é±àµÉ½ÜÍ´é¥ÑµÌµÍ±¥¹Í´éÀ´Ìø(ñ È¥ôµ½°µ±±Éäµ¡¥¹±ÍÍ9µôÑáÐµ±½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀùQÉ¹Í±Ñ¥½¸µ½±Ìð½ Èø(ñÀ±ÍÍ9µôÑáÐµÍ´ÑáÐµ¹ÕÑÉ°´ØÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀù1¥¹½ÕÍ¥½¸ÌÑáÐµ½±Ì½ÈµÕ±Ñ¥±¥¹Õ°ÑÍ­ÌÐÙÉäÍ±¸ð½Àø(ð½¥Øø(ñ¥Ø±ÍÍ9µôµÐ´àÉ¥Àµà´ÄÈÀµä´ÜµéÉ¥µ½±Ì´Èø(íµ½±Ì¹µÀ ¡µ½°¤ôøñ5½±±±Éå%Ñ´­äõíµ½°¹µ½±ôµ½°õíµ½±ô½¹=Á¸õì ¤ôø½¹=Á¹5½°¡µ½°¹µ½°¥ô¼ø¥ô(ð½¥Øø(ð½ÍÑ¥½¸ø((ñÍÑ¥½¸¥ô½µÁÉµµ½±Ì±ÍÍ9µôÍ¥ÑµÉÙ°µÐ´ÄÈÍÉ½±°µµÐ´ÈÐÉ½Õ¹µ±½ÉÈ½ÉÈµ¹ÕÑÉ°´ÈÀÀµÝ¡¥ÑÀ´ÐÍ¡½ÜµÍ´É¬é½ÉÈµÝ¡¥Ñ¼ÄÀÉ¬éµlÄØÄØÄÙtÍ´éÀ´ØÉ¥µ±±±äôµ½°µ½µÁÉ¥Í½¸µ¡¥¹ø(ñ¥Ø±ÍÍ9µô±à±àµ½°À´Ô½ÉÈµ½ÉÈµ¹ÕÑÉ°´ÈÀÀÁ´ÔÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀÍ´é±àµÉ½ÜÍ´é¥ÑµÌµ¹Í´é©ÕÍÑ¥äµÑÝ¸ø(ñ¥Øø(ñÀ±ÍÍ9µôÑáÐµáÌ½¹ÐµÍµ¥½±ÕÁÁÉÍÑÉ­¥¹µÝ¥ÑáÐµ¹ÕÑÉ°´ÔÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀÀùA$µ½°½µÁÉ¥Í½¸ð½Àø(ñ È¥ôµ½°µ½µÁÉ¥Í½¸µ¡¥¹±ÍÍ9µôµÐ´ÄÑáÐ´Éá°½¹ÐµÍµ¥½±ÑÉ­¥¹µÑ¥¡ÐÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀù½µÁÉÑÝ¼µ½±Ìð½ Èø(ð½¥Øø(ñ¥Ø±ÍÍ9µô±à±àµÝÉÀÀ´Ìø(ñ¥ØÉ½±ôÉ½ÕÀÉ¥µ±°ô5½°½µÁÉ¥Í½¸ÁÉ¥¥¹µ½±ÍÍ9µô¥¹±¥¹µ±àÉ½Õ¹µµ½ÉÈ½ÉÈµ¹ÕÑÉ°´ÌÀÀµ¹ÕÑÉ°´ÄÀÀÀ´À¸ÔÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÔÉ¬éµÝ¡¥Ñ½lÀ¸ÀÙtø(ì¡l¥¹ÍÑ¹Ð°Ñ tÌ½¹ÍÐ¤¹µÀ ¡µ½¤ôøì(½¹ÍÐÍ±ÑôÁÉ¥¥¹5½ôôôµ½ì(ÉÑÕÉ¸ñÕÑÑ½¸­äõíµ½ôÑåÁôÕÑÑ½¸É¥µÁÉÍÍõíÍ±Ñô½¹±¥¬õì ¤ôøÍ±ÑAÉ¥¥¹5½¡µ½¥ô±ÍÍ9µõíÁÉÍÍ±É½Õ¹Áà´ÌÁä´Ä¸ÔÑáÐµÍ´½¹Ðµµ¥Õ´½ÕÌµÙ¥Í¥±é½ÕÑ±¥¹µ¹½¹½ÕÌµÙ¥Í¥±éÉ¥¹´È½ÕÌµÙ¥Í¥±éÉ¥¹µ¹ÕÑÉ°´äÔÀ½ÕÌµÙ¥Í¥±éÉ¥¹µ½ÍÐ´ÈÉ¬é½ÕÌµÙ¥Í¥±éÉ¥¹µÝ¡¥ÑÉ¬é½ÕÌµÙ¥Í¥±éÉ¥¹µ½ÍÐµlÄØÄØÄÙtíÍ±Ñüµ¹ÕÑÉ°´äÔÀÑáÐµÝ¡¥ÑÍ¡½ÜµÍ´É¬éµÝ¡¥ÑÉ¬éÑáÐµ¹ÕÑÉ°´äÔÀèÑáÐµ¹ÕÑÉ°´ØÀÀ¡½ÙÈéÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀÉ¬é¡½ÙÈéÑáÐµ¹ÕÑÉ°´ÄÀÀõôùíµ½ôôô¥¹ÍÑ¹ÐüÕ±Ðè	Ñ ôð½ÕÑÑ½¸øì(ô¥ô(ð½¥Øø(ð½¥Øø(ð½¥Øø(ñ¥Ø±ÍÍ9µôµÐ´ÔÉ¥À´ÌÍ´éÉ¥µ½±Ìµmµ¥¹µà À°ÅÈ¥}ÕÑ½}µ¥¹µà À°ÅÈ¥tÍ´é¥ÑµÌµ¹ø(ñM±Ñ¥±±°ô¥ÉÍÐµ½°Ù±Õõí±Ñ5½°¹µ½±ô½¹¡¹õíÍÑ1Ñ5½±9µôø(íµ½±Ì¹µÀ ¡µ½°¤ôøñ½ÁÑ¥½¸­äõíµ½°¹µ½±ôùíµ½°¹µ½±ôð½½ÁÑ¥½¸ø¥ô(ð½M±Ñ¥±ø(ñÕÑÑ½¸ÑåÁôÕÑÑ½¸½¹±¥¬õì ¤ôøìÍÑ1Ñ5½±9µ¡É¥¡Ñ5½°¹µ½°¤ìÍÑI¥¡Ñ5½±9µ¡±Ñ5½°¹µ½°¤ìõô±ÍÍ9µôÁÉÍÍ±µ¥¸µ ´ÄÀÉ½Õ¹µµ½ÉÈ½ÉÈµ¹ÕÑÉ°´ÌÀÀµÝ¡¥ÑÁà´ÐÁä´ÈÑáÐµÍ´½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´äÔÀ¡½ÙÈéµ¹ÕÑÉ°´ÔÀÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÔÉ¬éµÝ¡¥Ñ¼ÔÉ¬éÑáÐµ¹ÕÑÉ°´ÄÀÀÉ¬é¡½ÙÈéµÝ¡¥Ñ¼ÄÀùMÝÀð½ÕÑÑ½¸ø(ñM±Ñ¥±±°ôM½¹µ½°Ù±ÕõíÉ¥¡Ñ5½°¹µ½±ô½¹¡¹õíÍÑI¥¡Ñ5½±9µôø(íµ½±Ì¹µÀ ¡µ½°¤ôøñ½ÁÑ¥½¸­äõíµ½°¹µ½±ôùíµ½°¹µ½±ôð½½ÁÑ¥½¸ø¥ô(ð½M±Ñ¥±ø(ð½¥Øø(ñ¥Ø±ÍÍ9µôµÐ´ØÉ¥À´Ð±éÉ¥µ½±Ì´Èø(ñ5½±½µÁÉ¥Í½¹Éµ½°õí±Ñ5½±ôÁÉ¥¥¹5½õíÁÉ¥¥¹5½ô¼ø(ñ5½±½µÁÉ¥Í½¹Éµ½°õíÉ¥¡Ñ5½±ôÁÉ¥¥¹5½õíÁÉ¥¥¹5½ô¼ø(ð½¥Øø(ð½ÍÑ¥½¸ø(ð½¥Øø(¤ì)ô()Õ¹Ñ¥½¸5½±±±Éå%Ñ´¡ìµ½°°½¹=Á¸ôèìµ½°èQáÑ5½°ì½¹=Á¸è ¤ôøÙ½¥ô¤ì(½¹ÍÐÁÉÍ¹ÑÑ¥½¸ôÑáÑ5½±AÉÍ¹ÑÑ¥½¹Ímµ½°¹µ½±tì((ÉÑÕÉ¸ (ñÕÑÑ½¸ÑåÁôÕÑÑ½¸½¹±¥¬õí½¹=Á¹ô±ÍÍ9µôµ½°µÑ±½µ¥Ñ´ÁÉÍÍ±É½ÕÀ±àµ¥¸µÜ´À¥ÑµÌµÍÑÉÐÀ´ÔÉ½Õ¹µ±À´ÈÑáÐµ±Ð½Á¥Ñä´äÀ½ÕÑ±¥¹µ¹½¹ÑÉ¹Í¥Ñ¥½¸¡½ÙÈé½Á¥Ñä´ÄÀÀ½ÕÌµÙ¥Í¥±éÉ¥¹´È½ÕÌµÙ¥Í¥±éÉ¥¹µ¹ÕÑÉ°´äÔÀ½ÕÌµÙ¥Í¥±éÉ¥¹µ½ÍÐ´ÐÉ¬é½ÕÌµÙ¥Í¥±éÉ¥¹µÝ¡¥ÑÉ¬é½ÕÌµÙ¥Í¥±éÉ¥¹µ½ÍÐµlÁÁÁtø(ñ5½±%½¸ÁÉÍ¹ÑÑ¥½¸õíÁÉÍ¹ÑÑ¥½¹ô¼ø(ñ¥Ø±ÍÍ9µôµ¥¸µÜ´À±à´ÄÁÐ´À¸Ôø(ñ¥Ø±ÍÍ9µô±à±àµÝÉÀ¥ÑµÌµ¹ÑÈÀ´Èø(ñ Ì±ÍÍ9µôÑáÐµá°½¹ÐµÍµ¥½±ÑÉ­¥¹µÑ¥¡ÐÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀùíµ½°¹µ½±ôð½ Ìø(íµ½°¹É½µµ¹ñÍÁ¸±ÍÍ9µôÉ½Õ¹µÕ±°µ¹ÕÑÉ°´äÀÀÁà´ÈÁä´À¸ÔÑáÐµlÄÅÁát½¹ÐµÍµ¥½±ÑáÐµÝ¡¥ÑÉ¬éµÝ¡¥ÑÉ¬éÑáÐµ¹ÕÑÉ°´äÔÀùI½µµ¹ð½ÍÁ¸ùô(ð½¥Øø(ñÀ±ÍÍ9µôµÐ´ÄÑáÐµÍ±¥¹´ØÑáÐµ¹ÕÑÉ°´ØÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀùíÁÉÍ¹ÑÑ¥½¸ü¹Á¥±¥Ñäüüµ½±Ñ¥±Ímµ½°¹µ½±uôð½Àø(ð½¥Øø(ð½ÕÑÑ½¸ø(¤ì)ô()ÑåÁ5½±AÉ½¥±MÁôì(ÉÍ½¹¥¹èÍÑÉ¥¹ì(ÉÍ½¹¥¹1Ù°è¹ÕµÈì(ÍÁèÍÑÉ¥¹ì(ÍÁ1Ù°è¹ÕµÈì(½¹ÑáÑ]¥¹½ÜèÍÑÉ¥¹ì(µá=ÕÑÁÕÐèÍÑÉ¥¹ì(ÅÕ±¥ÑäèÍÑÉ¥¹ì(ÍÉ¥ÁÑ¥½¸èÍÑÉ¥¹ì(±¥µ¥ÑÑ¥½¹ÌèÍÑÉ¥¹mtì)ôì()½¹ÍÐµ½±AÉ½¥±MÁÌèI½ÉñÍÑÉ¥¹°5½±AÉ½¥±MÁøôì(1¥¹½ÕÍ¥½¸9¹¼èì(ÉÍ½¹¥¹è1¥¡Ð°(ÉÍ½¹¥¹1Ù°èÄ°(ÍÁèÍÑÍÐ°(ÍÁ1Ù°èÐ°(½¹ÑáÑ]¥¹½ÜèÐÀÀ°ÀÀÀ°(µá=ÕÑÁÕÐèÄÈà°ÀÀÀ°(ÅÕ±¥ÑäèUÑ¥±¥Ñä°(ÍÉ¥ÁÑ¥½¸è1¥¹½ÕÍ¥½¸9¹¼¥Ì½ÁÑ¥µ¥é½È±½Üµ±Ñ¹ä°¡¥ µÙ½±Õµ±¹ÕÝ½É¬Ý¡ÉÁÉ¥Ñ±ÍÑÉÕÑÕÉ¹½ÍÐµÑÑÈµ½ÉÑ¡¸À±¥¹Õ¥ÍÑ¥¹±åÍ¥Ì¸°(±¥µ¥ÑÑ¥½¹Ìèl	ÍÐÝ¥Ñ Í¡½ÉÐ½È±É±äÍÑÉÕÑÕÉÍ½ÕÉÑáÐ°1¥µ¥ÑÑÉµ¥¹½±½äÉÍÉ °9½Ð¥¹Ñ¹½È½Õµ¹ÐµÍ±ÉÙ¥Üt°(ô°(1¥¹½ÕÍ¥½¸1¥Ñèì(ÉÍ½¹¥¹èMÑ¹É°(ÉÍ½¹¥¹1Ù°èÈ°(ÍÁèYÉäÍÐ°(ÍÁ1Ù°èÐ°(½¹ÑáÑ]¥¹½ÜèÐÀÀ°ÀÀÀ°(µá=ÕÑÁÕÐèÄÈà°ÀÀÀ°(ÅÕ±¥Ñäè¥¥¹Ð°(ÍÉ¥ÁÑ¥½¸è1¥¹½ÕÍ¥½¸1¥Ñ±¹Ì±½Ü½ÍÐÝ¥Ñ ÍÑÉ½¹ÈµÕ±Ñ¥±¥¹Õ°½µÁÉ¡¹Í¥½¸½ÈÁÉ½ÕÑ¥½¸ÑÉ¹Í±Ñ¥½¸°áÑÉÑ¥½¸°±ÍÍ¥¥Ñ¥½¸°¹ÍÕµµÉ¥éÑ¥½¸¸°(±¥µ¥ÑÑ¥½¹Ìèl5äÍ¥µÁ±¥ä¡¥¡±äÍÁ¥±¥é±¹Õ°1¥µ¥ÑÉ½ÍÌµ½Õµ¹Ð½¹Í¥ÍÑ¹ä°½µÁ±àÑ½¹µäÉÅÕ¥ÉÉÙ¥Üt°(ô°(1¥¹½ÕÍ¥½¸èì(ÉÍ½¹¥¹è	±¹°(ÉÍ½¹¥¹1Ù°èÌ°(ÍÁèÍÐ°(ÍÁ1Ù°èÌ°(½¹ÑáÑ]¥¹½ÜèÄ°ÀÀÀ°ÀÀÀ°(µá=ÕÑÁÕÐèÌàÐ°ÀÀÀ°(ÅÕ±¥Ñäè!¥ °(ÍÉ¥ÁÑ¥½¸è1¥¹½ÕÍ¥½¸¥ÌÑ¡É½µµ¹Õ±Ð½ÈÁ¹±ÑÉ¹Í±Ñ¥½¸¹µÕ±Ñ¥±¥¹Õ°¹ÉÑ¥½¸°±¹¥¹ÅÕ±¥Ñä°±Ñ¹ä°¹½ÍÐÉ½ÍÌÙÉåäÝ½É­±½Ì¸°(±¥µ¥ÑÑ¥½¹ÌèlMÁ¥±¥ÍÐÑÉµ¥¹½±½äµä¹¥ÐÉ½´ÍÕÁÁ±¥±½ÍÍÉ¥Ì°1½¹±°½Èµ¥°½Õµ¹ÑÌÍ¡½Õ±ÉÙ¥Ý°ÀÉÍÉ ¥ÌÉÍÉÙ½È¡¥¡ÈÑ¥ÉÌt°(ô°(1¥¹½ÕÍ¥½¸AÉ¼èì(ÉÍ½¹¥¹è!¥¡È°(ÉÍ½¹¥¹1Ù°èÐ°(ÍÁè5½ÉÑ°(ÍÁ1Ù°èÌ°(½¹ÑáÑ]¥¹½ÜèÄ°ÀÀÀ°ÀÀÀ°(µá=ÕÑÁÕÐèÌàÐ°ÀÀÀ°(ÅÕ±¥ÑäèÙ¹°(ÍÉ¥ÁÑ¥½¸è1¥¹½ÕÍ¥½¸AÉ¼¥ÌÍ¥¹½ÈÁÉ½ÍÍ¥½¹°±½±¥éÑ¥½¸¹½µÁ±àÑÉ¹Í±Ñ¥½¸Ý¡É½¹ÑáÐ°Ñ½¹°µ¥Õ¥Ñä°¹ÑÉµ¥¹½±½äµÕÍÐÉµ¥¸½¹Í¥ÍÑ¹Ð¸°(±¥µ¥ÑÑ¥½¹Ìèl!¥¡È±Ñ¹äÑ¡¸ÍÑ¹É1¥¹½ÕÍ¥½¸°YÉä±½¹©½ÌµäÑÑÈÍÕ¥ÑÑ¼	Ñ °!Õµ¸ÉÙ¥ÜÉµ¥¹ÌÉ½µµ¹½ÈÉÕ±Ñ½¹Ñ¹Ðt°(ô°(áÁ±¥¹ÕÍ¥½¸èì(ÉÍ½¹¥¹è!¥¡È°(ÉÍ½¹¥¹1Ù°èÐ°(ÍÁè5½ÉÑ°(ÍÁ1Ù°èÌ°(½¹ÑáÑ]¥¹½ÜèÄ°ÀÀÀ°ÀÀÀ°(µá=ÕÑÁÕÐèÌàÐ°ÀÀÀ°(ÅÕ±¥ÑäèáÁ±¹Ñ½Éä°(ÍÉ¥ÁÑ¥½¸èáÁ±¥¹ÕÍ¥½¸ÍÁ¥±¥éÌ¥¸ÑÉ¹Í±Ñ¥½¹ÌÑ¡ÐµÕÍÐ±Í¼Ñ °áÁ±¥¸°¹¹½ÑÑ°½È±É±ä©ÕÍÑ¥ä±¹Õ¡½¥Ì½ÈÉÉÌ¹ÉÙ¥ÝÉÌ¸°(±¥µ¥ÑÑ¥½¹ÌèláÁ±¹Ñ¥½¹Ì¥¹ÉÍ½ÕÑÁÕÐ±¹Ñ °9½ÐÑ¡±½ÝÍÐµ½ÍÐ¡½¥½È¥ÉÐÑÉ¹Í±Ñ¥½¸°½¹¥Íµ½¥ÌÉ½µµ¹½ÈÍ¥µÁ±ÉÅÕÍÑÌt°(ô°(1¥¹½ÕÍ¥½¸U±ÑÉèì(ÉÍ½¹¥¹è5á¥µÕ´°(ÉÍ½¹¥¹1Ù°èÐ°(ÍÁè±¥ÉÑ°(ÍÁ1Ù°èÈ°(½¹ÑáÑ]¥¹½ÜèÄ°ÀÀÀ°ÀÀÀ°(µá=ÕÑÁÕÐèÌàÐ°ÀÀÀ°(ÅÕ±¥Ñäè!¥¡ÍÐ°(ÍÉ¥ÁÑ¥½¸è1¥¹½ÕÍ¥½¸U±ÑÉ¥ÌÕ¥±Ð½ÈÑ¡¡ÉÍÐµÕ±Ñ¥±¥¹Õ°Ý½É¬°½µ¥¹¥¹ÀÉÍ½¹¥¹°ÍÁ¥±¥ÍÐÑÉµ¥¹½±½ä¡¹±¥¹°¹½Õµ¹ÐµÍ±½¹Í¥ÍÑ¹äÉÙ¥Ü¸°(±¥µ¥ÑÑ¥½¹Ìèl!¥¡ÍÐÁÉ¥¥¸Ñ¡1¥¹½ÕÍ¥½¸ÑáÐµ¥±ä°1½¹ÈÉÍÁ½¹ÍÑ¥µ½ÈÀ¹±åÍ¥Ì°	Ñ ¥ÌÉ½µµ¹½È±É¹½¸µÕÉ¹Ð©½Ìt°(ô°)ôì()Õ¹Ñ¥½¸IÑ¥¹5É­Ì¡ìÙ±Õ°¥½¸è%½¸ôèìÙ±Õè¹ÕµÈì¥½¸èÑåÁ½iÀô¤ì(ÉÑÕÉ¸ (ñÍÁ¸±ÍÍ9µô±à¥ÑµÌµ¹ÑÈ©ÕÍÑ¥äµ¹ÑÈÀ´ÄÉ¥µ±°õííÙ±Õô½ÕÐ½Ñôø(ílÄ°È°Ì°Ñt¹µÀ ¡µÉ¬¤ôøñ%½¸­äõíµÉ­ô±ÍÍ9µõí ´ÐÜ´ÐíµÉ¬ðôÙ±ÕüÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥ÑèÑáÐµ¹ÕÑÉ°´ÌÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÜÀÀõô¥±°õíµÉ¬ðôÙ±ÕüÕÉÉ¹Ñ½±½Èè¹½¹ô¼ø¥ô(ð½ÍÁ¸ø(¤ì)ô()Õ¹Ñ¥½¸5½±Ñ¥±A¡ì(µ½±9µ°(½¹	¬°(½¹½µÁÉ°(½¹=Á¹A±åÉ½Õ¹°)ôèì(µ½±9µèÍÑÉ¥¹ì(½¹	¬è ¤ôøÙ½¥ì(½¹½µÁÉè ¤ôøÙ½¥ì(½¹=Á¹A±åÉ½Õ¹è ¤ôøÙ½¥ì)ô¤ì(½¹ÍÐÕ±Ñ5½°ôÑáÑ5½±Í	åAÉ¥¥¹5½¹¥¹ÍÑ¹Ð¹¥¹ ¡µ½°¤ôøµ½°¹µ½°ôôôµ½±9µ¤ì(½¹ÍÐÑ¡5½°ôÑáÑ5½±Í	åAÉ¥¥¹5½¹Ñ ¹¥¹ ¡µ½°¤ôøµ½°¹µ½°ôôôµ½±9µ¤ì(½¹ÍÐÁÉÍ¹ÑÑ¥½¸ôÑáÑ5½±AÉÍ¹ÑÑ¥½¹Ímµ½±9µtì(½¹ÍÐÁÉ½¥±ôµ½±AÉ½¥±MÁÍmµ½±9µtì(½¹ÍÐmÁÉ¥¥¹5½°ÍÑAÉ¥¥¹5½tôÕÍMÑÑñQáÑAÉ¥¥¹5½ø ¥¹ÍÑ¹Ð¤ì(½¹ÍÐm½µÁÉ¥Í½¹5ÑÉ¥°ÍÑ½µÁÉ¥Í½¹5ÑÉ¥tôÕÍMÑÑð¥¹ÁÕÐð½ÕÑÁÕÐø ¥¹ÁÕÐ¤ì(½¹ÍÐm½Á¥°ÍÑ½Á¥tôÕÍMÑÑðµ½°ðÉÅÕÍÐð¹Õ±°ø¡¹Õ±°¤ì(¥ Õ±Ñ5½°ñðÑ¡5½°ñðÁÉÍ¹ÑÑ¥½¸ñðÁÉ½¥±¤ÉÑÕÉ¸¹Õ±°ì((½¹ÍÐÁÉ¥ô¡Ù±Õè¹ÕµÈ¤ôø¹Ü%¹Ñ°¹9ÕµÉ½ÉµÐ ¸µUL°ì(ÍÑå±èÕÉÉ¹ä°(ÕÉÉ¹äèUM°(µ¥¹¥µÕµÉÑ¥½¹¥¥ÑÌèÙ±ÕðÄüÈèÀ°(µá¥µÕµÉÑ¥½¹¥¥ÑÌèÈ°(ô¤¹½ÉµÐ¡Ù±Õ¤ì(½¹ÍÐÁ¥5½±%ôµ½±M±Õ¡µ½±9µ¤ì(½¹ÍÐÑ¥ÙAÉ¥ôÁÉ¥¥¹5½ôôôÑ üÑ¡5½°èÕ±Ñ5½°ì(½¹ÍÐ½µÁÉ¥Í½¹5½±ÌôÑáÑ5½±Í	åAÉ¥¥¹5½mÁÉ¥¥¹5½tì(½¹ÍÐ½µÁÉ¥Í½¹5àô5Ñ ¹µà ¸¸¹½µÁÉ¥Í½¹5½±Ì¹µÀ ¡µ½°¤ôøµ½±m½µÁÉ¥Í½¹5ÑÉ¥ôôô¥¹ÁÕÐü¥¹ÁÕÑUÍè½ÕÑÁÕÑUÍt¤¤ì(½¹ÍÐÉÅÕÍÑM¹¥ÁÁÐôÕÉ°¡ÑÑÁÌè¼½Á¤¹±¥¹½ÕÍ¥½¸¹¤½ØÄ½ÑÉ¹Í±Ñqp(µ ÕÑ¡½É¥éÑ¥½¸è	ÉÈ1%9=UM%=9}A%}-dqp(µ ½¹Ñ¹ÐµQåÁèÁÁ±¥Ñ¥½¸½©Í½¸qp(µì(µ½°èíÁ¥5½±%ô°(Í½ÕÉ}±¹Õè¸°(ÑÉÑ}±¹ÕèÈ°(¥¹ÁÕÐè	Õ¥±½ÈÙÉä±¹Õ¸(ôì((½¹ÍÐ½ÁåQáÐôÍå¹¡ÑáÐèÍÑÉ¥¹°ÑÉÐèµ½°ðÉÅÕÍÐ¤ôøì(ÑÉäì(¥ ¹Ù¥Ñ½È¹±¥Á½Éü¹ÝÉ¥ÑQáÐ¤Ñ¡É½Ü¹ÜÉÉ½È ±¥Á½ÉA$Õ¹Ù¥±±¤ì(Ý¥Ð¹Ù¥Ñ½È¹±¥Á½É¹ÝÉ¥ÑQáÐ¡ÑáÐ¤ì(ôÑ ì(½¹ÍÐÑáÑÉô½Õµ¹Ð¹ÉÑ±µ¹Ð ÑáÑÉ¤ì(ÑáÑÉ¹Ù±ÕôÑáÐì(ÑáÑÉ¹ÍÑå±¹Á½Í¥Ñ¥½¸ô¥áì(ÑáÑÉ¹ÍÑå±¹½Á¥ÑäôÀì(½Õµ¹Ð¹½ä¹ÁÁ¹¡¥±¡ÑáÑÉ¤ì(ÑáÑÉ¹Í±Ð ¤ì(½Õµ¹Ð¹á½µµ¹ ½Áä¤ì(ÑáÑÉ¹Éµ½Ù ¤ì(ô(ÍÑ½Á¥¡ÑÉÐ¤ì(Ý¥¹½Ü¹ÍÑQ¥µ½ÕÐ  ¤ôøÍÑ½Á¥¡¹Õ±°¤°ÄÔÀÀ¤ì(ôì((ÉÑÕÉ¸ (ñ¥Ø±ÍÍ9µôµàµÕÑ¼µàµÜ´Ùá°Á´ÈÀø(ñÕÑÑ½¸ÑåÁôÕÑÑ½¸½¹±¥¬õí½¹	­ô±ÍÍ9µôÁÉÍÍ±¥¹±¥¹µ±à¥ÑµÌµ¹ÑÈÀ´ÈÑáÐµÍ´½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´ØÀÀ¡½ÙÈéÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀÉ¬é¡½ÙÈéÑáÐµÝ¡¥ÑøñÉÉ½Ý1Ð±ÍÍ9µô ´ÐÜ´Ð¼ø±°µ½±Ìð½ÕÑÑ½¸ø((ñ¡È±ÍÍ9µôÍ¥ÑµÉÙ°µÐ´àø(ñ¥Ø±ÍÍ9µô±à±àµ½°À´Øá°é±àµÉ½Üá°é¥ÑµÌµ¹ÑÈá°é©ÕÍÑ¥äµÑÝ¸ø(ñ¥Ø±ÍÍ9µô±àµ¥¸µÜ´À±àµ½°À´ÐÍ´é±àµÉ½ÜÍ´é¥ÑµÌµ¹ÑÈø(ñ5½±%½¸ÁÉÍ¹ÑÑ¥½¸õíÁÉÍ¹ÑÑ¥½¹ôÍ¥éôÑ¥°¼ø(ñ¥Ø±ÍÍ9µôµ¥¸µÜ´Àø(ñ¥Ø±ÍÍ9µô±à±àµÝÉÀ¥ÑµÌµ¹ÑÈÀ´Èø(ñ Ä±ÍÍ9µôµ¥¸µÜ´ÀÉ¬µÝ½ÉÌÑáÐ´Íá°½¹ÐµÍµ¥½±ÑÉ­¥¹µÑ¥¡ÐÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀá°éÑáÐ´Ñá°ùíµ½±9µôð½ Äø(ñÍ±Ð(Ù±ÕõíÁÉ¥¥¹5½ô(½¹¡¹õì¡Ù¹Ð¤ôøÍÑAÉ¥¥¹5½¡Ù¹Ð¹ÑÉÐ¹Ù±ÕÌQáÑAÉ¥¥¹5½¥ô(É¥µ±°ôAÉ½ÍÍ¥¹µ½(±ÍÍ9µô ´äÉ½Õ¹µÕ±°½ÉÈ½ÉÈµ¹ÕÑÉ°´ÌÀÀµÝ¡¥ÑÁà´ÌÑáÐµÍ´½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´àÀÀ½ÕÑ±¥¹µ¹½¹½ÕÌé½ÉÈµ¹ÕÑÉ°´ØÀÀÉ¬é½ÉÈµÝ¡¥Ñ¼ÈÀÉ¬éµlÄÄÅtÉ¬éÑáÐµ¹ÕÑÉ°´ÄÀÀ(ø(ñ½ÁÑ¥½¸Ù±Õô¥¹ÍÑ¹ÐùÕ±Ðð½½ÁÑ¥½¸ø(ñ½ÁÑ¥½¸Ù±ÕôÑ ù	Ñ ð½½ÁÑ¥½¸ø(ð½Í±Ðø(ñÕÑÑ½¸ÑåÁôÕÑÑ½¸½¹±¥¬õì ¤ôø½ÁåQáÐ¡Á¥5½±%°µ½°¥ôÉ¥µ±°ô½Áäµ½°%±ÍÍ9µôÁÉÍÍ±É½Õ¹µµÀ´ÈÑáÐµ¹ÕÑÉ°´ÔÀÀ¡½ÙÈéµ¹ÕÑÉ°´ÄÀÀ¡½ÙÈéÑáÐµ¹ÕÑÉ°´äÔÀÉ¬é¡½ÙÈéµÝ¡¥Ñ¼ÄÀÉ¬é¡½ÙÈéÑáÐµÝ¡¥Ñøñ½Áä±ÍÍ9µô ´ÐÜ´Ð¼øð½ÕÑÑ½¸ø(í½Á¥ôôôµ½°ñÍÁ¸±ÍÍ9µôÑáÐµáÌ½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´ÔÀÀù½Á¥ð½ÍÁ¸ùô(ð½¥Øø(ñÀ±ÍÍ9µôµÐ´ÄµàµÜ´Íá°É¬µÝ½ÉÌÑáÐµÍ±¥¹´ÜÑáÐµ¹ÕÑÉ°´ØÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀùíÁÉÍ¹ÑÑ¥½¸¹Á¥±¥Ñåôð½Àø(ð½¥Øø(ð½¥Øø(ñ¥Ø±ÍÍ9µô±à±àµÝÉÀÀ´Èá°éÍ¡É¥¹¬´Àø(ñÕÑÑ½¸ÑåÁôÕÑÑ½¸½¹±¥¬õí½¹½µÁÉô±ÍÍ9µôÁÉÍÍ±¥¹±¥¹µ±àµ¥¸µ ´ÄÄ¥ÑµÌµ¹ÑÈ©ÕÍÑ¥äµ¹ÑÈÉ½Õ¹µÕ±°½ÉÈ½ÉÈµ¹ÕÑÉ°´ÌÀÀÁà´ÔÁä´È¸ÔÑáÐµÍ´½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀ¡½ÙÈéµ¹ÕÑÉ°´ÔÀÉ¬é½ÉÈµÝ¡¥Ñ¼ÈÀÉ¬éÑáÐµÝ¡¥ÑÉ¬é¡½ÙÈéµÝ¡¥Ñ¼ÄÀù½µÁÉð½ÕÑÑ½¸ø(ñÕÑÑ½¸ÑåÁôÕÑÑ½¸½¹±¥¬õí½¹=Á¹A±åÉ½Õ¹ô±ÍÍ9µôÁÉÍÍ±¥¹±¥¹µ±àµ¥¸µ ´ÄÄ¥ÑµÌµ¹ÑÈ©ÕÍÑ¥äµ¹ÑÈÉ½Õ¹µÕ±°µ¹ÕÑÉ°´äÔÀÁà´ÔÁä´È¸ÔÑáÐµÍ´½¹ÐµÍµ¥½±ÑáÐµÝ¡¥Ñ¡½ÙÈéµ¹ÕÑÉ°´àÀÀÉ¬éµÝ¡¥ÑÉ¬éÑáÐµ¹ÕÑÉ°´äÔÀÉ¬é¡½ÙÈéµ¹ÕÑÉ°´ÈÀÀùQÉä¥¸A±åÉ½Õ¹ð½ÕÑÑ½¸ø(ð½¥Øø(ð½¥Øø(ð½¡Èø((ñÍÑ¥½¸±ÍÍ9µôÍ¥ÑµÉÙ°µÐ´ÄÀ½ÙÉ±½Üµ¡¥¸É½Õ¹µ±½ÉÈ½ÉÈµ¹ÕÑÉ°´ÈÀÀÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀÉ¥µ±°ô5½°ÍÕµµÉäø(ñ¥Ø±ÍÍ9µôÉ¥É¥µ½±Ì´È¥Ù¥µà¥Ù¥µä¥Ù¥µ¹ÕÑÉ°´ÈÀÀÉ¬é¥Ù¥µÝ¡¥Ñ¼ÄÀÍ´éÉ¥µ½±Ì´ÌÉá°éÉ¥µ½±Ì´ÔÉá°é¥Ù¥µä´Àø(ñ¥Ø±ÍÍ9µôÀ´ÔÑáÐµ¹ÑÈøñÀ±ÍÍ9µôÑáÐµáÌ½¹ÐµÍµ¥½±ÕÁÁÉÍÑÉ­¥¹µÝ¥ÑáÐµ¹ÕÑÉ°´ÔÀÀùIÍ½¹¥¹ð½Àøñ¥Ø±ÍÍ9µôµÐ´ÌøñIÑ¥¹5É­ÌÙ±ÕõíÁÉ½¥±¹ÉÍ½¹¥¹1Ù±ô¥½¸õí	É¥¹¥ÉÕ¥Ñô¼øð½¥ØøñÀ±ÍÍ9µôµÐ´ÈÑáÐµÍ´½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´àÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÈÀÀùíÁÉ½¥±¹ÉÍ½¹¥¹ôð½Àøð½¥Øø(ñ¥Ø±ÍÍ9µôÀ´ÔÑáÐµ¹ÑÈøñÀ±ÍÍ9µôÑáÐµáÌ½¹ÐµÍµ¥½±ÕÁÁÉÍÑÉ­¥¹µÝ¥ÑáÐµ¹ÕÑÉ°´ÔÀÀùMÁð½Àøñ¥Ø±ÍÍ9µôµÐ´ÌøñIÑ¥¹5É­ÌÙ±ÕõíÁÉ½¥±¹ÍÁ1Ù±ô¥½¸õíiÁô¼øð½¥ØøñÀ±ÍÍ9µôµÐ´ÈÑáÐµÍ´½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´àÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÈÀÀùíÁÉ½¥±¹ÍÁôð½Àøð½¥Øø(ñ¥Ø±ÍÍ9µôÀ´ÔÑáÐµ¹ÑÈøñÀ±ÍÍ9µôÑáÐµáÌ½¹ÐµÍµ¥½±ÕÁÁÉÍÑÉ­¥¹µÝ¥ÑáÐµ¹ÕÑÉ°´ÔÀÀùAÉ¥ð½ÀøñÀ±ÍÍ9µôµÐ´ÌÑáÐµ±½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥ÑùíÁÉ¥¡Ñ¥ÙAÉ¥¹¥¹ÁÕÑUÍ¥ô
+ÜíÁÉ¥¡Ñ¥ÙAÉ¥¹½ÕÑÁÕÑUÍ¥ôð½ÀøñÀ±ÍÍ9µôµÐ´ÄÑáÐµÍ´ÑáÐµ¹ÕÑÉ°´ÔÀÀù%¹ÁÕÐ
+Ü=ÕÑÁÕÐð½Àøð½¥Øø(ñ¥Ø±ÍÍ9µôÀ´ÔÑáÐµ¹ÑÈøñÀ±ÍÍ9µôÑáÐµáÌ½¹ÐµÍµ¥½±ÕÁÁÉÍÑÉ­¥¹µÝ¥ÑáÐµ¹ÕÑÉ°´ÔÀÀù%¹ÁÕÐð½ÀøñQåÁ±ÍÍ9µôµàµÕÑ¼µÐ´Ì ´ÔÜ´ÔÑáÐµ¹ÕÑÉ°´àÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÈÀÀ¼øñÀ±ÍÍ9µôµÐ´ÈÑáÐµÍ´½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´àÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÈÀÀùQáÐð½Àøð½¥Øø(ñ¥Ø±ÍÍ9µô½°µÍÁ¸´ÈÀ´ÔÑáÐµ¹ÑÈÍ´é½°µÍÁ¸´ÄøñÀ±ÍÍ9µôÑáÐµáÌ½¹ÐµÍµ¥½±ÕÁÁÉÍÑÉ­¥¹µÝ¥ÑáÐµ¹ÕÑÉ°´ÔÀÀù=ÕÑÁÕÐð½Àøñ¥±QáÐ±ÍÍ9µôµàµÕÑ¼µÐ´Ì ´ÔÜ´ÔÑáÐµ¹ÕÑÉ°´àÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÈÀÀ¼øñÀ±ÍÍ9µôµÐ´ÈÑáÐµÍ´½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´àÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÈÀÀùQáÐð½Àøð½¥Øø(ð½¥Øø(ð½ÍÑ¥½¸ø((ñÍÑ¥½¸±ÍÍ9µôÍ¥ÑµÉÙ°É¥À´à½ÉÈµ½ÉÈµ¹ÕÑÉ°´ÈÀÀÁä´ÄÀÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀ±éÉ¥µ½±Ìµmµ¥¹µà À°Ä¸ÑÈ¥}µ¥¹µà ÄáÉ´°À¸ÙÈ¥tø(ñÀ±ÍÍ9µôÑáÐµÍ±¥¹´àÑáÐµ¹ÕÑÉ°´ÜÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÌÀÀùíÁÉ½¥±¹ÍÉ¥ÁÑ¥½¹ôð½Àø(ñ°±ÍÍ9µôÉ¥À´ÐÑáÐµÍ´Í´éÉ¥µ½±Ì´È±éÉ¥µ½±Ì´Äø(ñ¥Ø±ÍÍ9µô±à¥ÑµÌµ¹ÑÈÀ´Ìøñ1åÉÌÌ±ÍÍ9µô ´ÔÜ´ÔÑáÐµ¹ÕÑÉ°´ÔÀÀ¼øñ¥ØøñÐ±ÍÍ9µôÑáÐµ¹ÕÑÉ°´ÔÀÀù½¹ÑáÐÝ¥¹½Üð½Ðøñ±ÍÍ9µô½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥ÑùíÁÉ½¥±¹½¹ÑáÑ]¥¹½ÝôÑ½­¹Ìð½øð½¥Øøð½¥Øø(ñ¥Ø±ÍÍ9µô±à¥ÑµÌµ¹ÑÈÀ´ÌøñÕ±ÍÍ9µô ´ÔÜ´ÔÑáÐµ¹ÕÑÉ°´ÔÀÀ¼øñ¥ØøñÐ±ÍÍ9µôÑáÐµ¹ÕÑÉ°´ÔÀÀù5á¥µÕ´½ÕÑÁÕÐð½Ðøñ±ÍÍ9µô½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥ÑùíÁÉ½¥±¹µá=ÕÑÁÕÑôÑ½­¹Ìð½øð½¥Øøð½¥Øø(ñ¥Ø±ÍÍ9µô±à¥ÑµÌµ¹ÑÈÀ´Ìøñ±½È±ÍÍ9µô ´ÔÜ´ÔÑáÐµ¹ÕÑÉ°´ÔÀÀ¼øñ¥ØøñÐ±ÍÍ9µôÑáÐµ¹ÕÑÉ°´ÔÀÀùQÉ¹Í±Ñ¥½¸ÅÕ±¥Ñäð½Ðøñ±ÍÍ9µô½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥ÑùíÁÉ½¥±¹ÅÕ±¥Ñåôð½øð½¥Øøð½¥Øø(ñ¥Ø±ÍÍ9µô±à¥ÑµÌµ¹ÑÈÀ´Ìøñ±½¬Ì±ÍÍ9µô ´ÔÜ´ÔÑáÐµ¹ÕÑÉ°´ÔÀÀ¼øñ¥ØøñÐ±ÍÍ9µôÑáÐµ¹ÕÑÉ°´ÔÀÀùAÉ½ÍÍ¥¹ð½Ðøñ±ÍÍ9µô½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥ÑùÕ±Ð°ÍÑÉµ¥¹°	Ñ ð½øð½¥Øøð½¥Øø(ð½°ø(ð½ÍÑ¥½¸ø((ñÍÑ¥½¸±ÍÍ9µôÍ¥ÑµÉÙ°É¥À´à½ÉÈµ½ÉÈµ¹ÕÑÉ°´ÈÀÀÁä´ÄÈÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀ±éÉ¥µ½±ÌµlÄÑÉµ}µ¥¹µà À°ÅÈ¥tÉ¥µ±±±äôµ½°µÁÉ¥¥¹µ¡¥¹ø(ñ È¥ôµ½°µÁÉ¥¥¹µ¡¥¹±ÍÍ9µôÑáÐµá°½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥ÑùAÉ¥¥¹ð½ Èø(ñ¥Øø(ñ¥Ø±ÍÍ9µô±à±àµ½°À´ÈÍ´é±àµÉ½ÜÍ´é¥ÑµÌµ¹Í´é©ÕÍÑ¥äµÑÝ¸ø(ñÀ±ÍÍ9µôµàµÜ´Éá°ÑáÐµÍ´±¥¹´ØÑáÐµ¹ÕÑÉ°´ØÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀùAÉ¥¥¹¥ÌÍ½¸Ñ½­¹ÌÁÉ½ÍÍ¸A$¥±±¥¹Éµ¥¹Ì¥¸UM°¹	Ñ ½ÉÌ±½ÝÈµ½ÍÐÍå¹¡É½¹½ÕÌÁÉ½ÍÍ¥¹½È¹½¸µÕÉ¹ÐÝ½É¬¸ð½Àø(ñÍÁ¸±ÍÍ9µôÍ¡É¥¹¬´ÀÑáÐµÍ´ÑáÐµ¹ÕÑÉ°´ÔÀÀùAÈÅ4Ñ½­¹Ìð½ÍÁ¸ø(ð½¥Øø(ñ¥Ø±ÍÍ9µôµÐ´ØÉ¥À´ÌÍ´éÉ¥µ½±Ì´Ìø(ñ¥Ø±ÍÍ9µôÉ½Õ¹µ±½ÉÈ½ÉÈµ¹ÕÑÉ°´ÈÀÀµ¹ÕÑÉ°´ÔÀÀ´ÔÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀÉ¬éµÝ¡¥Ñ½lÀ¸ÀÑtøñÀ±ÍÍ9µôÑáÐµÍ´ÑáÐµ¹ÕÑÉ°´ÔÀÀù%¹ÁÕÐð½ÀøñÀ±ÍÍ9µôµÐ´ÈÑáÐ´Éá°½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥ÑùíÁÉ¥¡Ñ¥ÙAÉ¥¹¥¹ÁÕÑUÍ¥ôð½Àøð½¥Øø(ñ¥Ø±ÍÍ9µôÉ½Õ¹µ±½ÉÈ½ÉÈµ¹ÕÑÉ°´ÈÀÀµ¹ÕÑÉ°´ÔÀÀ´ÔÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀÉ¬éµÝ¡¥Ñ½lÀ¸ÀÑtøñÀ±ÍÍ9µôÑáÐµÍ´ÑáÐµ¹ÕÑÉ°´ÔÀÀù=ÕÑÁÕÐð½ÀøñÀ±ÍÍ9µôµÐ´ÈÑáÐ´Éá°½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥ÑùíÁÉ¥¡Ñ¥ÙAÉ¥¹½ÕÑÁÕÑUÍ¥ôð½Àøð½¥Øø(ñ¥Ø±ÍÍ9µôÉ½Õ¹µ±½ÉÈ½ÉÈµ¹ÕÑÉ°´ÈÀÀµ¹ÕÑÉ°´ÔÀÀ´ÔÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀÉ¬éµÝ¡¥Ñ½lÀ¸ÀÑtøñÀ±ÍÍ9µôÑáÐµÍ´ÑáÐµ¹ÕÑÉ°´ÔÀÀùíÁÉ¥¥¹5½ôôôÑ üQÕÉ¹É½Õ¹èIÍÁ½¹Íôð½ÀøñÀ±ÍÍ9µôµÐ´ÈÑáÐ´Éá°½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥ÑùíÁÉ¥¥¹5½ôôôÑ üUÀÑ¼ÈÑ è%µµ¥Ñôð½Àøð½¥Øø(ð½¥Øø((ñ¥Ø±ÍÍ9µôµÐ´à±à¥ÑµÌµ¹ÑÈ©ÕÍÑ¥äµÑÝ¸À´Ðø(ñ Ì±ÍÍ9µôÑáÐµÍ´½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥ÑùEÕ¥¬½µÁÉ¥Í½¸ð½ Ìø(ñ¥ØÉ½±ôÉ½ÕÀÉ¥µ±°ô½µÁÉ¥Í½¸µÑÉ¥±ÍÍ9µô¥¹±¥¹µ±àÉ½Õ¹µµ½ÉÈ½ÉÈµ¹ÕÑÉ°´ÈÀÀÀ´À¸ÔÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀø(ì¡l¥¹ÁÕÐ°½ÕÑÁÕÐtÌ½¹ÍÐ¤¹µÀ ¡µÑÉ¥¤ôøñÕÑÑ½¸­äõíµÑÉ¥ôÑåÁôÕÑÑ½¸É¥µÁÉÍÍõí½µÁÉ¥Í½¹5ÑÉ¥ôôôµÑÉ¥ô½¹±¥¬õì ¤ôøÍÑ½µÁÉ¥Í½¹5ÑÉ¥¡µÑÉ¥¥ô±ÍÍ9µõíÉ½Õ¹Áà´ÌÁä´ÄÑáÐµáÌ½¹Ðµµ¥Õ´Á¥Ñ±¥éí½µÁÉ¥Í½¹5ÑÉ¥ôôôµÑÉ¥üµ¹ÕÑÉ°´äÔÀÑáÐµÝ¡¥ÑÉ¬éµÝ¡¥ÑÉ¬éÑáÐµ¹ÕÑÉ°´äÔÀèÑáÐµ¹ÕÑÉ°´ÔÀÀõôùíµÑÉ¥ôð½ÕÑÑ½¸ø¥ô(ð½¥Øø(ð½¥Øø(ñ¥Ø±ÍÍ9µôµÐ´ÐÍÁµä´ÌÉ½Õ¹µ±½ÉÈ½ÉÈµ¹ÕÑÉ°´ÈÀÀÀ´ÔÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀø(í½µÁÉ¥Í½¹5½±Ì¹µÀ ¡µ½°¤ôøì(½¹ÍÐÙ±Õôµ½±m½µÁÉ¥Í½¹5ÑÉ¥ôôô¥¹ÁÕÐü¥¹ÁÕÑUÍè½ÕÑÁÕÑUÍtì(½¹ÍÐÙ¥ÍÕ±]¥Ñ ô5Ñ ¹µà ÄÀ°5Ñ ¹ÉÐ¡Ù±Õ¼½µÁÉ¥Í½¹5à¤¨ÄÀÀ¤ì(ÉÑÕÉ¸ (ñ¥Ø­äõíµ½°¹µ½±ô±ÍÍ9µôÉ¥É¥µ½±ÌµláÉµ}µ¥¹µà ÑÉ´°ÅÈ¥|ÑÉµt¥ÑµÌµ¹ÑÈÀ´ÌÑáÐµÍ´ø(ñÍÁ¸±ÍÍ9µõíÑÉÕ¹Ñíµ½°¹µ½°ôôôµ½±9µü½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥ÑèÑáÐµ¹ÕÑÉ°´ØÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀõôùíµ½°¹µ½°¹ÉÁ± 1¥¹½ÕÍ¥½¸°¥ôð½ÍÁ¸ø(ñÍÁ¸±ÍÍ9µô ´È½ÙÉ±½Üµ¡¥¸É½Õ¹µÕ±°µ¹ÕÑÉ°´ÈÀÀÉ¬éµÝ¡¥Ñ¼ÄÀøñÍÁ¸±ÍÍ9µõí±½¬ µÕ±°É½Õ¹µÕ±°íµ½°¹µ½°ôôôµ½±9µüµ¹ÕÑÉ°´äÔÀÉ¬éµÝ¡¥Ñèµ¹ÕÑÉ°´ÔÀÀõôÍÑå±õíìÝ¥Ñ èíÙ¥ÍÕ±]¥Ñ¡ôõô¼øð½ÍÁ¸ø(ñÍÁ¸±ÍÍ9µôÑáÐµÉ¥¡Ð½¹Ðµµ½¹¼ÑáÐµáÌÑáÐµ¹ÕÑÉ°´ØÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀùíÁÉ¥¡Ù±Õ¥ôð½ÍÁ¸ø(ð½¥Øø(¤ì(ô¥ô(ð½¥Øø(ð½¥Øø(ð½ÍÑ¥½¸ø((ñÍÑ¥½¸±ÍÍ9µôÍ¥ÑµÉÙ°É¥À´à½ÉÈµ½ÉÈµ¹ÕÑÉ°´ÈÀÀÁä´ÄÈÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀ±éÉ¥µ½±ÌµlÄÑÉµ}µ¥¹µà À°ÅÈ¥tÉ¥µ±±±äôÁ¥±¥Ñ¥Ìµ¡¥¹ø(ñ È¥ôÁ¥±¥Ñ¥Ìµ¡¥¹±ÍÍ9µôÑáÐµá°½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥ÑùÁ¥±¥Ñ¥Ìð½ Èø(ñ¥Øø(ñÀ±ÍÍ9µôµàµÜ´Íá°ÑáÐµÍ±¥¹´ÜÑáÐµ¹ÕÑÉ°´ØÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÌÀÀùíÁÉÍ¹ÑÑ¥½¸¹ÍÑ½Éôð½Àø(ñÕ°±ÍÍ9µôµÐ´ÜÉ¥ÀµÁà½ÙÉ±½Üµ¡¥¸É½Õ¹µ±½ÉÈ½ÉÈµ¹ÕÑÉ°´ÈÀÀµ¹ÕÑÉ°´ÈÀÀÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀÉ¬éµÝ¡¥Ñ¼ÄÀÍ´éÉ¥µ½±Ì´Èø(íÁÉÍ¹ÑÑ¥½¸¹ÑÕÉÌ¹µÀ ¡ÑÕÉ¤ôøñ±¤­äõíÑÕÉô±ÍÍ9µô±à¥ÑµÌµÍÑÉÐÀ´ÌµÝ¡¥ÑÀ´ÔÑáÐµÍ´ÑáÐµ¹ÕÑÉ°´ÜÀÀÉ¬éµlÄÄÅtÉ¬éÑáÐµ¹ÕÑÉ°´ÌÀÀøñ¡­¥É±È±ÍÍ9µôµÐ´À¸Ô ´ÐÜ´ÐÍ¡É¥¹¬´ÀÑáÐµ¹ÕÑÉ°´ÔÀÀ¼øíÑÕÉôð½±¤ø¥ô(ð½Õ°ø(ð½¥Øø(ð½ÍÑ¥½¸ø((ñÍÑ¥½¸±ÍÍ9µôÍ¥ÑµÉÙ°É¥À´à½ÉÈµ½ÉÈµ¹ÕÑÉ°´ÈÀÀÁä´ÄÈÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀ±éÉ¥µ½±ÌµlÄÑÉµ}µ¥¹µà À°ÅÈ¥tÉ¥µ±±±äôÁ¤µÕÍµ¡¥¹ø(ñ È¥ôÁ¤µÕÍµ¡¥¹±ÍÍ9µôÑáÐµá°½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥ÑùA$ÕÍð½ Èø(ñ¥Øø(ñ¥Ø±ÍÍ9µô±à±àµÝÉÀ¥ÑµÌµ¹ÑÈ©ÕÍÑ¥äµÑÝ¸À´Ìø(ñ¥ØøñÀ±ÍÍ9µôÑáÐµÍ´ÑáÐµ¹ÕÑÉ°´ÔÀÀù5½°%ð½Àøñ½±ÍÍ9µôµÐ´Ä±½¬½¹Ðµµ½¹¼ÑáÐµÍ´ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥ÑùíÁ¥5½±%ôð½½øð½¥Øø(ñÕÑÑ½¸ÑåÁôÕÑÑ½¸½¹±¥¬õì ¤ôø½ÁåQáÐ¡ÉÅÕÍÑM¹¥ÁÁÐ°ÉÅÕÍÐ¥ô±ÍÍ9µôÁÉÍÍ±¥¹±¥¹µ±à¥ÑµÌµ¹ÑÈÀ´ÈÉ½Õ¹µµ½ÉÈ½ÉÈµ¹ÕÑÉ°´ÌÀÀÁà´ÌÁä´ÈÑáÐµÍ´½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´àÀÀ¡½ÙÈéµ¹ÕÑÉ°´ÔÀÉ¬é½ÉÈµÝ¡¥Ñ¼ÈÀÉ¬éÑáÐµ¹ÕÑÉ°´ÈÀÀÉ¬é¡½ÙÈéµÝ¡¥Ñ¼ÄÀøñ½Áä±ÍÍ9µô ´ÐÜ´Ð¼øí½Á¥ôôôÉÅÕÍÐü½Á¥è½ÁäÉÅÕÍÐôð½ÕÑÑ½¸ø(ð½¥Øø(ñÁÉ±ÍÍ9µôµÐ´Ô½ÙÉ±½ÜµàµÕÑ¼É½Õ¹µ±µ¹ÕÑÉ°´äÔÀÀ´ÔÑáÐµÍ´±¥¹´ØÑáÐµ¹ÕÑÉ°´ÄÀÀøñ½ùíÉÅÕÍÑM¹¥ÁÁÑôð½½øð½ÁÉø(ñ¥Ø±ÍÍ9µôµÐ´ÔÉ¥À´ÌÍ´éÉ¥µ½±Ì´Ìø(íl½ØÄ½ÉÍÁ½¹ÍÌ°½ØÄ½ÑÉ¹Í±Ñ°½ØÄ½Ñ t¹µÀ ¡¹Á½¥¹Ð¤ôøñ¥Ø­äõí¹Á½¥¹Ñô±ÍÍ9µôÉ½Õ¹µ±½ÉÈ½ÉÈµ¹ÕÑÉ°´ÈÀÀÀ´ÐÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀøñÀ±ÍÍ9µô½¹Ðµµ½¹¼ÑáÐµÍ´ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥Ñùí¹Á½¥¹Ñôð½ÀøñÀ±ÍÍ9µôµÐ´ÄÑáÐµáÌÑáÐµ¹ÕÑÉ°´ÔÀÀùÙ¥±±ð½Àøð½¥Øø¥ô(ð½¥Øø(ð½¥Øø(ð½ÍÑ¥½¸ø((ñÍÑ¥½¸±ÍÍ9µôÍ¥ÑµÉÙ°É¥À´à½ÉÈµ½ÉÈµ¹ÕÑÉ°´ÈÀÀÁä´ÄÈÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀ±éÉ¥µ½±ÌµlÄÑÉµ}µ¥¹µà À°ÅÈ¥tÉ¥µ±±±äôÕ¥¹µ¡¥¹ø(ñ È¥ôÕ¥¹µ¡¥¹±ÍÍ9µôÑáÐµá°½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥ÑùUÍÕ¥¹ð½ Èø(ñ¥Ø±ÍÍ9µôÉ¥À´àµéÉ¥µ½±Ì´Èø(ñ¥Øø(ñ Ì±ÍÍ9µôÑáÐµÍ´½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥Ñù	ÍÐ½Èð½ Ìø(ñÀ±ÍÍ9µôµÐ´ÌÑáÐµÍ´±¥¹´ÜÑáÐµ¹ÕÑÉ°´ØÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀùíÁÉÍ¹ÑÑ¥½¸¹ÍÑ½Éôð½Àø(ð½¥Øø(ñ¥Øø(ñ Ì±ÍÍ9µôÑáÐµÍ´½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥Ñù½¹Í¥ÉÑ¥½¹Ìð½ Ìø(ñÕ°±ÍÍ9µôµÐ´ÌÍÁµä´Ìø(íÁÉ½¥±¹±¥µ¥ÑÑ¥½¹Ì¹µÀ ¡±¥µ¥ÑÑ¥½¸¤ôøñ±¤­äõí±¥µ¥ÑÑ¥½¹ô±ÍÍ9µô±à¥ÑµÌµÍÑÉÐÀ´ÌÑáÐµÍ´±¥¹´ØÑáÐµ¹ÕÑÉ°´ØÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀøñÍÁ¸±ÍÍ9µôµÐ´È ´Ä¸ÔÜ´Ä¸ÔÍ¡É¥¹¬´ÀÉ½Õ¹µÕ±°µ¹ÕÑÉ°´ÐÀÀ¼ùí±¥µ¥ÑÑ¥½¹ôð½±¤ø¥ô(ð½Õ°ø(ð½¥Øø(ð½¥Øø(ð½ÍÑ¥½¸ø((ñÍÑ¥½¸±ÍÍ9µôÍ¥ÑµÉÙ°É¥À´àÁä´ÄÈ±éÉ¥µ½±ÌµlÄÑÉµ}µ¥¹µà À°ÅÈ¥tÉ¥µ±±±äô½ÁÉÑ¥½¹Ìµ¡¥¹ø(ñ È¥ô½ÁÉÑ¥½¹Ìµ¡¥¹±ÍÍ9µôÑáÐµá°½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥Ñù=ÁÉÑ¥½¹Ìð½ Èø(ñ¥Ø±ÍÍ9µôÉ¥À´ÐÍ´éÉ¥µ½±Ì´Ìø(ñÉÑ¥±±ÍÍ9µôÉ½Õ¹µ±½ÉÈ½ÉÈµ¹ÕÑÉ°´ÈÀÀÀ´ÔÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀøñÑ¥Ù¥Ñä±ÍÍ9µô ´ÔÜ´ÔÑáÐµ¹ÕÑÉ°´ÔÀÀ¼øñ Ì±ÍÍ9µôµÐ´Ð½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥ÑùMÑÉµ¥¹ð½ ÌøñÀ±ÍÍ9µôµÐ´ÈÑáÐµÍ´±¥¹´ØÑáÐµ¹ÕÑÉ°´ÔÀÀùI¥ÙÑáÐÌ¥Ð¥Ì¹ÉÑ½ÈÉÍÁ½¹Í¥Ù¥¹ÑÉÌ¹±¥ÙÑÉ¹Í±Ñ¥½¸Ý½É­±½ÝÌ¸ð½Àøð½ÉÑ¥±ø(ñÉÑ¥±±ÍÍ9µôÉ½Õ¹µ±½ÉÈ½ÉÈµ¹ÕÑÉ°´ÈÀÀÀ´ÔÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀøñ1åÉÌÌ±ÍÍ9µô ´ÔÜ´ÔÑáÐµ¹ÕÑÉ°´ÔÀÀ¼øñ Ì±ÍÍ9µôµÐ´Ð½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥Ñù	Ñ ÁÉ½ÍÍ¥¹ð½ ÌøñÀ±ÍÍ9µôµÐ´ÈÑáÐµÍ´±¥¹´ØÑáÐµ¹ÕÑÉ°´ÔÀÀùEÕÕ±É½È¹½¸µÕÉ¹Ð©½ÌÐÉÕÑ½­¸ÁÉ¥ÌÝ¥Ñ ½µÁ±Ñ¥½¸Ý¥Ñ¡¥¸ÈÐ¡½ÕÉÌ¸ð½Àøð½ÉÑ¥±ø(ñÉÑ¥±±ÍÍ9µôÉ½Õ¹µ±½ÉÈ½ÉÈµ¹ÕÑÉ°´ÈÀÀÀ´ÔÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀøñ	½±±ÉM¥¸±ÍÍ9µô ´ÔÜ´ÔÑáÐµ¹ÕÑÉ°´ÔÀÀ¼øñ Ì±ÍÍ9µôµÐ´Ð½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµÝ¡¥ÑùUÍÉÁ½ÉÑ¥¹ð½ ÌøñÀ±ÍÍ9µôµÐ´ÈÑáÐµÍ´±¥¹´ØÑáÐµ¹ÕÑÉ°´ÔÀÀùÙÉäÉÍÁ½¹ÍÉÁ½ÉÑÌ¥¹ÁÕÐÑ½­¹Ì°½ÕÑÁÕÐÑ½­¹Ì°ÁÉ½ÍÍ¥¹µ½°¹áÐUM½ÍÐ¸ð½Àøð½ÉÑ¥±ø(ð½¥Øø(ð½ÍÑ¥½¸ø(ð½¥Øø(¤ì)ô()Õ¹Ñ¥½¸5½±½µÁÉ¥Í½¹É¡ìµ½°°ÁÉ¥¥¹5½ôèìµ½°èQáÑ5½°ìÁÉ¥¥¹5½èQáÑAÉ¥¥¹5½ô¤ì(½¹ÍÐÁÉ¥ô¡Ù±Õè¹ÕµÈ¤ôø¹Ü%¹Ñ°¹9ÕµÉ½ÉµÐ ¸µUL°ì(ÍÑå±èÕÉÉ¹ä°(ÕÉÉ¹äèUM°(µ¥¹¥µÕµÉÑ¥½¹¥¥ÑÌèÙ±ÕðÄüÈèÀ°(µá¥µÕµÉÑ¥½¹¥¥ÑÌèÈ°(ô¤¹½ÉµÐ¡Ù±Õ¤ì((ÉÑÕÉ¸ (ñÉÑ¥±±ÍÍ9µõí½µÁÉ¥Í½¸µÉµµ½Ñ¥½¸É½Õ¹µ±½ÉÈÀ´Ôíµ½°¹É½µµ¹ü½ÉÈµ¹ÕÑÉ°´äÔÀµ¹ÕÑÉ°´ÔÀÉ¬é½ÉÈµÝ¡¥Ñ¼ÔÀÉ¬éµÝ¡¥Ñ½lÀ¸ÀÕtè½ÉÈµ¹ÕÑÉ°´ÈÀÀµÝ¡¥ÑÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀÉ¬éµlÄÄÄÄÄÅtõôø(ñ¥Ø±ÍÍ9µô±à¥ÑµÌµÍÑÉÐ©ÕÍÑ¥äµÑÝ¸À´Ðø(ñ¥Øø(ñ Ì±ÍÍ9µôÑáÐµá°½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀùíµ½°¹µ½±ôð½ Ìø(ñÀ±ÍÍ9µôµÐ´ÈÑáÐµÍ´±¥¹´ØÑáÐµ¹ÕÑÉ°´ØÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀùíµ½±Ñ¥±Ímµ½°¹µ½±tüü1¥¹½ÕÍ¥½¸A$µ½°½ÈÑÉ¹Í±Ñ¥½¸¹±¹ÕÝ½É­±½ÝÌ¸ôð½Àø(ð½¥Øø(íµ½°¹É½µµ¹ñÍÁ¸±ÍÍ9µôÉ½Õ¹µÕ±°µ¹ÕÑÉ°´äÔÀÁà´ÈÁä´ÄÑáÐµáÌ½¹ÐµÍµ¥½±ÑáÐµÝ¡¥ÑÉ¬éµÝ¡¥ÑÉ¬éÑáÐµ¹ÕÑÉ°´äÔÀùI½µµ¹ð½ÍÁ¸ùô(ð½¥Øø(ñ°±ÍÍ9µôµÐ´ÔÉ¥À´Ì½ÉÈµÐ½ÉÈµ¹ÕÑÉ°´ÈÀÀÁÐ´ÔÑáÐµÍ´É¬é½ÉÈµÝ¡¥Ñ¼ÄÀÍ´éÉ¥µ½±Ì´Èø(ñ¥ØøñÐ±ÍÍ9µôÑáÐµ¹ÕÑÉ°´ÔÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀÀù%¹ÁÕÐÁÈÅ4Ñ½­¹Ìð½Ðøñ±ÍÍ9µôµÐ´ÄÑáÐµ±½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀùíÁÉ¥¡µ½°¹¥¹ÁÕÑUÍ¥ôð½øð½¥Øø(ñ¥ØøñÐ±ÍÍ9µôÑáÐµ¹ÕÑÉ°´ÔÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀÀù=ÕÑÁÕÐÁÈÅ4Ñ½­¹Ìð½Ðøñ±ÍÍ9µôµÐ´ÄÑáÐµ±½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀùíÁÉ¥¡µ½°¹½ÕÑÁÕÑUÍ¥ôð½øð½¥Øø(ñ¥Ø±ÍÍ9µôÍ´é½°µÍÁ¸´ÈøñÐ±ÍÍ9µôÑáÐµ¹ÕÑÉ°´ÔÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀÀùAÉ¥¥¹µ½ð½Ðøñ±ÍÍ9µôµÐ´Ä½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀùíÁÉ¥¥¹5½ôôôÑ ü	Ñ °Íå¹¡É½¹½ÕÌÁÉ½ÍÍ¥¹èÕ±Ð°É°µÑ¥µÁÉ½ÍÍ¥¹ôð½øð½¥Øø(ð½°ø(ð½ÉÑ¥±ø(¤ì)ô()Õ¹Ñ¥½¸MÑ¥½¹±Õ±Ñ½È¡ì(Ñ¥Ñ±°(ÍÑ¥µÑ1°°(ÍÑ¥µÑ°(¡¥±É¸°)ôèì(Ñ¥Ñ±èÍÑÉ¥¹ì(ÍÑ¥µÑ1°èÍÑÉ¥¹ì(ÍÑ¥µÑèÍÑÉ¥¹ì(¡¥±É¸èIÑ9½ì)ô¤ì(ÉÑÕÉ¸ (ñ¥Ø±ÍÍ9µô±Õ±Ñ½Èµµ½Ñ¥½¸ÍÕÉµ±¥Ðµ´ÐÉ½Õ¹µ±½ÉÈ½ÉÈµ¹ÕÑÉ°´ÈÀÀµ¹ÕÑÉ°´ÔÀÀ´ÌÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀÉ¬éµÝ¡¥Ñ½lÀ¸ÀÍtÍ´éÀ´Ðø(ñ¥Ø±ÍÍ9µôµ´Ð±à±àµ½°À´ÈÍ´é±àµÉ½ÜÍ´é¥ÑµÌµ¹ÑÈÍ´é©ÕÍÑ¥äµÑÝ¸ø(ñ Ì±ÍÍ9µôÑáÐµÍ´½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀùíÑ¥Ñ±ôð½ Ìø(ñ¥Ø±ÍÍ9µôÉ½Õ¹µµ½ÉÈ½ÉÈµ¹ÕÑÉ°´ÈÀÀµÝ¡¥ÑÁà´ÌÁä´ÈÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀÉ¬éµlÄÄÄÄÄÅtÍ´éÑáÐµÉ¥¡Ðø(ñ¥Ø±ÍÍ9µôÑáÐµlÄÅÁát½¹Ðµµ¥Õ´ÕÁÁÉÍÑÉ­¥¹µÝ¥ÑáÐµ¹ÕÑÉ°´ÔÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀÀø(íÍÑ¥µÑ1±ô(ð½¥Øø(ñ¥Ø­äõíÍÑ¥µÑô±ÍÍ9µôÍÑ¥µÑµÁ½ÀµÐ´À¸ÔÉ¬µ±°½¹Ðµµ½¹¼ÑáÐµÍ½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀø(íÍÑ¥µÑô(ð½¥Øø(ð½¥Øø(ð½¥Øø(ñ¥Ø±ÍÍ9µôÉ¥À´ÌµéÉ¥µ½±Ì´Èá°éÉ¥µ½±Ì´Ìùí¡¥±É¹ôð½¥Øø(ð½¥Øø(¤ì)ô()Õ¹Ñ¥½¸M±Ñ¥±¡ì(±°°(Ù±Õ°(½¹¡¹°(¡¥±É¸°)ôèì(±°èÍÑÉ¥¹ì(Ù±ÕèÍÑÉ¥¹ì(½¹¡¹è¡Ù±ÕèÍÑÉ¥¹¤ôøÙ½¥ì(¡¥±É¸èIÑ9½ì)ô¤ì(ÉÑÕÉ¸ (ñ±°±ÍÍ9µôµ¥¸µÜ´ÀÑáÐµÍ´ø(ñÍÁ¸±ÍÍ9µôµ´Ä¸Ô±½¬½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´ÜÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÌÀÀùí±±ôð½ÍÁ¸ø(ñ¥Ø±ÍÍ9µôÉ±Ñ¥Ùø(ñÍ±Ð(Ù±ÕõíÙ±Õô(½¹¡¹õì¡Ù¹Ð¤ôø½¹¡¹¡Ù¹Ð¹ÑÉÐ¹Ù±Õ¥ô(±ÍÍ9µô±¸µÍ±Ð ´ÄÀÜµÕ±°ÁÁÉ¹µ¹½¹É½Õ¹µµ½ÉÈ½ÉÈµ¹ÕÑÉ°´ÌÀÀµÝ¡¥ÑÁà´ÌÁÈ´äÑáÐµÍ´ÑáÐµ¹ÕÑÉ°´äÔÀ½ÕÑ±¥¹µ¹½¹ÑÉ¹Í¥Ñ¥½¸½ÕÌé½ÉÈµ¹ÕÑÉ°´ØÀÀÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÔÉ¬éµlÄÄÄÄÄÅtÉ¬éÑáÐµ¹ÕÑÉ°´ÄÀÀÉ¬é½ÕÌé½ÉÈµ¹ÕÑÉ°´ÐÀÀ(ø(í¡¥±É¹ô(ð½Í±Ðø(ñÍÁ¸±ÍÍ9µôÁ½¥¹ÑÈµÙ¹ÑÌµ¹½¹Í½±ÕÑÉ¥¡Ð´ÌÑ½À´Ä¼ÈµÑÉ¹Í±Ñµä´Ä¼ÈÑáÐµ¹ÕÑÉ°´ÐÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀÀø(ñÍÙÉ¥µ¡¥¸ôÑÉÕÙ¥Ý	½àôÀÀÈÀÈÀ±ÍÍ9µô ´ÐÜ´Ð¥±°ôÕÉÉ¹Ñ½±½Èø(ñÁÑ ô4Ô¸ÜÜ¸ÕÄÄÀÀÄÄ¸ÐÁ0ÄÀÄÀ¸Ñ°È¸ä´È¸åÄÄÀÄÄÄ¸ÐÄ¸Ñ°´Ì¸ØÌ¸ÙÄÄÀÀÄ´Ä¸ÐÁ0Ô¸Üà¸åÄÄÀÀÄÀ´Ä¸Ñh¼ø(ð½ÍÙø(ð½ÍÁ¸ø(ð½¥Øø(ð½±°ø(¤ì)ô()Õ¹Ñ¥½¸9ÕµÉ¥±¡ì(±°°(µ¥¸°(µà°(ÍÑÀ°(Ù±Õ°(½¹¡¹°(µ¥¹ÕÑ9½ÑÑ¥½¸ô±Í°(µ¥¹ÕÑ!±À°)ôèì(±°èÍÑÉ¥¹ì(µ¥¸è¹ÕµÈì(µàè¹ÕµÈì(ÍÑÀè¹ÕµÈì(Ù±Õè¹ÕµÈì(½¹¡¹è¡Ù±Õè¹ÕµÈ¤ôøÙ½¥ì(µ¥¹ÕÑ9½ÑÑ¥½¸üè½½±¸ì(µ¥¹ÕÑ!±ÀüèÍÑÉ¥¹ì)ô¤ì(ÉÑÕÉ¸ (ñ±°±ÍÍ9µôÑáÐµÍ´ø(ñÍÁ¸±ÍÍ9µôµ´Ä¸Ô±½¬½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´ÜÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÌÀÀùí±±ôð½ÍÁ¸ø(ñ¥¹ÁÕÐ(ÑåÁô¹ÕµÈ(µ¥¸õíµ¥¹ô(µàõíµáô(ÍÑÀõíÍÑÁô(Ù±ÕõíÙ±Õô(½¹¡¹õì¡Ù¹Ð¤ôø(½¹¡¹ (µ¥¹ÕÑ9½ÑÑ¥½¸(ü±µÁ5¥¹ÕÑ9½ÑÑ¥½¸¡9ÕµÈ¡Ù¹Ð¹ÑÉÐ¹Ù±Õ¤°µ¥¸°µà¤(è±µÁ9ÕµÈ¡9ÕµÈ¡Ù¹Ð¹ÑÉÐ¹Ù±Õ¤°µ¥¸°µà¤°(¤(ô(±ÍÍ9µô ´ÄÀÜµÕ±°É½Õ¹µµ½ÉÈ½ÉÈµ¹ÕÑÉ°´ÌÀÀµÝ¡¥ÑÁà´ÌÑáÐµÍ´ÑáÐµ¹ÕÑÉ°´äÔÀ½ÕÑ±¥¹µ¹½¹ÑÉ¹Í¥Ñ¥½¸½ÕÌé½ÉÈµ¹ÕÑÉ°´ØÀÀÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÔÉ¬éµlÄÄÄÄÄÅtÉ¬éÑáÐµ¹ÕÑÉ°´ÄÀÀÉ¬é½ÕÌé½ÉÈµ¹ÕÑÉ°´ÐÀÀ(¼ø(íµ¥¹ÕÑ9½ÑÑ¥½¸ (ñÍÁ¸±ÍÍ9µôµÐ´Ä±½¬ÑáÐµáÌÑáÐµ¹ÕÑÉ°´ÔÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀÀø(íµ¥¹ÕÑ!±Áô(ð½ÍÁ¸ø(¥ô(ð½±°ø(¤ì)ô()Õ¹Ñ¥½¸I=¹±å¥±¡ì±°°Ù±Õôèì±°èÍÑÉ¥¹ìÙ±ÕèÍÑÉ¥¹ô¤ì(ÉÑÕÉ¸ (ñ¥Ø±ÍÍ9µôµ¥¸µÜ´ÀÑáÐµÍ´ø(ñÍÁ¸±ÍÍ9µôµ´Ä¸Ô±½¬½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´ÜÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÌÀÀùí±±ôð½ÍÁ¸ø(ñ¥Ø±ÍÍ9µô±à ´ÄÀ¥ÑµÌµ¹ÑÈÑÉÕ¹ÑÉ½Õ¹µµ½ÉÈ½ÉÈµ¹ÕÑÉ°´ÈÀÀµÝ¡¥ÑÁà´ÌÑáÐµÍ´ÑáÐµ¹ÕÑÉ°´ÜÀÀÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀÉ¬éµlÄÄÄÄÄÅtÉ¬éÑáÐµ¹ÕÑÉ°´ÌÀÀø(íÙ±Õô(ð½¥Øø(ð½¥Øø(¤ì)ô()Õ¹Ñ¥½¸½ÍA¡ì(Ñ¥ÙA°(Ð°(Ñ°(½¹9Ù¥Ñ°(½¹½Áä°)ôèì(Ñ¥ÙAèÍÑÉ¥¹ì(Ðè¡­äèQÉ¹Í±Ñ¥½¹-ä¤ôøÍÑÉ¥¹ì(Ñè¡ÑáÐèÍÑÉ¥¹¤ôøÍÑÉ¥¹ì(½¹9Ù¥Ñè¡ÁèÍÑÉ¥¹¤ôøÙ½¥ì(½¹½Áäè ¤ôøÙ½¥ì)ô¤ì(½¹ÍÐ¥Í5½°ô	½½±¸¡µ½±Ñ¥±ÍmÑ¥ÙAt¤ì(½¹ÍÐÍÕµµÉäôµ½±Ñ¥±ÍmÑ¥ÙAtüüÁMÕµµÉ¥ÍmÑ¥ÙAtüüÁMÕµµÉ¥Ì¹=ÙÉÙ¥Üì((ÉÑÕÉ¸ (ñ¥Øø(ñÍÑ¥½¸±ÍÍ9µôÍ¥ÑµÉÙ°µàµÜ´Íá°ø(ñÀ±ÍÍ9µôµ´ÐÑáÐµÍ´½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´ØÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀø(í¥Í5½°üÐ µ½±IÉ¹¤èÐ Ù±½ÁÉ½Ì¥ô(ð½Àø(ñ Ä±ÍÍ9µôÑáÐ´Õá°½¹ÐµÍµ¥½±ÑÉ­¥¹µÑ¥¡ÐÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀÍ´éÑáÐ´Ùá°ø(íµ½±Ñ¥±ÍmÑ¥ÙAtüÑ¥ÙAèÑ¡Ñ¥ÙA¥ô(ð½ Äø(ñÀ±ÍÍ9µôµÐ´ÔÑáÐµ±±¥¹´àÑáÐµ¹ÕÑÉ°´ÜÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÌÀÀùíÑ¡ÍÕµµÉä¥ôð½Àø(ñ¥Ø±ÍÍ9µôµÐ´Ü±à±àµÝÉÀÀ´Ìø(ñÕÑÑ½¸(ÑåÁôÕÑÑ½¸(½¹±¥¬õì ¤ôø½¹9Ù¥Ñ AÉ¥¥¹¥ô(±ÍÍ9µôÁÉÍÍ±¥¹±¥¹µ±à¥ÑµÌµ¹ÑÈÀ´ÈÉ½Õ¹µµµ¹ÕÑÉ°´äÔÀÁà´ÐÁä´È¸ÔÑáÐµÍ´½¹Ðµµ¥Õ´ÑáÐµÝ¡¥Ñ¡½ÙÈéµ¹ÕÑÉ°´àÀÀÉ¬éµÝ¡¥ÑÉ¬éÑáÐµ¹ÕÑÉ°´äÔÀÉ¬é¡½ÙÈéµ¹ÕÑÉ°´ÈÀÀ(ø(íÐ Ù¥ÝAÉ¥¥¹¥ô(ñ	½±±ÉM¥¸±ÍÍ9µô ´ÐÜ´Ð¼ø(ð½ÕÑÑ½¸ø(ñÕÑÑ½¸(ÑåÁôÕÑÑ½¸(½¹±¥¬õí½¹½Áåô(±ÍÍ9µôÁÉÍÍ±¥¹±¥¹µ±à¥ÑµÌµ¹ÑÈÀ´ÈÉ½Õ¹µµ½ÉÈ½ÉÈµ¹ÕÑÉ°´ÌÀÀµÝ¡¥ÑÁà´ÐÁä´È¸ÔÑáÐµÍ´½¹Ðµµ¥Õ´ÑáÐµ¹ÕÑÉ°´äÔÀ¡½ÙÈéµ¹ÕÑÉ°´ÔÀÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÔÉ¬éµÝ¡¥Ñ¼ÔÉ¬éÑáÐµ¹ÕÑÉ°´ÄÀÀÉ¬é¡½ÙÈéµÝ¡¥Ñ¼ÄÀ(ø(íÐ ½ÁåEÕ¥­ÍÑÉÐ¥ô(ñ½Áä±ÍÍ9µô ´ÐÜ´Ð¼ø(ð½ÕÑÑ½¸ø(ð½¥Øø(ð½ÍÑ¥½¸ø((ñ¥Ø±ÍÍ9µôÍ¥ÑµÉÙ°µÐ´ÄÈÉ¥À´Ð±éÉ¥µ½±Ì´Ìø(ñ½É¥½¸õíA±åôÑ¥Ñ±õíÐ ÍÑÉÑÍÐ¥ôÑõíÑôø(¹ÉÑÍ½Á­ä°Á¥¬µ½°°¹Í¹å½ÕÈ¥ÉÍÐÉÅÕÍÐÉ½´Ñ¡(Í¡½É½È¸M,¸(ð½½Éø(ñ½É¥½¸õíÑ¥Ù¥ÑåôÑ¥Ñ±õíÐ µ½¹¥Ñ½ÉUÍ¥ôÑõíÑôø(QÉ¬Ñ½­¸°¡ÉÑÈ°¥µ°¹µ¥¹ÕÑÕÍÝ¥Ñ ÕÐ±ÉÑÌ¹¥¹Ù½¥Ì¸(ð½½Éø(ñ½É¥½¸õí¡­¥É±ÉôÑ¥Ñ±õíÐ Í¡¥ÁI±¥±ä¥ôÑõíÑôø(AÉ½ÕÑ¥½¸ÉÑÉ¥Ì°ÍÑÑÕÌÙ¥Í¥¥±¥Ñä°¹±ÈÉÉ½ÈÉÍÁ½¹ÍÌ­À¥¹ÑÉÑ¥½¹ÌÁÉ¥Ñ±¸(ð½½Éø(ð½¥Øø((ñÍÑ¥½¸±ÍÍ9µôÍ¥ÑµÉÙ°µÐ´à½ÉÈµÐ½ÉÈµ¹ÕÑÉ°´ÈÀÀÁÐ´àÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀø(ñ È±ÍÍ9µôÑáÐ´Éá°½¹ÐµÍµ¥½±ÑÉ­¥¹µÑ¥¡ÐÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀùíÐ É±ÑAÌ¥ôð½ Èø(ñ¥Ø±ÍÍ9µôµÐ´Ð±à±àµÝÉÀÀ´Èø(íÍ¥ÉMÑ¥½¹Ì(¹±Ñ5À ¡ÍÑ¥½¸¤ôøÍÑ¥½¸¹¥ÑµÌ¤(¹¥±ÑÈ ¡¥Ñ´¤ôø¥Ñ´ôôÑ¥ÙA¤(¹Í±¥ À°à¤(¹µÀ ¡¥Ñ´¤ôø (ñÕÑÑ½¸(ÑåÁôÕÑÑ½¸(­äõí¥Ñµô(½¹±¥¬õì ¤ôø½¹9Ù¥Ñ¡¥Ñ´¥ô(±ÍÍ9µôÁÉÍÍ±É½Õ¹µµ½ÉÈ½ÉÈµ¹ÕÑÉ°´ÌÀÀµÝ¡¥ÑÁà´ÌÁä´Ä¸ÔÑáÐµÍ´ÑáÐµ¹ÕÑÉ°´ÜÀÀ¡½ÙÈéµ¹ÕÑÉ°´ÔÀ¡½ÙÈéÑáÐµ¹ÕÑÉ°´äÔÀÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÔÉ¬éµÝ¡¥Ñ¼ÔÉ¬éÑáÐµ¹ÕÑÉ°´ÌÀÀÉ¬é¡½ÙÈéµÝ¡¥Ñ¼ÄÀÉ¬é¡½ÙÈéÑáÐµ¹ÕÑÉ°´ÄÀÀ(ø(íÑ¡¥Ñ´¥ô(ð½ÕÑÑ½¸ø(¤¥ô(ð½¥Øø(ð½ÍÑ¥½¸ø(ð½¥Øø(¤ì)ô()Õ¹Ñ¥½¸½É¡ì(¥½¸è%½¸°(Ñ¥Ñ±°(Ñ°(¡¥±É¸°)ôèì(¥½¸èÑåÁ½Ñ¥Ù¥Ñäì(Ñ¥Ñ±èÍÑÉ¥¹ì(Ñè¡ÑáÐèÍÑÉ¥¹¤ôøÍÑÉ¥¹ì(¡¥±É¸èIÑ9½ì)ô¤ì(ÉÑÕÉ¸ (ñÉÑ¥±±ÍÍ9µôÍÕÉµ±¥ÐÉ½Õ¹µ±½ÉÈ½ÉÈµ¹ÕÑÉ°´ÈÀÀµÝ¡¥ÑÀ´ÔÉ¬é½ÉÈµÝ¡¥Ñ¼ÄÀÉ¬éµlÄØÄØÄÙtø(ñ%½¸±ÍÍ9µôµ´Ð ´ÔÜ´ÔÑáÐµ¹ÕÑÉ°´ÔÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀÀ¼ø(ñ È±ÍÍ9µô½¹ÐµÍµ¥½±ÑáÐµ¹ÕÑÉ°´äÔÀÉ¬éÑáÐµ¹ÕÑÉ°´ÔÀùíÑ¥Ñ±ôð½ Èø(ñÀ±ÍÍ9µôµÐ´ÈÑáÐµÍ´±¥¹´ØÑáÐµ¹ÕÑÉ°´ØÀÀÉ¬éÑáÐµ¹ÕÑÉ°´ÐÀÀø(íÑåÁ½¡¥±É¸ôôôÍÑÉ¥¹üÑ¡¡¥±É¸¤è¡¥±É¹ô(ð½Àø(ð½ÉÑ¥±ø(¤ì)ô
