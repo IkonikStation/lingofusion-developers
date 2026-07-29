@@ -15,6 +15,7 @@ import {
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { musicModels, textModelsByPricingMode } from "../data/pricing";
 import type { TextPricingMode } from "../data/pricing";
+import { playgroundLanguages } from "../data/playgroundLanguages";
 import { browserApi, shouldUseBrowserApi } from "../data/browserApi";
 import { sdkExamples } from "../data/sdkExamples";
 import type { SdkLanguage } from "../data/sdkExamples";
@@ -275,9 +276,10 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
   const [tryInput, setTryInput] = useState("Hello, how are you?");
   const [tryFromLanguage, setTryFromLanguage] = useState("English");
   const [tryToLanguage, setTryToLanguage] = useState("French");
-  const [tryStream, setTryStream] = useState(false);
+  const [tryStream, setTryStream] = useState(true);
   const [tryMusicDurationSeconds, setTryMusicDurationSeconds] = useState(30);
   const [tryResult, setTryResult] = useState("");
+  const [tryOutput, setTryOutput] = useState("");
 
   const playgroundModels = textModelsByPricingMode[playgroundPricingMode];
   const selectedPlaygroundModel =
@@ -454,6 +456,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
         }),
     });
     setTryResult(formatPlaygroundResult(result));
+    setTryOutput(typeof result.output_text === "string" ? result.output_text : isMusic ? "Music generation completed. The audio response is available in the result payload." : "No output text was returned.");
     await refresh();
     onNotify(tc("Request processed, billed, and logged"));
   };
@@ -631,23 +634,21 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                             </>
                           )}
                           {playgroundMode === "text" && <>
-                            <TextInput label="From language" value={tryFromLanguage} onChange={setTryFromLanguage} />
-                            <TextInput label="To language" value={tryToLanguage} onChange={setTryToLanguage} />
+                            <LanguageSelect label="Source language" value={tryFromLanguage} onChange={setTryFromLanguage} />
+                            <LanguageSelect label="Target language" value={tryToLanguage} onChange={setTryToLanguage} />
                             <SelectInput label="Streaming" value={tryStream ? "true" : "false"} onChange={(value) => setTryStream(value === "true")}>
-                              <option value="false">false</option>
                               <option value="true">true</option>
+                              <option value="false">false</option>
                             </SelectInput>
                           </>}
                         </div>
-                        <label className="mt-3 block text-sm">
-                          <span className="mb-1.5 block font-medium text-neutral-700 dark:text-neutral-300">{playgroundMode === "music" ? "Music prompt" : tc("Input")}</span>
-                          <textarea
-                            value={tryInput}
-                            onChange={(event) => setTryInput(event.target.value)}
-                            rows={6}
-                            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-950 outline-none transition placeholder:text-neutral-400 focus:border-neutral-600 dark:border-white/15 dark:bg-[#111111] dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:border-neutral-400"
-                          />
-                        </label>
+                        <div className={`mt-3 grid gap-3 ${playgroundMode === "music" ? "" : "lg:grid-cols-2"}`}>
+                          <label className="block text-sm">
+                            <span className="mb-1.5 block font-medium text-neutral-700 dark:text-neutral-300">{playgroundMode === "music" ? "Music prompt" : "Input text"}</span>
+                            <textarea value={tryInput} onChange={(event) => setTryInput(event.target.value)} rows={7} className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-950 outline-none transition placeholder:text-neutral-400 focus:border-neutral-600 dark:border-white/15 dark:bg-[#111111] dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:border-neutral-400" />
+                          </label>
+                          {playgroundMode === "text" && <label className="block text-sm"><span className="mb-1.5 block font-medium text-neutral-700 dark:text-neutral-300">Translated output</span><textarea readOnly value={tryOutput} placeholder="Your translation will appear here." rows={7} className="w-full resize-none rounded-md border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm text-neutral-950 outline-none dark:border-white/15 dark:bg-white/[0.04] dark:text-neutral-100 dark:placeholder:text-neutral-500" /></label>}
+                        </div>
                         <div className="mt-4 flex flex-wrap gap-3">
                           <ActionButton onClick={sendTryRequest}>
                             {playgroundMode === "music" ? <Music className="h-4 w-4" /> : <Activity className="h-4 w-4" />}
@@ -1223,6 +1224,23 @@ function SelectInput({ label, value, onChange, children }: { label: string; valu
       >
         {children}
       </select>
+    </label>
+  );
+}
+
+function LanguageSelect({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  const t = useDashboardText();
+  return (
+    <label className="text-sm">
+      <span className="mb-1.5 block font-medium text-neutral-700 dark:text-neutral-300">{t(label)}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="clean-select h-10 w-full rounded-md border border-neutral-300 bg-white px-3 text-sm text-neutral-950 outline-none transition focus:border-neutral-600 dark:border-white/15 dark:bg-[#111111] dark:text-neutral-100 dark:focus:border-neutral-400"
+      >
+        {playgroundLanguages.map((language) => <option key={language.code} value={language.name}>{language.name}</option>)}
+      </select>
+      <span className="mt-1 block text-xs text-neutral-500 dark:text-neutral-500">{playgroundLanguages.length.toLocaleString("en-US")} languages available</span>
     </label>
   );
 }
