@@ -65,6 +65,8 @@ type RequestLog = {
   status: number;
   inputTokens: number;
   outputTokens: number;
+  reasoningTokens?: number;
+  totalTokens?: number;
   cost: number;
   latencyMs: number;
   errorCode: string;
@@ -107,6 +109,7 @@ type DashboardData = {
     failedRequests: number;
     inputTokens: number;
     outputTokens: number;
+    reasoningTokens: number;
     totalTokens: number;
     words: number;
     streamingRequests: number;
@@ -652,7 +655,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                         <div className="mt-4 flex flex-wrap gap-3">
                           <ActionButton onClick={sendTryRequest}>
                             {playgroundMode === "music" ? <Music className="h-4 w-4" /> : <Activity className="h-4 w-4" />}
-                            {playgroundMode === "music" ? "Generate simulated music" : tc("Run simulated API call")}
+                            {playgroundMode === "music" ? "Generate simulated music" : tc("Run API call")}
                           </ActionButton>
                           <button
                             type="button"
@@ -666,12 +669,15 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                           </button>
                         </div>
                         {tryResult && (
-                          <CodeBlock
-                            code={tryResult}
-                            language="JSON"
-                            syntax="json"
-                            onCopy={() => copyText(tryResult, tc("Result copied"))}
-                          />
+                          <div className="space-y-2">
+                            <p className="text-xs leading-5 text-neutral-500 dark:text-neutral-400">Input token totals include the source text, translation instructions, and request formatting. Source-text and instruction estimates are included in the usage object.</p>
+                            <CodeBlock
+                              code={tryResult}
+                              language="JSON"
+                              syntax="json"
+                              onCopy={() => copyText(tryResult, tc("Result copied"))}
+                            />
+                          </div>
                         )}
                       </div>
 
@@ -900,7 +906,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                           log.endpoint,
                           log.model,
                           `${log.status} ${log.errorCode}`,
-                          (log.inputTokens + log.outputTokens).toLocaleString(),
+                          (log.totalTokens ?? log.inputTokens + log.outputTokens).toLocaleString(),
                           dollars(log.cost),
                           `${log.latencyMs} ms`,
                         ])}
@@ -917,7 +923,8 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                       items={[
                         ["Successful requests", data.usage.successfulRequests.toLocaleString(), "Completed with success status."],
                         ["Failed requests", data.usage.failedRequests.toLocaleString(), "Rejected or errored requests."],
-                        ["Total tokens", data.usage.totalTokens.toLocaleString(), "Input plus output tokens."],
+                        ["Total tokens", data.usage.totalTokens.toLocaleString(), "Provider-reported input plus output tokens."],
+                        ["Reasoning tokens", data.usage.reasoningTokens.toLocaleString(), "Included within provider-reported output tokens."],
                         ["Words processed", data.usage.words.toLocaleString(), "Where text metrics apply."],
                         ["Average latency", `${data.usage.averageLatencyMs} ms`, "Across logged requests."],
                         ["Streaming split", `${data.usage.streamingRequests} / ${data.usage.nonStreamingRequests}`, "Streaming versus non-streaming."],
@@ -930,6 +937,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                         failed: data.usage.failedRequests,
                         inputTokens: data.usage.inputTokens,
                         outputTokens: data.usage.outputTokens,
+                        reasoningTokens: data.usage.reasoningTokens,
                         totalSpend: data.usage.totalSpend,
                       }])}
                       className="mt-5"
