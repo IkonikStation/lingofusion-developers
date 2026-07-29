@@ -327,7 +327,11 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
           />
         </div>
 
-        <OrganizationPlanStrip billingInterval={billingInterval} onContactSales={() => openSalesForm(enterpriseConfiguration.minimumSeats)} />
+        <OrganizationPlanStrip
+          billingInterval={billingInterval}
+          onBuildTeam={() => onBuildTeam(billingInterval)}
+          onContactSales={() => onContactSales(enterpriseConfiguration.minimumSeats, selectedTeamSeat.planId, billingInterval)}
+        />
 
         <ComparisonPanel billingInterval={billingInterval} pro={pro} ultra={ultra} proVariantKey={proVariantKey} ultraVariantKey={ultraVariantKey} onProVariantChange={onProVariantChange} onUltraVariantChange={selectUltraVariant} view={comparisonView} onViewChange={setComparisonView} />
       </section>
@@ -672,7 +676,7 @@ function PlanCard({ planId, name, description, price, monthlyPrice, billingInter
   );
 }
 
-function OrganizationPlanStrip({ billingInterval, onContactSales }: { billingInterval: BillingInterval; onContactSales: () => void }) {
+function OrganizationPlanStrip({ billingInterval, onBuildTeam, onContactSales }: { billingInterval: BillingInterval; onBuildTeam: () => void; onContactSales: () => void }) {
   const billing = billingIntervals[billingInterval];
   const pro500k = subscriptionPlans.pro.variants["500k"];
   const seatPrice = priceForBillingInterval(pro500k.monthlyPrice, pro500k.yearlyPrice, billingInterval);
@@ -691,9 +695,9 @@ function OrganizationPlanStrip({ billingInterval, onContactSales }: { billingInt
             <span className="text-2xl font-semibold tracking-tight text-[#101d36] dark:text-white">{formatPrice(seatPrice)}</span>
             <span className="text-sm font-medium text-[#6b7890] dark:text-slate-400">per seat{billing.suffix}</span>
           </div>
-          <a href="#teams" className="pressable click-feedback mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#16284a] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#203b6d] dark:bg-white dark:text-[#14233d]">
+          <button type="button" onClick={onBuildTeam} className="pressable click-feedback mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#16284a] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#203b6d] dark:bg-white dark:text-[#14233d]">
             Calculate Teams <ArrowRight className="h-4 w-4" />
-          </a>
+          </button>
         </article>
         <article className="p-5 sm:p-6">
           <div className="flex flex-wrap items-center gap-3">
@@ -704,9 +708,9 @@ function OrganizationPlanStrip({ billingInterval, onContactSales }: { billingInt
           <ul className="mt-4 grid gap-2 text-sm leading-5 text-[#43546e] dark:text-slate-300 sm:grid-cols-2">
             {enterpriseConfiguration.features.map((feature) => <FeatureLine key={feature}>{feature}</FeatureLine>)}
           </ul>
-          <a href="#teams" onClick={onContactSales} className="pressable click-feedback mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[#7ba9df] bg-white px-5 py-2.5 text-sm font-semibold text-[#1e5f9f] hover:border-[#3679cc] hover:bg-[#edf6ff] dark:border-[#78aff5]/50 dark:bg-white/[0.04] dark:text-[#9bcaff] dark:hover:bg-[#78aff5]/10">
+          <button type="button" onClick={onContactSales} className="pressable click-feedback mt-5 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[#7ba9df] bg-white px-5 py-2.5 text-sm font-semibold text-[#1e5f9f] hover:border-[#3679cc] hover:bg-[#edf6ff] dark:border-[#78aff5]/50 dark:bg-white/[0.04] dark:text-[#9bcaff] dark:hover:bg-[#78aff5]/10">
             Contact Sales <ArrowRight className="h-4 w-4" />
-          </a>
+          </button>
         </article>
       </div>
     </section>
