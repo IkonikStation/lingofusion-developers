@@ -57,7 +57,11 @@ console.log(await response.json());`,
   output_text: string;
   usage: {
     input_tokens: number;
+    source_text_tokens_estimate: number;
+    instruction_tokens_estimate: number;
     output_tokens: number;
+    reasoning_tokens: number;
+    visible_output_tokens: number;
     total_tokens: number;
     cost_usd: number;
   };
