@@ -935,7 +935,7 @@ function TextModelGallery({ models, pricingMode, displayPrice, onOpenModel }: {
           <h2 id="pricing-model-gallery-heading" className="text-2xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50">LingoFusion models</h2>
           <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">Our text models, designed for fast, capable multilingual work.</p>
         </div>
-        <span className="text-xs font-medium text-neutral-500 dark:text-neutral-500">{pricingMode === "batch" ? "Batch" : "Default"} pricing Â· open a model for details</span>
+        <span className="text-xs font-medium text-neutral-500 dark:text-neutral-500">{pricingMode === "batch" ? "Batch" : "Default"} pricing - open a model for details</span>
       </div>
       <div className="mt-8 grid gap-x-12 gap-y-7 md:grid-cols-2">
         {models.map((model) => {
@@ -1013,7 +1013,7 @@ function MediaShowcase() {
                         Replace with {item.kind}
                       </p>
                       <p className="mt-1 text-xs font-medium uppercase tracking-wide text-neutral-600 dark:text-neutral-400">
-                        16:9 Â· JPG, PNG, WebP or MP4
+                        16:9 - JPG, PNG, WebP or MP4
                       </p>
                     </div>
                     {item.kind === "video" && <span className="media-scan-line" aria-hidden="true" />}
@@ -1336,7 +1336,7 @@ function ModelDetailPage({
         <div className="grid grid-cols-2 divide-x divide-y divide-neutral-200 dark:divide-white/10 sm:grid-cols-3 2xl:grid-cols-5 2xl:divide-y-0">
           <div className="p-5 text-center"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Reasoning</p><div className="mt-3"><RatingMarks value={profile.reasoningLevel} icon={BrainCircuit} /></div><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">{profile.reasoning}</p></div>
           <div className="p-5 text-center"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Speed</p><div className="mt-3"><RatingMarks value={profile.speedLevel} icon={Zap} /></div><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">{profile.speed}</p></div>
-          <div className="p-5 text-center"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Price</p><p className="mt-3 text-lg font-semibold text-neutral-950 dark:text-white">{price(activePrice.inputUsd)} Â· {price(activePrice.outputUsd)}</p><p className="mt-1 text-sm text-neutral-500">Input Â· Output</p></div>
+          <div className="p-5 text-center"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Price</p><p className="mt-3 text-lg font-semibold text-neutral-950 dark:text-white">{price(activePrice.inputUsd)} / {price(activePrice.outputUsd)}</p><p className="mt-1 text-sm text-neutral-500">Input / Output</p></div>
           <div className="p-5 text-center"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Input</p><Type className="mx-auto mt-3 h-5 w-5 text-neutral-800 dark:text-neutral-200" /><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">Text</p></div>
           <div className="col-span-2 p-5 text-center sm:col-span-1"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Output</p><FileText className="mx-auto mt-3 h-5 w-5 text-neutral-800 dark:text-neutral-200" /><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">Text</p></div>
         </div>
