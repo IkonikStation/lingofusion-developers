@@ -5,6 +5,26 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const rootDir = dirname(fileURLToPath(import.meta.url));
+
+async function loadLocalEnv() {
+  try {
+    const content = await readFile(join(rootDir, ".env"), "utf8");
+    for (const rawLine of content.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith("#")) continue;
+      const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
+      if (!match || process.env[match[1]] !== undefined) continue;
+      const [, name, rawValue] = match;
+      const value = rawValue.trim().replace(/^(["'])(.*)\1$/, "$2");
+      process.env[name] = value;
+    }
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+}
+
+await loadLocalEnv();
+
 const dbPath = join(rootDir, "data", "api-platform.json");
 const port = Number(process.env.LINGOFUSION_API_PORT || 8787);
 const MICRO_CENTS_PER_DOLLAR = 100_000_000;
@@ -116,6 +136,10 @@ function centsCostMicro(inputTokens, outputTokens, model) {
   const inputCost = (inputTokens / 1_000_000) * model.input;
   const outputCost = (outputTokens / 1_000_000) * model.output;
   return dollarsToMicroCents(inputCost + outputCost);
+}
+
+function providerTokenCount(value) {
+  return Number.isFinite(value) && value >= 0 ? Math.trunc(value) : null;
 }
 
 function normalizeMusicModelName(value) {
@@ -244,8 +268,8 @@ async function runRealTranslation({ modelName, input, fromLanguage, toLanguage, 
       outputText,
       inputTokens: response.usage?.input_tokens,
       outputTokens: response.usage?.output_tokens,
-      provider: "openai",
-      providerModel: route.model,
+      reasoningTokens: response.usage?.output_tokens_details?.reasoning_tokens,
+      totalTokens: response.usage?.total_tokens,
     };
   }
 
@@ -266,8 +290,8 @@ async function runRealTranslation({ modelName, input, fromLanguage, toLanguage, 
     outputText,
     inputTokens: response.usage?.prompt_tokens,
     outputTokens: response.usage?.completion_tokens,
-    provider: "deepseek",
-    providerModel: route.model,
+    reasoningTokens: response.usage?.completion_tokens_details?.reasoning_tokens,
+    totalTokens: response.usage?.total_tokens,
   };
 }
 
@@ -323,6 +347,7 @@ function publicDashboard(db) {
       acc.failedRequests += log.status >= 400 ? 1 : 0;
       acc.inputTokens += log.inputTokens || 0;
       acc.outputTokens += log.outputTokens || 0;
+      acc.reasoningTokens += log.reasoningTokens || 0;
       acc.words += log.words || 0;
       acc.streamingRequests += log.streaming ? 1 : 0;
       acc.nonStreamingRequests += log.streaming ? 0 : 1;
@@ -336,6 +361,7 @@ function publicDashboard(db) {
       failedRequests: 0,
       inputTokens: 0,
       outputTokens: 0,
+      reasoningTokens: 0,
       words: 0,
       streamingRequests: 0,
       nonStreamingRequests: 0,
@@ -376,7 +402,7 @@ function publicDashboard(db) {
     })),
     usage: {
       ...usage,
-      totalTokens: usage.inputTokens + usage.outputTokens,
+      totalTokens: db.requestLogs.reduce((total, log) => total + (log.totalTokens ?? (log.inputTokens || 0) + (log.outputTokens || 0)), 0),
       totalSpend: microCentsToDollars(usage.totalSpendMicroCents),
       averageLatencyMs,
     },
@@ -586,11 +612,11 @@ async function route(req, res) {
       }
 
       let execution = "simulated";
-      let provider = null;
-      let providerModel = null;
       let outputText;
       let inputTokens;
       let outputTokens;
+      let reasoningTokens = 0;
+      let totalTokens;
       try {
         if (realModelsEnabled()) {
           const result = await runRealTranslation({
@@ -601,15 +627,16 @@ async function route(req, res) {
             tone: String(body.tone || "Natural (Default)"),
           });
           execution = "live";
-          provider = result.provider;
-          providerModel = result.providerModel;
           outputText = result.outputText;
-          inputTokens = Number.isFinite(result.inputTokens) ? result.inputTokens : tokenEstimate(body.input);
-          outputTokens = Number.isFinite(result.outputTokens) ? result.outputTokens : tokenEstimate(outputText);
+          inputTokens = providerTokenCount(result.inputTokens) ?? tokenEstimate(body.input);
+          outputTokens = providerTokenCount(result.outputTokens) ?? tokenEstimate(outputText);
+          reasoningTokens = providerTokenCount(result.reasoningTokens) ?? 0;
+          totalTokens = providerTokenCount(result.totalTokens) ?? inputTokens + outputTokens;
         } else {
           outputText = syntheticTranslation(body.input, body.from_language, body.to_language);
           inputTokens = tokenEstimate(body.input);
           outputTokens = tokenEstimate(outputText);
+          totalTokens = inputTokens + outputTokens;
         }
       } catch (error) {
         db.requestLogs.unshift({
@@ -626,6 +653,8 @@ async function route(req, res) {
           streaming: false,
           inputTokens: tokenEstimate(body.input),
           outputTokens: 0,
+          reasoningTokens: 0,
+          totalTokens: tokenEstimate(body.input),
           words: String(body.input).trim().split(/\s+/).filter(Boolean).length,
           costMicroCents: 0,
           creditSource: "none",
@@ -637,6 +666,8 @@ async function route(req, res) {
         return send(res, error.status || 502, { error: error.code || "provider_request_failed", message: error.message, request_id: requestId });
       }
       const costMicroCents = centsCostMicro(inputTokens, outputTokens, model);
+      const sourceTextTokensEstimate = tokenEstimate(body.input);
+      const instructionTokensEstimate = Math.max(0, inputTokens - sourceTextTokensEstimate);
       const charge = applyCharge(db, costMicroCents);
 
       if (!charge) {
@@ -654,6 +685,8 @@ async function route(req, res) {
           streaming: Boolean(body.stream),
           inputTokens,
           outputTokens: 0,
+          reasoningTokens: 0,
+          totalTokens: inputTokens,
           words: String(body.input).trim().split(/\s+/).filter(Boolean).length,
           costMicroCents: 0,
           creditSource: "none",
@@ -674,11 +707,14 @@ async function route(req, res) {
         stream: false,
         requested_stream: Boolean(body.stream),
         execution,
-        ...(provider ? { provider, provider_model: providerModel } : {}),
         usage: {
           input_tokens: inputTokens,
+          source_text_tokens_estimate: sourceTextTokensEstimate,
+          instruction_tokens_estimate: instructionTokensEstimate,
           output_tokens: outputTokens,
-          total_tokens: inputTokens + outputTokens,
+          reasoning_tokens: reasoningTokens,
+          visible_output_tokens: Math.max(0, outputTokens - reasoningTokens),
+          total_tokens: totalTokens,
           cost_usd: microCentsToDollars(costMicroCents),
         },
       };
@@ -708,6 +744,8 @@ async function route(req, res) {
         streaming: Boolean(body.stream),
         inputTokens,
         outputTokens,
+        reasoningTokens,
+        totalTokens,
         words: String(body.input).trim().split(/\s+/).filter(Boolean).length,
         costMicroCents,
         creditSource: charge.reward ? "reward" : "paid",
