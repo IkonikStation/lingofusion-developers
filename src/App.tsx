@@ -45,7 +45,8 @@ import {
   ttsModels,
 } from "./data/pricing";
 import type { TextModel, TextModelPresentation, TextPricingMode } from "./data/pricing";
-import type { ProVariantKey } from "./data/subscriptions";
+import { priceForBillingInterval, subscriptionPlans } from "./data/subscriptions";
+import type { BillingInterval, ProVariantKey } from "./data/subscriptions";
 
 const billingNotes = [
   {
@@ -186,6 +187,10 @@ function pageFromPath(pathname: string) {
   const appPath = stripBasePath(pathname);
   if (appPath === "/subscriptions") return "Subscription Prices";
   if (appPath === "/models" || appPath === "/models/") return "Models";
+  if (appPath === "/playground") return "Playground";
+  if (appPath === "/checkout") return "Checkout";
+  if (appPath === "/teams") return "Teams";
+  if (appPath === "/contact-sales") return "Contact Sales";
   return modelNameFromPath(pathname) ?? "Pricing";
 }
 
@@ -206,17 +211,28 @@ export default function App() {
   const activeLanguage = getLanguage(language);
   const isSubscriptionPage = activePage === "Subscription Prices";
 
-  const navigate = (page: string) => {
+  const navigate = (page: string, query?: Record<string, string | number | undefined>) => {
     const nextPage = page === "API Prices" ? "Pricing" : page;
     const nextPath = nextPage === "Subscription Prices"
       ? "/subscriptions"
       : nextPage === "Models"
         ? "/models"
+        : nextPage === "Playground"
+          ? "/playground"
+          : nextPage === "Checkout"
+            ? "/checkout"
+            : nextPage === "Teams"
+              ? "/teams"
+              : nextPage === "Contact Sales"
+                ? "/contact-sales"
         : textModels.some((model) => model.model === nextPage)
           ? `/models/${modelSlug(nextPage)}`
           : "/";
-    const deployedPath = withBasePath(nextPath);
-    if (window.location.pathname !== deployedPath) window.history.pushState({}, "", deployedPath);
+    const search = query
+      ? `?${new URLSearchParams(Object.entries(query).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)])).toString()}`
+      : "";
+    const deployedPath = `${withBasePath(nextPath)}${search}`;
+    if (`${window.location.pathname}${window.location.search}` !== deployedPath) window.history.pushState({}, "", deployedPath);
     setActivePage(nextPage);
     setMobileOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -356,12 +372,9 @@ export default function App() {
         <main className="min-w-0 flex-1 overflow-hidden">
           <SubscriptionPage
             onApiPrices={() => navigate("API Prices")}
-            onSelectPlan={(planId, billingInterval) => {
-              // Checkout integration point: pass the plan id and billing interval to the future authenticated checkout flow.
-              notify(`Checkout is not connected yet. Selected plan: ${planId} (${billingInterval})`);
-            }}
-            onBuildTeam={(billingInterval) => notify(`Team checkout is not connected yet (${billingInterval}).`)}
-            onContactSales={(seatCount, seatPlanId, billingInterval) => notify(`Sales request saved for ${seatCount.toLocaleString("en-US")} ${seatPlanId} seats (${billingInterval}).`)}
+            onSelectPlan={(planId, billingInterval) => navigate("Checkout", { plan: planId, billing: billingInterval })}
+            onBuildTeam={(billingInterval) => navigate("Teams", { billing: billingInterval })}
+            onContactSales={(seatCount, seatPlanId, billingInterval) => navigate("Contact Sales", { seats: seatCount, plan: seatPlanId, billing: billingInterval })}
             proVariantKey={proVariantKey}
             onProVariantChange={selectProVariant}
           />
@@ -392,6 +405,14 @@ export default function App() {
                 <PricingPage t={t} onDashboard={() => setDashboardOpen(true)} onOpenModel={navigate} />
               ) : activePage === "Models" ? (
                 <ModelComparisonPage onOpenModel={navigate} />
+              ) : activePage === "Playground" ? (
+                <PlaygroundPage onOpenDashboard={() => setDashboardOpen(true)} onNavigate={navigate} />
+              ) : activePage === "Checkout" ? (
+                <CheckoutPage onNavigate={navigate} />
+              ) : activePage === "Teams" ? (
+                <TeamsPage onNavigate={navigate} />
+              ) : activePage === "Contact Sales" ? (
+                <ContactSalesPage onNavigate={navigate} />
               ) : textModels.some((model) => model.model === activePage) ? (
                 <ModelDetailPage
                   modelName={activePage}
@@ -400,7 +421,7 @@ export default function App() {
                     navigate("Models");
                     window.setTimeout(() => document.getElementById("compare-models")?.scrollIntoView({ behavior: "smooth" }), 120);
                   }}
-                  onOpenPlayground={() => notify(`${activePage} selected in the Playground.`)}
+                  onOpenPlayground={() => navigate("Playground", { model: activePage })}
                 />
               ) : (
                 <DocsPage activePage={activePage} t={t} tc={tc} onNavigate={navigate} onCopy={copySnippet} />
@@ -450,6 +471,119 @@ export default function App() {
         </div>
       )}
     </div>
+  );
+}
+
+function pageQuery() {
+  return new URLSearchParams(window.location.search);
+}
+
+function humanizePlanId(planId: string) {
+  const names: Record<string, string> = {
+    free: "LingoFusion Free",
+    "pro-500k": "LingoFusion Pro 500K",
+    "pro-1m": "LingoFusion Pro 1M",
+    "ultra-x1": "LingoFusion Ultra X1",
+    "ultra-x2": "LingoFusion Ultra X2",
+    ultra: "LingoFusion Ultra",
+  };
+  return names[planId] ?? planId;
+}
+
+function PlaygroundPage({ onOpenDashboard, onNavigate }: { onOpenDashboard: () => void; onNavigate: (page: string) => void }) {
+  const requestedModel = pageQuery().get("model");
+  const selectedModel = requestedModel && textModels.some((model) => model.model === requestedModel) ? requestedModel : "LingoFusion";
+
+  return (
+    <section className="mx-auto max-w-4xl py-6 sm:py-12">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">LingoFusion Developer Playground</p>
+      <h1 className="mt-3 text-4xl font-semibold tracking-tight text-neutral-950 dark:text-white sm:text-5xl">Test a model in the interactive playground.</h1>
+      <p className="mt-5 max-w-2xl text-base leading-7 text-neutral-600 dark:text-neutral-400">{selectedModel} is ready for a simulated request. Run translations, inspect exact token usage, and review the price before building against the API.</p>
+      <div className="mt-10 grid gap-4 rounded-xl border border-neutral-200 bg-neutral-50 p-6 dark:border-white/10 dark:bg-white/[0.04] sm:grid-cols-[1fr_auto] sm:items-center">
+        <div>
+          <p className="text-sm text-neutral-500">Selected model</p>
+          <p className="mt-1 text-xl font-semibold text-neutral-950 dark:text-white">{selectedModel}</p>
+        </div>
+        <button type="button" onClick={onOpenDashboard} className="pressable inline-flex min-h-11 items-center justify-center rounded-md bg-neutral-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-950">Open interactive playground</button>
+      </div>
+      <div className="mt-8 flex flex-wrap gap-3">
+        <button type="button" onClick={() => onNavigate(selectedModel)} className="pressable inline-flex min-h-11 items-center justify-center rounded-md border border-neutral-300 px-5 py-2.5 text-sm font-semibold text-neutral-800 hover:bg-neutral-50 dark:border-white/20 dark:text-white dark:hover:bg-white/10">View model details</button>
+        <button type="button" onClick={() => onNavigate("API Prices")} className="pressable inline-flex min-h-11 items-center justify-center rounded-md border border-neutral-300 px-5 py-2.5 text-sm font-semibold text-neutral-800 hover:bg-neutral-50 dark:border-white/20 dark:text-white dark:hover:bg-white/10">View API pricing</button>
+      </div>
+    </section>
+  );
+}
+
+function CheckoutPage({ onNavigate }: { onNavigate: (page: string) => void }) {
+  const query = pageQuery();
+  const planId = query.get("plan") ?? "pro-500k";
+  const billing = query.get("billing") === "yearly" ? "yearly" : "monthly";
+  const seats = Math.max(1, Number(query.get("seats")) || 1);
+
+  return (
+    <section className="mx-auto max-w-3xl py-6 sm:py-12">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">Subscription setup</p>
+      <h1 className="mt-3 text-4xl font-semibold tracking-tight text-neutral-950 dark:text-white sm:text-5xl">Review your plan selection.</h1>
+      <p className="mt-5 max-w-2xl text-base leading-7 text-neutral-600 dark:text-neutral-400">You selected a plan from the subscriptions page. This local demo does not process payments, so no charge will be made here.</p>
+      <dl className="mt-10 divide-y divide-neutral-200 overflow-hidden rounded-xl border border-neutral-200 dark:divide-white/10 dark:border-white/10">
+        <div className="flex items-center justify-between gap-6 p-5"><dt className="text-neutral-500">Plan</dt><dd className="font-semibold text-neutral-950 dark:text-white">{humanizePlanId(planId)}</dd></div>
+        <div className="flex items-center justify-between gap-6 p-5"><dt className="text-neutral-500">Billing</dt><dd className="font-semibold capitalize text-neutral-950 dark:text-white">{billing}</dd></div>
+        <div className="flex items-center justify-between gap-6 p-5"><dt className="text-neutral-500">Seats</dt><dd className="font-semibold text-neutral-950 dark:text-white">{seats.toLocaleString("en-US")}</dd></div>
+      </dl>
+      <div className="mt-8 flex flex-wrap gap-3">
+        <button type="button" onClick={() => onNavigate("Playground")} className="pressable inline-flex min-h-11 items-center justify-center rounded-md bg-neutral-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-950">Continue to playground</button>
+        <button type="button" onClick={() => onNavigate("Subscription Prices")} className="pressable inline-flex min-h-11 items-center justify-center rounded-md border border-neutral-300 px-5 py-2.5 text-sm font-semibold text-neutral-800 hover:bg-neutral-50 dark:border-white/20 dark:text-white dark:hover:bg-white/10">Change plan</button>
+      </div>
+    </section>
+  );
+}
+
+function TeamsPage({ onNavigate }: { onNavigate: (page: string, query?: Record<string, string | number | undefined>) => void }) {
+  const requestedBilling = pageQuery().get("billing");
+  const [billing, setBilling] = useState<BillingInterval>(requestedBilling === "yearly" ? "yearly" : "monthly");
+  const [planId, setPlanId] = useState<"pro-500k" | "pro-1m" | "ultra-x2">("pro-500k");
+  const [seats, setSeats] = useState(2);
+  const plan = planId === "pro-500k" ? subscriptionPlans.pro.variants["500k"] : planId === "pro-1m" ? subscriptionPlans.pro.variants["1m"] : subscriptionPlans.ultra.variants.x2;
+  const price = priceForBillingInterval(plan.monthlyPrice, plan.yearlyPrice, billing);
+  const total = price * seats;
+
+  return (
+    <section className="mx-auto max-w-4xl py-6 sm:py-12">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">LingoFusion Teams</p>
+      <h1 className="mt-3 text-4xl font-semibold tracking-tight text-neutral-950 dark:text-white sm:text-5xl">Build a team plan.</h1>
+      <p className="mt-5 max-w-2xl text-base leading-7 text-neutral-600 dark:text-neutral-400">Choose a seat type, billing cycle, and anywhere from 2 to 999 members. Organizations with 1,000 or more seats are routed to Enterprise.</p>
+      <div className="mt-10 grid gap-6 rounded-xl border border-neutral-200 p-6 dark:border-white/10 sm:grid-cols-2">
+        <label className="grid gap-2 text-sm font-medium text-neutral-700 dark:text-neutral-300">Seat type<select value={planId} onChange={(event) => setPlanId(event.target.value as typeof planId)} className="h-11 rounded-md border border-neutral-300 bg-white px-3 text-neutral-950 outline-none dark:border-white/20 dark:bg-[#111] dark:text-white"><option value="pro-500k">Pro 500K</option><option value="pro-1m">Pro 1M</option><option value="ultra-x2">Ultra X2</option></select></label>
+        <label className="grid gap-2 text-sm font-medium text-neutral-700 dark:text-neutral-300">Billing<select value={billing} onChange={(event) => setBilling(event.target.value as BillingInterval)} className="h-11 rounded-md border border-neutral-300 bg-white px-3 text-neutral-950 outline-none dark:border-white/20 dark:bg-[#111] dark:text-white"><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></label>
+        <label className="grid gap-2 text-sm font-medium text-neutral-700 dark:text-neutral-300 sm:col-span-2">Seats<input type="number" min="2" max="999" value={seats} onChange={(event) => setSeats(Math.min(999, Math.max(2, Number(event.target.value) || 2)))} className="h-11 rounded-md border border-neutral-300 bg-white px-3 text-neutral-950 outline-none dark:border-white/20 dark:bg-[#111] dark:text-white" /></label>
+      </div>
+      <div className="mt-6 flex flex-wrap items-end justify-between gap-4 rounded-xl bg-neutral-950 p-6 text-white dark:bg-white dark:text-neutral-950"><div><p className="text-sm opacity-70">Estimated total</p><p className="mt-1 text-3xl font-semibold">{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(total)} <span className="text-base font-medium opacity-70">/{billing === "yearly" ? "year" : "month"}</span></p></div><button type="button" onClick={() => onNavigate("Checkout", { plan: planId, billing, seats })} className="pressable min-h-11 rounded-md bg-white px-5 py-2.5 text-sm font-semibold text-neutral-950 hover:bg-neutral-200 dark:bg-neutral-950 dark:text-white dark:hover:bg-neutral-800">Review team plan</button></div>
+      <p className="mt-5 text-sm text-neutral-500 dark:text-neutral-400">Need 1,000 or more seats? <button type="button" onClick={() => onNavigate("Contact Sales", { seats: 1000, plan: planId, billing })} className="font-semibold text-neutral-950 underline underline-offset-4 dark:text-white">Contact Sales</button>.</p>
+    </section>
+  );
+}
+
+function ContactSalesPage({ onNavigate }: { onNavigate: (page: string) => void }) {
+  const query = pageQuery();
+  const [sent, setSent] = useState(false);
+  const seats = Math.max(1_000, Number(query.get("seats")) || 1_000);
+
+  return (
+    <section className="mx-auto max-w-3xl py-6 sm:py-12">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">LingoFusion Enterprise</p>
+      <h1 className="mt-3 text-4xl font-semibold tracking-tight text-neutral-950 dark:text-white sm:text-5xl">Talk to Sales about {seats.toLocaleString("en-US")} seats.</h1>
+      <p className="mt-5 max-w-2xl text-base leading-7 text-neutral-600 dark:text-neutral-400">Custom pricing, volume discounts, centralized billing, SSO, audit logs, priority support, dedicated onboarding, and invoice or purchase-order billing are available for Enterprise.</p>
+      {sent ? (
+        <div className="mt-10 rounded-xl border border-neutral-200 bg-neutral-50 p-6 dark:border-white/10 dark:bg-white/[0.04]"><h2 className="text-xl font-semibold text-neutral-950 dark:text-white">Sales request prepared</h2><p className="mt-2 text-neutral-600 dark:text-neutral-400">This demo saved your request locally. A production version would send it to the LingoFusion sales team.</p><button type="button" onClick={() => onNavigate("Subscription Prices")} className="pressable mt-5 min-h-11 rounded-md bg-neutral-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-950">Back to subscriptions</button></div>
+      ) : (
+        <form onSubmit={(event) => { event.preventDefault(); setSent(true); }} className="mt-10 grid gap-5 rounded-xl border border-neutral-200 p-6 dark:border-white/10 sm:grid-cols-2">
+          <label className="grid gap-2 text-sm font-medium text-neutral-700 dark:text-neutral-300">Work email<input required type="email" placeholder="you@company.com" className="h-11 rounded-md border border-neutral-300 bg-white px-3 text-neutral-950 outline-none dark:border-white/20 dark:bg-[#111] dark:text-white" /></label>
+          <label className="grid gap-2 text-sm font-medium text-neutral-700 dark:text-neutral-300">Organization<input required type="text" placeholder="Organization name" className="h-11 rounded-md border border-neutral-300 bg-white px-3 text-neutral-950 outline-none dark:border-white/20 dark:bg-[#111] dark:text-white" /></label>
+          <label className="grid gap-2 text-sm font-medium text-neutral-700 dark:text-neutral-300 sm:col-span-2">How can we help?<textarea required rows={4} defaultValue={`Interested in Enterprise for ${seats.toLocaleString("en-US")} seats.`} className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-neutral-950 outline-none dark:border-white/20 dark:bg-[#111] dark:text-white" /></label>
+          <button type="submit" className="pressable min-h-11 rounded-md bg-neutral-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 sm:col-span-2">Send sales request</button>
+        </form>
+      )}
+    </section>
   );
 }
 
