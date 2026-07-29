@@ -10,10 +10,13 @@ import {
   Gauge,
   Globe2,
   Image,
+  KeyRound,
   Layers3,
   Mic,
   Music,
   Play,
+  Server,
+  Terminal,
   Type,
   Video,
   Zap,
@@ -167,6 +170,8 @@ function modelSlug(modelName: string) {
   return modelName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
 
+const documentationPages = sidebarSections.flatMap((section) => section.items);
+
 const appBasePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function stripBasePath(pathname: string) {
@@ -191,6 +196,8 @@ function pageFromPath(pathname: string) {
   if (appPath === "/checkout") return "Checkout";
   if (appPath === "/teams") return "Teams";
   if (appPath === "/contact-sales") return "Contact Sales";
+  const documentationSlug = appPath.match(/^\/docs\/([^/]+)\/?$/)?.[1];
+  if (documentationSlug) return documentationPages.find((page) => modelSlug(page) === documentationSlug) ?? "Overview";
   return modelNameFromPath(pathname) ?? "Pricing";
 }
 
@@ -225,6 +232,8 @@ export default function App() {
               ? "/teams"
               : nextPage === "Contact Sales"
                 ? "/contact-sales"
+                : documentationPages.includes(nextPage)
+                  ? `/docs/${modelSlug(nextPage)}`
         : textModels.some((model) => model.model === nextPage)
           ? `/models/${modelSlug(nextPage)}`
           : "/";
@@ -1732,10 +1741,25 @@ function DocsPage({
 }) {
   const isModel = Boolean(modelDetails[activePage]);
   const summary = modelDetails[activePage] ?? pageSummaries[activePage] ?? pageSummaries.Overview;
+  const [exampleLanguage, setExampleLanguage] = useState<"curl" | "javascript" | "python">("curl");
+  const isOverview = activePage === "Overview";
+  const isQuickstart = activePage === "Quickstart";
+  const pageFocus = isOverview
+    ? "A practical view of the platform, from the first request through production monitoring."
+    : isQuickstart
+      ? "Create a key, choose a model, and make a translation request in a few minutes."
+      : isModel
+        ? "Use this model reference to select the right capability and pricing mode for your workload."
+        : `Everything you need to work with ${activePage.toLowerCase()} in a production integration.`;
+  const codeExamples = {
+    curl: `curl https://api.lingofusion.dev/v1/translate \\\n+  -H "Authorization: Bearer $LINGOFUSION_API_KEY" \\\n+  -H "Content-Type: application/json" \\\n+  -d '{\n    "model": "lingofusion",\n    "source_language": "en",\n    "target_language": "fr",\n    "input": "Build for every language."\n  }'`,
+    javascript: `const response = await fetch("https://api.lingofusion.dev/v1/translate", {\n  method: "POST",\n  headers: {\n    Authorization: \`Bearer \${process.env.LINGOFUSION_API_KEY}\`,\n    "Content-Type": "application/json",\n  },\n  body: JSON.stringify({\n    model: "lingofusion",\n    source_language: "en",\n    target_language: "fr",\n    input: "Build for every language.",\n  }),\n});\n\nconst result = await response.json();`,
+    python: `from lingofusion import LingoFusion\n\nclient = LingoFusion(api_key=os.environ["LINGOFUSION_API_KEY"])\nresult = client.translate(\n    model="lingofusion",\n    source_language="en",\n    target_language="fr",\n    input="Build for every language.",\n)\n\nprint(result.output_text)`,
+  };
 
   return (
     <div>
-      <section className="site-reveal max-w-3xl">
+      <section className="site-reveal max-w-4xl">
         <p className="mb-4 text-sm font-medium text-neutral-600 dark:text-neutral-400">
           {isModel ? t("modelReference") : t("developerDocs")}
         </p>
@@ -1743,6 +1767,7 @@ function DocsPage({
           {modelDetails[activePage] ? activePage : tc(activePage)}
         </h1>
         <p className="mt-5 text-lg leading-8 text-neutral-700 dark:text-neutral-300">{tc(summary)}</p>
+        <p className="mt-3 max-w-3xl text-base leading-7 text-neutral-600 dark:text-neutral-400">{pageFocus}</p>
         <div className="mt-7 flex flex-wrap gap-3">
           <button
             type="button"
@@ -1763,18 +1788,41 @@ function DocsPage({
         </div>
       </section>
 
-      <div className="site-reveal mt-12 grid gap-4 lg:grid-cols-3">
-        <DocCard icon={Play} title={t("startFast")} tc={tc}>
-          Generate a scoped key, pick a model, and send your first request from the
-          dashboard or an SDK.
-        </DocCard>
-        <DocCard icon={Activity} title={t("monitorUsage")} tc={tc}>
-          Track token, character, image, and minute usage with budget alerts and invoices.
-        </DocCard>
-        <DocCard icon={CheckCircle2} title={t("shipReliably")} tc={tc}>
-          Production retries, status visibility, and clear error responses keep integrations predictable.
-        </DocCard>
-      </div>
+      <section className="site-reveal mt-12 grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(17rem,0.65fr)]">
+        <div className="overflow-hidden rounded-xl border border-neutral-200 bg-neutral-950 dark:border-white/10">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-5 py-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-white"><Terminal className="h-4 w-4" /> First translation request</div>
+            <div role="tablist" aria-label="Example language" className="inline-flex rounded-md bg-white/10 p-1">
+              {(Object.keys(codeExamples) as Array<keyof typeof codeExamples>).map((language) => <button key={language} type="button" role="tab" aria-selected={exampleLanguage === language} onClick={() => setExampleLanguage(language)} className={`rounded px-2.5 py-1 text-xs font-medium transition ${exampleLanguage === language ? "bg-white text-neutral-950" : "text-neutral-300 hover:text-white"}`}>{language === "javascript" ? "Node.js" : language === "curl" ? "cURL" : "Python"}</button>)}
+            </div>
+          </div>
+          <pre className="min-h-72 overflow-x-auto p-5 text-sm leading-6 text-emerald-100"><code>{codeExamples[exampleLanguage]}</code></pre>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-5 py-4"><p className="text-xs text-neutral-400">Uses the default LingoFusion model and the translation endpoint.</p><button type="button" onClick={onCopy} className="pressable inline-flex items-center gap-2 rounded-md bg-white px-3 py-2 text-xs font-semibold text-neutral-950 hover:bg-neutral-200"><Copy className="h-3.5 w-3.5" /> Copy example</button></div>
+        </div>
+        <aside className="rounded-xl border border-neutral-200 bg-neutral-50 p-5 dark:border-white/10 dark:bg-white/[0.04]">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">Request checklist</p>
+          <ol className="mt-5 space-y-5">
+            <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-neutral-950 text-xs font-semibold text-white dark:bg-white dark:text-neutral-950">1</span><div><p className="font-medium text-neutral-950 dark:text-white">Create an API key</p><p className="mt-1 text-sm leading-5 text-neutral-500">Use a restricted key for each project.</p></div></li>
+            <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-neutral-950 text-xs font-semibold text-white dark:bg-white dark:text-neutral-950">2</span><div><p className="font-medium text-neutral-950 dark:text-white">Choose a model</p><p className="mt-1 text-sm leading-5 text-neutral-500">Pick the quality, speed, and cost that fit the work.</p></div></li>
+            <li className="flex gap-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-neutral-950 text-xs font-semibold text-white dark:bg-white dark:text-neutral-950">3</span><div><p className="font-medium text-neutral-950 dark:text-white">Inspect usage</p><p className="mt-1 text-sm leading-5 text-neutral-500">Every simulated response includes token usage and exact cost.</p></div></li>
+          </ol>
+          <button type="button" onClick={() => onNavigate("Playground")} className="pressable mt-6 inline-flex min-h-10 w-full items-center justify-center rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm font-semibold text-neutral-950 hover:bg-neutral-100 dark:border-white/20 dark:bg-transparent dark:text-white dark:hover:bg-white/10">Open Playground</button>
+        </aside>
+      </section>
+
+      <section className="site-reveal mt-10">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">Build with confidence</p><h2 className="mt-2 text-2xl font-semibold tracking-tight text-neutral-950 dark:text-white">What you can do next</h2></div><button type="button" onClick={() => onNavigate("Models")} className="pressable text-left text-sm font-semibold text-neutral-950 underline underline-offset-4 dark:text-white">Browse all models</button></div>
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
+          <DocCard icon={KeyRound} title="Secure access" tc={tc}>Create scoped keys per environment, rotate them on a schedule, and keep secrets out of client applications.</DocCard>
+          <DocCard icon={Server} title="Reliable requests" tc={tc}>Use request IDs, retry only safe transient failures, and keep a record of the response usage object.</DocCard>
+          <DocCard icon={Activity} title="Measure every call" tc={tc}>Compare models in the Playground, then review exact request costs and operational data in the dashboard.</DocCard>
+        </div>
+      </section>
+
+      <section className="site-reveal mt-10 grid gap-5 border-y border-neutral-200 py-10 dark:border-white/10 lg:grid-cols-[0.7fr_1.3fr]">
+        <div><p className="text-xs font-semibold uppercase tracking-[0.12em] text-neutral-500">Reference</p><h2 className="mt-2 text-2xl font-semibold tracking-tight text-neutral-950 dark:text-white">Endpoints at a glance</h2><p className="mt-3 text-sm leading-6 text-neutral-600 dark:text-neutral-400">Start with a direct translation request, then add streaming or batch processing as your workload grows.</p></div>
+        <div className="overflow-hidden rounded-lg border border-neutral-200 dark:border-white/10"><EndpointRow endpoint="POST /v1/translate" description="Translate text between supported languages." onClick={() => onNavigate("Text generation")} /><EndpointRow endpoint="POST /v1/responses" description="Run model responses with token accounting." onClick={() => onNavigate("Playground")} /><EndpointRow endpoint="POST /v1/batch" description="Queue lower-cost asynchronous text processing." onClick={() => onNavigate("API Prices")} /></div>
+      </section>
 
       <section className="site-reveal mt-8 border-t border-neutral-200 pt-8 dark:border-white/10">
         <h2 className="text-2xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50">{t("relatedPages")}</h2>
@@ -1797,6 +1845,10 @@ function DocsPage({
       </section>
     </div>
   );
+}
+
+function EndpointRow({ endpoint, description, onClick }: { endpoint: string; description: string; onClick: () => void }) {
+  return <button type="button" onClick={onClick} className="pressable flex w-full items-center justify-between gap-4 border-b border-neutral-200 px-5 py-4 text-left last:border-b-0 hover:bg-neutral-50 dark:border-white/10 dark:hover:bg-white/[0.04]"><div><code className="text-sm font-semibold text-neutral-950 dark:text-white">{endpoint}</code><p className="mt-1 text-sm text-neutral-500">{description}</p></div><ArrowLeft className="h-4 w-4 rotate-180 text-neutral-500" /></button>;
 }
 
 function DocCard({
