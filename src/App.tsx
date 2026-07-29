@@ -935,7 +935,7 @@ function TextModelGallery({ models, pricingMode, displayPrice, onOpenModel }: {
           <h2 id="pricing-model-gallery-heading" className="text-2xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50">LingoFusion models</h2>
           <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">Our text models, designed for fast, capable multilingual work.</p>
         </div>
-        <span className="text-xs font-medium text-neutral-500 dark:text-neutral-500">{pricingMode === "batch" ? "Batch" : "Default"} pricing · open a model for details</span>
+        <span className="text-xs font-medium text-neutral-500 dark:text-neutral-500">{pricingMode === "batch" ? "Batch" : "Default"} pricing Â· open a model for details</span>
       </div>
       <div className="mt-8 grid gap-x-12 gap-y-7 md:grid-cols-2">
         {models.map((model) => {
@@ -1013,7 +1013,7 @@ function MediaShowcase() {
                         Replace with {item.kind}
                       </p>
                       <p className="mt-1 text-xs font-medium uppercase tracking-wide text-neutral-600 dark:text-neutral-400">
-                        16:9 · JPG, PNG, WebP or MP4
+                        16:9 Â· JPG, PNG, WebP or MP4
                       </p>
                     </div>
                     {item.kind === "video" && <span className="media-scan-line" aria-hidden="true" />}
@@ -1301,12 +1301,12 @@ function ModelDetailPage({
       <button type="button" onClick={onBack} className="pressable inline-flex items-center gap-2 text-sm font-medium text-neutral-600 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white"><ArrowLeft className="h-4 w-4" /> All models</button>
 
       <header className="site-reveal mt-8">
-        <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-          <div className="flex min-w-0 items-center gap-4">
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center">
             <ModelIcon presentation={presentation} size="detail" />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-3xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50 sm:text-4xl">{modelName}</h1>
+                <h1 className="min-w-0 break-words text-3xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50 xl:text-4xl">{modelName}</h1>
                 <select
                   value={pricingMode}
                   onChange={(event) => setPricingMode(event.target.value as TextPricingMode)}
@@ -1319,10 +1319,10 @@ function ModelDetailPage({
                 <button type="button" onClick={() => copyText(apiModelId, "model")} aria-label="Copy model ID" className="pressable rounded-md p-2 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-950 dark:hover:bg-white/10 dark:hover:text-white"><Copy className="h-4 w-4" /></button>
                 {copied === "model" && <span className="text-xs font-medium text-neutral-500">Copied</span>}
               </div>
-              <p className="mt-1 max-w-2xl text-base text-neutral-600 dark:text-neutral-400">{presentation.capability}</p>
+              <p className="mt-1 max-w-3xl break-words text-base leading-7 text-neutral-600 dark:text-neutral-400">{presentation.capability}</p>
             </div>
           </div>
-          <div className="flex shrink-0 gap-2">
+          <div className="flex flex-wrap gap-2 xl:shrink-0">
             <button type="button" onClick={onCompare} className="pressable inline-flex min-h-11 items-center justify-center rounded-full border border-neutral-300 px-5 py-2.5 text-sm font-semibold text-neutral-950 hover:bg-neutral-50 dark:border-white/20 dark:text-white dark:hover:bg-white/10">Compare</button>
             <button type="button" onClick={onOpenPlayground} className="pressable inline-flex min-h-11 items-center justify-center rounded-full bg-neutral-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200">Try in Playground</button>
           </div>
@@ -1330,10 +1330,10 @@ function ModelDetailPage({
       </header>
 
       <section className="site-reveal mt-10 overflow-hidden rounded-lg border border-neutral-200 dark:border-white/10" aria-label="Model summary">
-        <div className="grid grid-cols-2 divide-x divide-y divide-neutral-200 dark:divide-white/10 sm:grid-cols-3 lg:grid-cols-5 lg:divide-y-0">
+        <div className="grid grid-cols-2 divide-x divide-y divide-neutral-200 dark:divide-white/10 sm:grid-cols-3 2xl:grid-cols-5 2xl:divide-y-0">
           <div className="p-5 text-center"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Reasoning</p><div className="mt-3"><RatingMarks value={profile.reasoningLevel} icon={BrainCircuit} /></div><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">{profile.reasoning}</p></div>
           <div className="p-5 text-center"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Speed</p><div className="mt-3"><RatingMarks value={profile.speedLevel} icon={Zap} /></div><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">{profile.speed}</p></div>
-          <div className="p-5 text-center"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Price</p><p className="mt-3 text-lg font-semibold text-neutral-950 dark:text-white">{price(activePrice.inputUsd)} · {price(activePrice.outputUsd)}</p><p className="mt-1 text-sm text-neutral-500">Input · Output</p></div>
+          <div className="p-5 text-center"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Price</p><p className="mt-3 text-lg font-semibold text-neutral-950 dark:text-white">{price(activePrice.inputUsd)} Â· {price(activePrice.outputUsd)}</p><p className="mt-1 text-sm text-neutral-500">Input Â· Output</p></div>
           <div className="p-5 text-center"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Input</p><Type className="mx-auto mt-3 h-5 w-5 text-neutral-800 dark:text-neutral-200" /><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">Text</p></div>
           <div className="col-span-2 p-5 text-center sm:col-span-1"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Output</p><FileText className="mx-auto mt-3 h-5 w-5 text-neutral-800 dark:text-neutral-200" /><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">Text</p></div>
         </div>
