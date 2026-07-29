@@ -33,6 +33,8 @@ type BrowserRequestLog = {
   status: number;
   inputTokens: number;
   outputTokens: number;
+  reasoningTokens: number;
+  totalTokens?: number;
   words: number;
   cost: number;
   latencyMs: number;
@@ -76,6 +78,7 @@ type BrowserDashboard = {
     failedRequests: number;
     inputTokens: number;
     outputTokens: number;
+    reasoningTokens: number;
     totalTokens: number;
     words: number;
     streamingRequests: number;
@@ -100,6 +103,7 @@ function emptyUsage(): BrowserDashboard["usage"] {
     failedRequests: 0,
     inputTokens: 0,
     outputTokens: 0,
+    reasoningTokens: 0,
     totalTokens: 0,
     words: 0,
     streamingRequests: 0,
@@ -187,6 +191,7 @@ function recalculateUsage(dashboard: BrowserDashboard) {
     total.failedRequests += log.status >= 400 ? 1 : 0;
     total.inputTokens += log.inputTokens;
     total.outputTokens += log.outputTokens;
+    total.reasoningTokens += log.reasoningTokens || 0;
     total.words += log.words;
     total.streamingRequests += log.streaming ? 1 : 0;
     total.nonStreamingRequests += log.streaming ? 0 : 1;
@@ -194,7 +199,7 @@ function recalculateUsage(dashboard: BrowserDashboard) {
     total.averageLatencyMs += log.latencyMs;
     return total;
   }, emptyUsage());
-  usage.totalTokens = usage.inputTokens + usage.outputTokens;
+  usage.totalTokens = dashboard.requestLogs.reduce((total, log) => total + (log.totalTokens ?? log.inputTokens + log.outputTokens), 0);
   usage.averageLatencyMs = usage.totalRequests ? Math.round(usage.averageLatencyMs / usage.totalRequests) : 0;
   dashboard.usage = usage;
 }
@@ -289,6 +294,8 @@ function runTranslation(state: BrowserState, options?: RequestInit) {
     status: 200,
     inputTokens,
     outputTokens,
+    reasoningTokens: 0,
+    totalTokens: inputTokens + outputTokens,
     words: input.split(/\s+/).length,
     cost,
     latencyMs: Math.max(18, Date.now() - started),
@@ -303,7 +310,11 @@ function runTranslation(state: BrowserState, options?: RequestInit) {
     stream: Boolean(body.stream),
     usage: {
       input_tokens: inputTokens,
+      source_text_tokens_estimate: inputTokens,
+      instruction_tokens_estimate: 0,
       output_tokens: outputTokens,
+      reasoning_tokens: 0,
+      visible_output_tokens: outputTokens,
       total_tokens: inputTokens + outputTokens,
       cost_usd: cost,
     },
@@ -336,6 +347,8 @@ function runMusic(state: BrowserState, options?: RequestInit) {
     status: 200,
     inputTokens: 0,
     outputTokens: 0,
+    reasoningTokens: 0,
+    totalTokens: 0,
     words: prompt.split(/\s+/).length,
     cost,
     latencyMs: Math.max(24, Date.now() - started),
