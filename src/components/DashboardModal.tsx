@@ -202,7 +202,8 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
     return browserApi<T>(path, options);
   }
 
-  const response = await fetch(path, {
+  const apiBaseUrl = String(import.meta.env.VITE_LINGOFUSION_API_URL || "").replace(/\/$/, "");
+  const response = await fetch(`${apiBaseUrl}${path}`, {
     ...options,
     headers: {
       "content-type": "application/json",
