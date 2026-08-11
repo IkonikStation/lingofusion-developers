@@ -50,6 +50,7 @@ import {
 import type { TextModel, TextModelPresentation, TextPricingMode } from "./data/pricing";
 import { priceForBillingInterval, subscriptionPlans } from "./data/subscriptions";
 import type { BillingInterval, ProVariantKey } from "./data/subscriptions";
+import { submitSalesRequest } from "./data/sales";
 
 const billingNotes = [
   {
@@ -575,7 +576,33 @@ function TeamsPage({ onNavigate }: { onNavigate: (page: string, query?: Record<s
 function ContactSalesPage({ onNavigate }: { onNavigate: (page: string) => void }) {
   const query = pageQuery();
   const [sent, setSent] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
   const seats = Math.max(1_000, Number(query.get("seats")) || 1_000);
+  const planId = query.get("plan") ?? "";
+  const billingInterval = query.get("billing") === "yearly" ? "yearly" : "monthly";
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setError("");
+    const form = new FormData(event.currentTarget);
+    try {
+      await submitSalesRequest({
+        email: String(form.get("email") || ""),
+        organization: String(form.get("organization") || ""),
+        message: String(form.get("message") || ""),
+        seats,
+        planId,
+        billingInterval,
+      });
+      setSent(true);
+    } catch {
+      setError("We could not send the acknowledgement email. Please try again shortly.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <section className="mx-auto max-w-3xl py-6 sm:py-12">
@@ -583,13 +610,14 @@ function ContactSalesPage({ onNavigate }: { onNavigate: (page: string) => void }
       <h1 className="mt-3 text-4xl font-semibold tracking-tight text-neutral-950 dark:text-white sm:text-5xl">Talk to Sales about {seats.toLocaleString("en-US")} seats.</h1>
       <p className="mt-5 max-w-2xl text-base leading-7 text-neutral-600 dark:text-neutral-400">Custom pricing, volume discounts, centralized billing, SSO, audit logs, priority support, dedicated onboarding, and invoice or purchase-order billing are available for Enterprise.</p>
       {sent ? (
-        <div className="mt-10 rounded-xl border border-neutral-200 bg-neutral-50 p-6 dark:border-white/10 dark:bg-white/[0.04]"><h2 className="text-xl font-semibold text-neutral-950 dark:text-white">Sales request prepared</h2><p className="mt-2 text-neutral-600 dark:text-neutral-400">This demo saved your request locally. A production version would send it to the LingoFusion sales team.</p><button type="button" onClick={() => onNavigate("Subscription Prices")} className="pressable mt-5 min-h-11 rounded-md bg-neutral-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-950">Back to subscriptions</button></div>
+        <div className="mt-10 rounded-xl border border-neutral-200 bg-neutral-50 p-6 dark:border-white/10 dark:bg-white/[0.04]"><h2 className="text-xl font-semibold text-neutral-950 dark:text-white">Check your inbox</h2><p className="mt-2 text-neutral-600 dark:text-neutral-400">LingoFusion sent an automatic confirmation to your work email. Our sales team will follow up there.</p><button type="button" onClick={() => onNavigate("Subscription Prices")} className="pressable mt-5 min-h-11 rounded-md bg-neutral-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-950">Back to subscriptions</button></div>
       ) : (
-        <form onSubmit={(event) => { event.preventDefault(); setSent(true); }} className="mt-10 grid gap-5 rounded-xl border border-neutral-200 p-6 dark:border-white/10 sm:grid-cols-2">
-          <label className="grid gap-2 text-sm font-medium text-neutral-700 dark:text-neutral-300">Work email<input required type="email" placeholder="you@company.com" className="h-11 rounded-md border border-neutral-300 bg-white px-3 text-neutral-950 outline-none dark:border-white/20 dark:bg-[#111] dark:text-white" /></label>
-          <label className="grid gap-2 text-sm font-medium text-neutral-700 dark:text-neutral-300">Organization<input required type="text" placeholder="Organization name" className="h-11 rounded-md border border-neutral-300 bg-white px-3 text-neutral-950 outline-none dark:border-white/20 dark:bg-[#111] dark:text-white" /></label>
-          <label className="grid gap-2 text-sm font-medium text-neutral-700 dark:text-neutral-300 sm:col-span-2">How can we help?<textarea required rows={4} defaultValue={`Interested in Enterprise for ${seats.toLocaleString("en-US")} seats.`} className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-neutral-950 outline-none dark:border-white/20 dark:bg-[#111] dark:text-white" /></label>
-          <button type="submit" className="pressable min-h-11 rounded-md bg-neutral-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 sm:col-span-2">Send sales request</button>
+        <form onSubmit={handleSubmit} className="mt-10 grid gap-5 rounded-xl border border-neutral-200 p-6 dark:border-white/10 sm:grid-cols-2">
+          <label className="grid gap-2 text-sm font-medium text-neutral-700 dark:text-neutral-300">Work email<input required name="email" type="email" placeholder="you@company.com" className="h-11 rounded-md border border-neutral-300 bg-white px-3 text-neutral-950 outline-none dark:border-white/20 dark:bg-[#111] dark:text-white" /></label>
+          <label className="grid gap-2 text-sm font-medium text-neutral-700 dark:text-neutral-300">Organization<input required name="organization" type="text" placeholder="Organization name" className="h-11 rounded-md border border-neutral-300 bg-white px-3 text-neutral-950 outline-none dark:border-white/20 dark:bg-[#111] dark:text-white" /></label>
+          <label className="grid gap-2 text-sm font-medium text-neutral-700 dark:text-neutral-300 sm:col-span-2">How can we help?<textarea required name="message" rows={4} defaultValue={`Interested in Enterprise for ${seats.toLocaleString("en-US")} seats.`} className="rounded-md border border-neutral-300 bg-white px-3 py-2 text-neutral-950 outline-none dark:border-white/20 dark:bg-[#111] dark:text-white" /></label>
+          {error && <p className="text-sm text-red-600 dark:text-red-400 sm:col-span-2" role="alert">{error}</p>}
+          <button type="submit" disabled={submitting} className="pressable min-h-11 rounded-md bg-neutral-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-neutral-950 sm:col-span-2">{submitting ? "Sending confirmation..." : "Send sales request"}</button>
         </form>
       )}
     </section>
@@ -1407,7 +1435,7 @@ function ModelDetailPage({
   const price = (value: number) => new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    minimumFractionDigits: value < 1 ? 2 : 0,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
   const apiModelId = modelSlug(modelName);
@@ -1476,12 +1504,12 @@ function ModelDetailPage({
       </header>
 
       <section className="site-reveal mt-10 overflow-hidden rounded-lg border border-neutral-200 dark:border-white/10" aria-label="Model summary">
-        <div className="grid grid-cols-2 divide-x divide-y divide-neutral-200 dark:divide-white/10 sm:grid-cols-3 2xl:grid-cols-5 2xl:divide-y-0">
-          <div className="p-5 text-center"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Reasoning</p><div className="mt-3"><RatingMarks value={profile.reasoningLevel} icon={BrainCircuit} /></div><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">{profile.reasoning}</p></div>
-          <div className="p-5 text-center"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Speed</p><div className="mt-3"><RatingMarks value={profile.speedLevel} icon={Zap} /></div><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">{profile.speed}</p></div>
-          <div className="p-5 text-center"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Price</p><p className="mt-3 text-lg font-semibold text-neutral-950 dark:text-white">{price(activePrice.inputUsd)} / {price(activePrice.outputUsd)}</p><p className="mt-1 text-sm text-neutral-500">Input / Output</p></div>
-          <div className="p-5 text-center"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Input</p><Type className="mx-auto mt-3 h-5 w-5 text-neutral-800 dark:text-neutral-200" /><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">Text</p></div>
-          <div className="col-span-2 p-5 text-center sm:col-span-1"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Output</p><FileText className="mx-auto mt-3 h-5 w-5 text-neutral-800 dark:text-neutral-200" /><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">Text</p></div>
+        <div className="grid gap-px bg-neutral-200 dark:bg-white/10 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="bg-white p-5 text-center dark:bg-[#0d0d0d]"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Reasoning</p><div className="mt-3"><RatingMarks value={profile.reasoningLevel} icon={BrainCircuit} /></div><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">{profile.reasoning}</p></div>
+          <div className="bg-white p-5 text-center dark:bg-[#0d0d0d]"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Speed</p><div className="mt-3"><RatingMarks value={profile.speedLevel} icon={Zap} /></div><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">{profile.speed}</p></div>
+          <div className="bg-white p-5 text-center dark:bg-[#0d0d0d]"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Price</p><p className="mt-3 whitespace-nowrap text-lg font-semibold text-neutral-950 dark:text-white">{price(activePrice.inputUsd)} / {price(activePrice.outputUsd)}</p><p className="mt-1 text-sm text-neutral-500">Input / Output</p></div>
+          <div className="bg-white p-5 text-center dark:bg-[#0d0d0d]"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Input</p><Type className="mx-auto mt-3 h-5 w-5 text-neutral-800 dark:text-neutral-200" /><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">Text</p></div>
+          <div className="bg-white p-5 text-center dark:bg-[#0d0d0d] sm:col-span-2 lg:col-span-1"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Output</p><FileText className="mx-auto mt-3 h-5 w-5 text-neutral-800 dark:text-neutral-200" /><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">Text</p></div>
         </div>
       </section>
 
@@ -1586,7 +1614,7 @@ function ModelComparisonCard({ model, pricingMode }: { model: TextModel; pricing
   const price = (value: number) => new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    minimumFractionDigits: value < 1 ? 2 : 0,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
 
