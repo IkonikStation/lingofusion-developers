@@ -48,7 +48,7 @@ export const textModelsByPricingMode: Record<TextPricingMode, TextModel[]> = {
     { model: "LingoFusion", inputUsd: 1.75, outputUsd: 10.00, recommended: true },
     { model: "LingoFusion Pro", inputUsd: 2.00, outputUsd: 12.50 },
     { model: "ExplainFusion", inputUsd: 1.00, outputUsd: 5.00 },
-    { model: "LingoFusion Ultra", inputUsd: 20.00, outputUsd: 120.00 },
+    { model: "LingoFusion Ultra", inputUsd: 12.50, outputUsd: 75.00 },
   ],
 };
 
