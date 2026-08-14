@@ -30,6 +30,7 @@ const port = Number(process.env.LINGOFUSION_API_PORT || 8787);
 const MICRO_CENTS_PER_DOLLAR = 100_000_000;
 
 const textModels = [
+  { model: "LingoFusion Pico", input: 0.003, output: 0.014 },
   { model: "LingoFusion Nano", input: 0.15, output: 0.70 },
   { model: "LingoFusion Lite", input: 0.75, output: 3.00 },
   { model: "LingoFusion", input: 3.50, output: 20.00 },
@@ -38,14 +39,11 @@ const textModels = [
   { model: "LingoFusion Ultra", input: 25.00, output: 150.00 },
 ];
 
-const batchTextModels = [
-  { model: "LingoFusion Nano", input: 0.08, output: 0.35 },
-  { model: "LingoFusion Lite", input: 0.40, output: 1.50 },
-  { model: "LingoFusion", input: 1.75, output: 10.00 },
-  { model: "LingoFusion Pro", input: 2.00, output: 12.50 },
-  { model: "ExplainFusion", input: 2.00, output: 12.50 },
-  { model: "LingoFusion Ultra", input: 20.00, output: 120.00 },
-];
+const batchTextModels = textModels.map((model) => ({
+  ...model,
+  input: model.input / 2,
+  output: model.output / 2,
+}));
 
 const musicModels = [
   { model: "Aurora Music V1", pricePerMinute: 0.60 },
@@ -53,6 +51,7 @@ const musicModels = [
 ];
 
 const realModelRouting = {
+  "LingoFusion Pico": { provider: "openai", model: "gpt-5-nano" },
   "LingoFusion Nano": { provider: "openai", model: "gpt-5-nano" },
   "LingoFusion Lite": { provider: "openai", model: "gpt-5-mini" },
   "LingoFusion": { provider: "deepseek", model: "deepseek-v4-flash", thinking: "disabled" },
