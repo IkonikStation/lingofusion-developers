@@ -27,6 +27,7 @@ export type ImageModel = {
 };
 
 export const textModels: TextModel[] = [
+  { model: "LingoFusion Pico", inputUsd: 0.003, outputUsd: 0.014 },
   { model: "LingoFusion Nano", inputUsd: 0.15, outputUsd: 0.70 },
   { model: "LingoFusion Lite", inputUsd: 0.75, outputUsd: 3.00 },
   {
@@ -50,6 +51,13 @@ export const textModelsByPricingMode: Record<TextPricingMode, TextModel[]> = {
 };
 
 export const textModelPresentations: Record<string, TextModelPresentation> = {
+  "LingoFusion Pico": {
+    image: "/assets/models/lingofusion-pico.png",
+    imageScale: 1.72,
+    capability: "Extremely fast, ultra-low-cost translation for simple language tasks at massive scale.",
+    bestFor: "Simple translations, routing, tagging, and lightweight language tasks where cost and speed matter most.",
+    features: ["Ultra-low-cost translation", "Fast classification", "Language detection", "High-volume processing"],
+  },
   "LingoFusion Nano": {
     image: "/assets/models/lingofusion-nano.png",
     imageScale: 1.72,
@@ -134,6 +142,7 @@ export const latestModels = [
   "ExplainFusion",
   "LingoFusion",
   "LingoFusion Lite",
+  "LingoFusion Pico",
   "LingoFusion Nano",
   "LingoFusion TTS Advanced",
   "LingoFusion Live Translate",
@@ -184,6 +193,7 @@ export const navMenus = {
     "ExplainFusion",
     "LingoFusion",
     "LingoFusion Lite",
+    "LingoFusion Pico",
     "LingoFusion Nano",
     "LingoFusion Live Translate",
     "LingoFusion Transcribe",
@@ -236,6 +246,8 @@ export const modelDetails: Record<string, string> = {
     "Recommended default model for most text generation and translation workloads.",
   "LingoFusion Lite":
     "Low-cost, fast model for simple translation, extraction, and classification.",
+  "LingoFusion Pico":
+    "Extremely fast, ultra-low-cost model for simple translations and lightweight language tasks.",
   "LingoFusion Nano":
     "Ultra-efficient model for high-volume utility tasks and latency-sensitive flows.",
   "LingoFusion TTS Advanced":
