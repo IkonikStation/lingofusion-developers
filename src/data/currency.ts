@@ -49,12 +49,15 @@ export function formatCurrencyAmount(usdAmount: number, currencyCode: CurrencyCo
   const currency = getCurrency(currencyCode);
   const amount = usdAmount * rate;
   const fractionDigits = currency.code === "JPY" ? 0 : 2;
-  const tinyAmount = precise && amount !== 0 && Math.abs(amount) < 0.01 && fractionDigits > 0;
+  const meaningfulFractionDigits = precise && amount !== 0
+    ? Math.min(8, (Math.abs(amount).toFixed(8).split(".")[1] ?? "").replace(/0+$/, "").length)
+    : fractionDigits;
+  const displayFractionDigits = Math.max(fractionDigits, meaningfulFractionDigits);
 
   return new Intl.NumberFormat(currency.locale, {
     style: "currency",
     currency: currency.code,
-    minimumFractionDigits: tinyAmount ? 0 : fractionDigits,
-    maximumFractionDigits: tinyAmount ? 8 : fractionDigits,
+    minimumFractionDigits: displayFractionDigits,
+    maximumFractionDigits: displayFractionDigits,
   }).format(amount);
 }
