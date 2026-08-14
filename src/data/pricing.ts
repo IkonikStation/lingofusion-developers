@@ -52,7 +52,7 @@ export const textModelsByPricingMode: Record<TextPricingMode, TextModel[]> = {
 
 export const textModelPresentations: Record<string, TextModelPresentation> = {
   "LingoFusion Pico": {
-    image: "/assets/models/lingofusion-pico.png",
+    image: "/assets/models/lingofusion-pico.svg",
     imageScale: 1.72,
     capability: "Extremely fast, ultra-low-cost translation for simple language tasks at massive scale.",
     bestFor: "Simple translations, routing, tagging, and lightweight language tasks where cost and speed matter most.",
