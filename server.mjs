@@ -50,8 +50,13 @@ const musicModels = [
   { model: "Aurora Music V2", pricePerMinute: 0.99 },
 ];
 
+const lmStudio = {
+  baseUrl: (process.env.LINGOFUSION_LM_STUDIO_BASE_URL || "http://127.0.0.1:1234/v1").replace(/\/+$/, ""),
+  apiKey: "lm-studio",
+};
+
 const realModelRouting = {
-  "LingoFusion Pico": { provider: "openai", model: "gpt-5-nano" },
+  "LingoFusion Pico": { provider: "lm_studio" },
   "LingoFusion Nano": { provider: "openai", model: "gpt-5-nano" },
   "LingoFusion Lite": { provider: "openai", model: "gpt-5-mini" },
   "LingoFusion": { provider: "deepseek", model: "deepseek-v4-flash", thinking: "disabled" },
@@ -248,9 +253,134 @@ async function requestJson(url, apiKey, body) {
   return payload;
 }
 
-async function runRealTranslation({ modelName, input, fromLanguage, toLanguage, tone }) {
+function lmStudioErrorFromConnection(error) {
+  const details = `${error?.message || ""} ${error?.cause?.code || ""}`.toLowerCase();
+  if (details.includes("econnrefused") || details.includes("connection refused")) {
+    return providerError("lm_studio_connection_refused", 503, "LM Studio refused the connection. Start its local server at http://127.0.0.1:1234/v1 and try again.");
+  }
+  return providerError("lm_studio_server_not_running", 503, "LM Studio is not running or its local server is unavailable. Start the server in LM Studio and try again.");
+}
+
+async function resolveLmStudioModel() {
+  let response;
+  try {
+    response = await fetch(`${lmStudio.baseUrl}/models`, {
+      headers: { authorization: `Bearer ${lmStudio.apiKey}` },
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (error) {
+    throw lmStudioErrorFromConnection(error);
+  }
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw providerError("lm_studio_models_unavailable", 503, "LM Studio could not list local models. Confirm its OpenAI-compatible server is running.");
+  }
+
+  const models = (payload.data || []).filter((model) => typeof model?.id === "string" && model.id.trim());
+  if (models.length === 0) {
+    throw providerError("lm_studio_no_model_loaded", 503, "No model is loaded in LM Studio. Load Qwen 1.7B, start the local server, and try again.");
+  }
+  const qwenModel = models.find((model) => /qwen.*1[._-]?7b/i.test(model.id));
+  if (!qwenModel) {
+    throw providerError("lm_studio_qwen_not_loaded", 503, "Qwen 1.7B is not available from LM Studio. Load it in LM Studio and try again.");
+  }
+  return qwenModel.id;
+}
+
+async function readLmStudioStream(response) {
+  if (!response.body) throw providerError("lm_studio_stream_unavailable", 502, "LM Studio returned an empty streaming response.");
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let outputText = "";
+  let usage = {};
+
+  const consumeEvent = (event) => {
+    const data = event.split("\n").find((line) => line.startsWith("data:"))?.slice(5).trim();
+    if (!data || data === "[DONE]") return;
+    try {
+      const payload = JSON.parse(data);
+      outputText += String(payload.choices?.[0]?.delta?.content || "");
+      if (payload.usage) usage = payload.usage;
+    } catch {
+      // Ignore a malformed keepalive or incomplete SSE event.
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+    const events = buffer.split("\n\n");
+    buffer = events.pop() || "";
+    events.forEach(consumeEvent);
+    if (done) break;
+  }
+  if (buffer) consumeEvent(buffer);
+  return { outputText: outputText.trim(), usage };
+}
+
+async function runLmStudioTranslation({ input, fromLanguage, toLanguage, tone, stream }) {
+  const model = await resolveLmStudioModel();
+  const systemPrompt = buildTranslationSystemPrompt({ fromLanguage, toLanguage, tone });
+  let response;
+  try {
+    response = await fetch(`${lmStudio.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${lmStudio.apiKey}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: input },
+        ],
+        stream: Boolean(stream),
+        ...(stream ? { stream_options: { include_usage: true } } : {}),
+      }),
+      signal: AbortSignal.timeout(90_000),
+    });
+  } catch (error) {
+    throw lmStudioErrorFromConnection(error);
+  }
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    const details = JSON.stringify(payload).toLowerCase();
+    if (response.status === 400 || response.status === 404 || details.includes("model")) {
+      throw providerError("lm_studio_invalid_model_id", 502, "LM Studio rejected the loaded model ID. Reload Qwen 1.7B in LM Studio and try again.");
+    }
+    throw providerError("lm_studio_request_failed", 502, "LM Studio could not complete the translation request.");
+  }
+
+  const result = stream
+    ? await readLmStudioStream(response)
+    : (() => response.json())();
+  const payload = await result;
+  const outputText = stream
+    ? payload.outputText
+    : String(payload.choices?.[0]?.message?.content || "").trim();
+  const usage = stream ? payload.usage : payload.usage;
+  if (!outputText) throw providerError("provider_empty_response", 502, "LM Studio returned no translation.");
+  return {
+    outputText,
+    inputTokens: usage?.prompt_tokens,
+    outputTokens: usage?.completion_tokens,
+    reasoningTokens: usage?.completion_tokens_details?.reasoning_tokens,
+    totalTokens: usage?.total_tokens,
+  };
+}
+
+function shouldRunLiveModel(modelName) {
+  return realModelRouting[modelName]?.provider === "lm_studio" || realModelsEnabled();
+}
+
+async function runRealTranslation({ modelName, input, fromLanguage, toLanguage, tone, stream }) {
   const route = realModelRouting[modelName];
   if (!route) throw providerError("unsupported_model", 400, "This model is not configured for live execution.");
+  if (route.provider === "lm_studio") {
+    return runLmStudioTranslation({ input, fromLanguage, toLanguage, tone, stream });
+  }
   const systemPrompt = buildTranslationSystemPrompt({ fromLanguage, toLanguage, tone });
 
   if (route.provider === "openai") {
@@ -293,7 +423,6 @@ async function runRealTranslation({ modelName, input, fromLanguage, toLanguage, 
     totalTokens: response.usage?.total_tokens,
   };
 }
-
 async function loadDb() {
   try {
     const db = JSON.parse(await readFile(dbPath, "utf8"));
@@ -617,13 +746,14 @@ async function route(req, res) {
       let reasoningTokens = 0;
       let totalTokens;
       try {
-        if (realModelsEnabled()) {
+        if (shouldRunLiveModel(model.model)) {
           const result = await runRealTranslation({
             modelName: model.model,
             input: String(body.input),
             fromLanguage: String(body.from_language),
             toLanguage: String(body.to_language),
             tone: String(body.tone || "Natural (Default)"),
+            stream: Boolean(body.stream),
           });
           execution = "live";
           outputText = result.outputText;
