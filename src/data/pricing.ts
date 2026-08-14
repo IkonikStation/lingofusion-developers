@@ -42,14 +42,11 @@ export const textModels: TextModel[] = [
 
 export const textModelsByPricingMode: Record<TextPricingMode, TextModel[]> = {
   instant: textModels,
-  batch: [
-    { model: "LingoFusion Nano", inputUsd: 0.08, outputUsd: 0.35 },
-    { model: "LingoFusion Lite", inputUsd: 0.40, outputUsd: 1.50 },
-    { model: "LingoFusion", inputUsd: 1.75, outputUsd: 10.00, recommended: true },
-    { model: "LingoFusion Pro", inputUsd: 2.00, outputUsd: 12.50 },
-    { model: "ExplainFusion", inputUsd: 1.00, outputUsd: 5.00 },
-    { model: "LingoFusion Ultra", inputUsd: 12.50, outputUsd: 75.00 },
-  ],
+  batch: textModels.map((model) => ({
+    ...model,
+    inputUsd: model.inputUsd / 2,
+    outputUsd: model.outputUsd / 2,
+  })),
 };
 
 export const textModelPresentations: Record<string, TextModelPresentation> = {
