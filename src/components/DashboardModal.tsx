@@ -16,7 +16,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { musicModels, textModelsByPricingMode } from "../data/pricing";
 import type { TextPricingMode } from "../data/pricing";
 import { playgroundLanguages } from "../data/playgroundLanguages";
-import { browserApi, shouldUseBrowserApi } from "../data/browserApi";
+import { browserApi, getApiBaseUrl, shouldUseBrowserApi } from "../data/browserApi";
 import { sdkExamples } from "../data/sdkExamples";
 import type { SdkLanguage } from "../data/sdkExamples";
 import { highlightCode } from "../lib/highlightCode";
@@ -206,7 +206,7 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
     return browserApi<T>(path, options);
   }
 
-  const apiBaseUrl = String(import.meta.env.VITE_LINGOFUSION_API_URL || "").replace(/\/$/, "");
+  const apiBaseUrl = getApiBaseUrl();
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...options,
     headers: {
