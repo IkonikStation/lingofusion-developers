@@ -373,8 +373,16 @@ function runMusic(state: BrowserState, options?: RequestInit) {
   };
 }
 
+const githubPagesApiUrl = "https://bull-con-energy-kong.trycloudflare.com";
+
+export function getApiBaseUrl() {
+  const configuredApiUrl = String(import.meta.env.VITE_LINGOFUSION_API_URL || "").replace(/\/$/, "");
+  if (configuredApiUrl) return configuredApiUrl;
+  return window.location.hostname.endsWith(".github.io") ? githubPagesApiUrl : "";
+}
+
 export function shouldUseBrowserApi() {
-  return !import.meta.env.VITE_LINGOFUSION_API_URL
+  return !getApiBaseUrl()
     && (window.location.hostname.endsWith(".github.io")
       || new URLSearchParams(window.location.search).has("browser-api"));
 }
