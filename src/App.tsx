@@ -1336,6 +1336,17 @@ type ModelProfileSpec = {
 };
 
 const modelProfileSpecs: Record<string, ModelProfileSpec> = {
+  "LingoFusion Pico": {
+    reasoning: "Minimal",
+    reasoningLevel: 1,
+    speed: "Fastest",
+    speedLevel: 4,
+    contextWindow: "400,000",
+    maxOutput: "128,000",
+    quality: "Essential",
+    description: "LingoFusion Pico is the fastest and most cost-efficient model in the family, designed for simple translation and lightweight language tasks at high volume.",
+    limitations: ["Best for short, straightforward source text", "Limited contextual analysis", "Not intended for specialized terminology or document-scale review"],
+  },
   "LingoFusion Nano": {
     reasoning: "Light",
     reasoningLevel: 1,
