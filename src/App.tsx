@@ -716,7 +716,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
     recommended: t("recommended"),
   };
 
-  const displayedTextModels = visibleTextModels.map((model) => ({ ...model, input: displayCurrency(model.inputUsd), output: displayCurrency(model.outputUsd) }));
+  const displayedTextModels = visibleTextModels.map((model) => ({ ...model, input: displayCurrency(model.inputUsd, true), output: displayCurrency(model.outputUsd, true) }));
   const displayedTtsModels = ttsModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
   const displayedTranscriptionModels = transcriptionModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
   const displayedDubbingModels = dubbingModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
@@ -1443,12 +1443,7 @@ function ModelDetailPage({
   const [copied, setCopied] = useState<"model" | "request" | null>(null);
   if (!defaultModel || !batchModel || !presentation || !profile) return null;
 
-  const price = (value: number) => new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
+  const price = (value: number) => formatCurrencyAmount(value, "USD", 1, true);
   const apiModelId = modelSlug(modelName);
   const activePrice = pricingMode === "batch" ? batchModel : defaultModel;
   const comparisonModels = textModelsByPricingMode[pricingMode];
@@ -1622,12 +1617,7 @@ function ModelDetailPage({
 }
 
 function ModelComparisonCard({ model, pricingMode }: { model: TextModel; pricingMode: TextPricingMode }) {
-  const price = (value: number) => new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
+  const price = (value: number) => formatCurrencyAmount(value, "USD", 1, true);
 
   return (
     <article className={`comparison-card-motion rounded-lg border p-5 ${model.recommended ? "border-neutral-950 bg-neutral-50 dark:border-white/50 dark:bg-white/[0.05]" : "border-neutral-200 bg-white dark:border-white/10 dark:bg-[#111111]"}`}>
