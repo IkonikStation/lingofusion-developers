@@ -8,19 +8,20 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@lmstudio/sdk": "^1.5.0",
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "typescript": "latest",
+    "highlight.js": "^11.11.1",
+    "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "lucide-react": "latest",
-    "highlight.js": "^11.11.1"
+    "typescript": "latest",
+    "vite": "latest"
   },
   "devDependencies": {
     "@types/react": "latest",
     "@types/react-dom": "latest",
-    "tailwindcss": "^3.4.17",
+    "autoprefixer": "latest",
     "postcss": "latest",
-    "autoprefixer": "latest"
+    "tailwindcss": "^3.4.17"
   }
 }
