@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { LMStudioClient } from "@lmstudio/sdk";
 
 const rootDir = dirname(fileURLToPath(import.meta.url));
 
@@ -159,6 +160,11 @@ function tokenEstimate(text) {
   return Math.max(1, Math.ceil(String(text || "").length / 4));
 }
 
+function estimatedTokenPieces(text) {
+  return Array.from(String(text || "").matchAll(/\s+|[\p{L}\p{N}]+|[^\s\p{L}\p{N}]/gu), (match) => match[0])
+    .flatMap((piece) => piece.match(/.{1,4}/gu) || [piece]);
+}
+
 const phraseTranslations = {
   english: {
     french: {
@@ -286,6 +292,25 @@ async function resolveLmStudioModel() {
     throw providerError("lm_studio_qwen_not_loaded", 503, "Qwen 1.7B is not available from LM Studio. Load it in LM Studio and try again.");
   }
   return qwenModel.id;
+}
+
+function lmStudioSdkBaseUrl() {
+  const baseUrl = new URL(lmStudio.baseUrl);
+  baseUrl.protocol = baseUrl.protocol === "https:" ? "wss:" : "ws:";
+  baseUrl.pathname = "";
+  return baseUrl.toString().replace(/\/$/, "");
+}
+
+async function tokenizeWithLmStudio(text) {
+  const modelId = await resolveLmStudioModel();
+  try {
+    const client = new LMStudioClient({ baseUrl: lmStudioSdkBaseUrl() });
+    const model = await client.llm.model(modelId);
+    const tokenIds = await model.tokenize(text);
+    return { modelId, tokenIds };
+  } catch (error) {
+    throw lmStudioErrorFromConnection(error);
+  }
 }
 
 async function readLmStudioStream(response) {
@@ -423,6 +448,7 @@ async function runRealTranslation({ modelName, input, fromLanguage, toLanguage, 
     totalTokens: response.usage?.total_tokens,
   };
 }
+
 async function loadDb() {
   try {
     const db = JSON.parse(await readFile(dbPath, "utf8"));
@@ -465,6 +491,48 @@ function send(res, status, body) {
     "access-control-allow-headers": "content-type, authorization, idempotency-key",
   });
   res.end(JSON.stringify(body));
+}
+
+function validEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+async function sendSalesAcknowledgement({ email, organization, seats, planId, billingInterval, message }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.LINGOFUSION_EMAIL_FROM;
+  if (!apiKey || !from) {
+    throw providerError("sales_email_not_configured", 503, "Sales email delivery is not configured.");
+  }
+
+  const configuration = [planId, billingInterval].filter(Boolean).join(" / ") || "Enterprise";
+  const text = [
+    `Hi ${organization},`,
+    "",
+    `Thanks for contacting LingoFusion Sales about ${seats.toLocaleString("en-US")} seats.`,
+    `Requested configuration: ${configuration}.`,
+    "A LingoFusion sales specialist will review your request and reply to this email address.",
+    "",
+    "Request summary:",
+    message,
+    "",
+    "LingoFusion Sales",
+  ].join("\n");
+
+  let response;
+  try {
+    response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+      body: JSON.stringify({ from, to: [email], subject: "We received your LingoFusion Enterprise request", text }),
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    throw providerError("sales_email_unavailable", 502, "The sales email provider could not be reached.");
+  }
+
+  if (!response.ok) {
+    throw providerError("sales_email_failed", 502, "The sales acknowledgement could not be delivered.");
+  }
 }
 
 function publicDashboard(db) {
@@ -575,6 +643,24 @@ async function route(req, res) {
 
     if (req.method === "GET" && url.pathname === "/api/models") {
       return send(res, 200, { models: textModels });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/sales-requests") {
+      const body = await parseBody(req);
+      const email = String(body.email || "").trim().toLowerCase();
+      const organization = String(body.organization || "").trim();
+      const seats = Math.round(Number(body.seats));
+      const message = String(body.message || "").trim();
+      const planId = String(body.planId || "").trim();
+      const billingInterval = String(body.billingInterval || "").trim();
+
+      if (!validEmail(email)) return send(res, 400, { error: "valid_work_email_required" });
+      if (!organization || organization.length > 200) return send(res, 400, { error: "organization_required" });
+      if (!Number.isFinite(seats) || seats < 1_000 || seats > 1_000_000) return send(res, 400, { error: "enterprise_seat_count_required" });
+      if (!message || message.length > 5_000) return send(res, 400, { error: "sales_message_required" });
+
+      await sendSalesAcknowledgement({ email, organization, seats, planId, billingInterval, message });
+      return send(res, 202, { status: "acknowledgement_sent" });
     }
 
     if (req.method === "POST" && url.pathname === "/api/projects") {
@@ -889,6 +975,43 @@ async function route(req, res) {
       return send(res, 200, response);
     }
 
+    if (req.method === "POST" && url.pathname === "/v1/tokenize") {
+      const auth = requireKey(db, req);
+      const requestId = id("tok");
+      const body = await parseBody(req);
+      if (auth.error) return send(res, 401, { error: auth.error, request_id: requestId });
+      if (!auth.key.scopes.includes("Text translation")) {
+        return send(res, 403, { error: "missing_scope", required_scope: "Text translation", request_id: requestId });
+      }
+
+      const text = String(body.input || "");
+      const model = normalizeModelName(body.model);
+      if (!model) return send(res, 400, { error: "unsupported_model", request_id: requestId });
+      if (!text) return send(res, 400, { error: "invalid_request", message: "input is required", request_id: requestId });
+      if (text.length > 20_000) return send(res, 413, { error: "input_too_large", message: "Tokenizer input is limited to 20,000 characters.", request_id: requestId });
+
+      if (model.model === "LingoFusion Pico") {
+        const { modelId, tokenIds } = await tokenizeWithLmStudio(text);
+        return send(res, 200, {
+          model: model.model,
+          tokenizer_model: modelId,
+          exact: true,
+          token_count: tokenIds.length,
+          token_ids: tokenIds.slice(0, 500),
+          truncated: tokenIds.length > 500,
+        });
+      }
+
+      const previewPieces = estimatedTokenPieces(text);
+      return send(res, 200, {
+        model: model.model,
+        exact: false,
+        token_count: tokenEstimate(text),
+        preview_pieces: previewPieces.slice(0, 500),
+        truncated: previewPieces.length > 500,
+      });
+    }
+
     if (req.method === "POST" && url.pathname === "/v1/music") {
       const started = Date.now();
       const auth = requireKey(db, req);
@@ -1011,7 +1134,7 @@ async function route(req, res) {
 
     return send(res, 404, { error: "not_found" });
   } catch (error) {
-    return send(res, 500, { error: "server_error", message: error.message });
+    return send(res, error.status || 500, { error: error.code || "server_error", message: error.message });
   }
 }
 
