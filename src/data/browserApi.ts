@@ -373,7 +373,7 @@ function runMusic(state: BrowserState, options?: RequestInit) {
   };
 }
 
-const githubPagesApiUrl = "https://bull-con-energy-kong.trycloudflare.com";
+const githubPagesApiUrl = "https://situations-filling-curves-bond.trycloudflare.com";
 
 export function getApiBaseUrl() {
   const configuredApiUrl = String(import.meta.env.VITE_LINGOFUSION_API_URL || "").replace(/\/$/, "");
