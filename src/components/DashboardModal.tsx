@@ -82,6 +82,16 @@ type LedgerEntry = {
   createdAt: string;
 };
 
+type TokenizerResult = {
+  model: string;
+  tokenizer_model?: string;
+  exact: boolean;
+  token_count: number;
+  token_ids?: number[];
+  preview_pieces?: string[];
+  truncated: boolean;
+};
+
 type DashboardData = {
   account: {
     paidBalance: number;
@@ -138,6 +148,7 @@ const permissionScopes = [
 const tabs = [
   "Overview",
   "Playground",
+  "Tokenizer",
   "Projects",
   "API Keys",
   "Usage",
@@ -283,6 +294,10 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
   const [tryMusicDurationSeconds, setTryMusicDurationSeconds] = useState(30);
   const [tryResult, setTryResult] = useState("");
   const [tryOutput, setTryOutput] = useState("");
+  const [tokenizerModel, setTokenizerModel] = useState("LingoFusion Pico");
+  const [tokenizerInput, setTokenizerInput] = useState("Hello, world!");
+  const [tokenizerResult, setTokenizerResult] = useState<TokenizerResult | null>(null);
+  const [tokenizerLoading, setTokenizerLoading] = useState(false);
 
   const playgroundModels = textModelsByPricingMode[playgroundPricingMode];
   const selectedPlaygroundModel =
@@ -462,6 +477,25 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
     setTryOutput(typeof result.output_text === "string" ? result.output_text : isMusic ? "Music generation completed. The audio response is available in the result payload." : "No output text was returned.");
     await refresh();
     onNotify(tc("Request processed, billed, and logged"));
+  };
+
+  const tokenizeInput = async () => {
+    if (!tryKey) {
+      setTab("API Keys");
+      onNotify(tc("Create a key first, then come back to Tokenizer"));
+      return;
+    }
+    setTokenizerLoading(true);
+    try {
+      const result = await api<TokenizerResult>("/v1/tokenize", {
+        method: "POST",
+        headers: { authorization: `Bearer ${tryKey}` },
+        body: JSON.stringify({ model: tokenizerModel, input: tokenizerInput }),
+      });
+      setTokenizerResult(result);
+    } finally {
+      setTokenizerLoading(false);
+    }
   };
 
   const copyText = async (text: string, message: string) => {
@@ -718,6 +752,53 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                         </div>
                       </div>
                     </div>
+                  </Panel>
+                )}
+
+                {tab === "Tokenizer" && (
+                  <Panel title="Tokenizer" description="Inspect how text is split into tokens before you send a request.">
+                    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+                      <div>
+                        <label className="block text-sm">
+                          <span className="mb-1.5 block font-medium text-neutral-700 dark:text-neutral-300">Text to tokenize</span>
+                          <textarea value={tokenizerInput} onChange={(event) => setTokenizerInput(event.target.value)} rows={9} placeholder="Paste text here" className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-950 outline-none transition placeholder:text-neutral-400 focus:border-neutral-600 dark:border-white/15 dark:bg-[#111111] dark:text-neutral-100 dark:placeholder:text-neutral-500 dark:focus:border-neutral-400" />
+                        </label>
+                        <div className="mt-4 flex flex-wrap gap-3">
+                          <ActionButton onClick={tokenizeInput} disabled={tokenizerLoading || !tokenizerInput.trim()}>
+                            {tokenizerLoading ? "Tokenizing..." : "Tokenize text"}
+                          </ActionButton>
+                          <button type="button" onClick={() => setTokenizerInput(tryInput)} className="rounded-md border border-neutral-300 bg-white px-4 py-2.5 text-sm font-medium text-neutral-950 hover:bg-neutral-50 dark:border-white/15 dark:bg-white/5 dark:text-neutral-100 dark:hover:bg-white/10">Use Playground input</button>
+                        </div>
+                      </div>
+                      <div className="space-y-4">
+                        <SelectInput label="Model" value={tokenizerModel} onChange={setTokenizerModel}>
+                          {textModelsByPricingMode.instant.map((model) => <option key={model.model}>{model.model}</option>)}
+                        </SelectInput>
+                        <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+                          <p className="text-sm font-medium text-neutral-950 dark:text-neutral-50">{tokenizerModel === "LingoFusion Pico" ? "Exact tokenizer" : "Estimated tokenizer"}</p>
+                          <p className="mt-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">{tokenizerModel === "LingoFusion Pico" ? "Uses the loaded Qwen model's tokenizer in LM Studio." : "This provider does not expose token pieces, so the preview is an estimate."}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {tokenizerResult && (
+                      <div className="mt-6 rounded-lg border border-neutral-200 p-5 dark:border-white/10">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-sm text-neutral-500 dark:text-neutral-400">Total tokens</p>
+                            <p className="mt-1 text-3xl font-semibold tracking-tight text-neutral-950 dark:text-white">{tokenizerResult.token_count.toLocaleString()}</p>
+                          </div>
+                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${tokenizerResult.exact ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300" : "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300"}`}>{tokenizerResult.exact ? `Exact: ${tokenizerResult.tokenizer_model}` : "Estimated tokenization"}</span>
+                        </div>
+                        <div className="mt-5 rounded-md bg-neutral-50 p-3 dark:bg-white/[0.04]">
+                          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">{tokenizerResult.exact ? "Token IDs" : "Token preview"}</p>
+                          <div className="flex max-h-56 flex-wrap gap-2 overflow-y-auto">
+                            {(tokenizerResult.exact ? tokenizerResult.token_ids : tokenizerResult.preview_pieces)?.map((token, index) => <span key={`${token}-${index}`} className="rounded bg-white px-2 py-1 font-mono text-xs text-neutral-800 shadow-sm ring-1 ring-neutral-200 dark:bg-[#151515] dark:text-neutral-200 dark:ring-white/10">{String(token).replace(/\n/g, "↵") || "space"}</span>)}
+                          </div>
+                        </div>
+                        {tokenizerResult.truncated && <p className="mt-3 text-sm text-neutral-500 dark:text-neutral-400">Showing the first 500 tokens.</p>}
+                      </div>
+                    )}
                   </Panel>
                 )}
 
