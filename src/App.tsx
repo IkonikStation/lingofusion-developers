@@ -51,6 +51,7 @@ import type { TextModel, TextModelPresentation, TextPricingMode } from "./data/p
 import { priceForBillingInterval, subscriptionPlans } from "./data/subscriptions";
 import type { BillingInterval, ProVariantKey } from "./data/subscriptions";
 import { submitSalesRequest } from "./data/sales";
+import { picoLocalRequirements } from "./data/picoLocal";
 
 const billingNotes = [
   {
@@ -716,7 +717,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
     recommended: t("recommended"),
   };
 
-  const displayedTextModels = visibleTextModels.map((model) => ({ ...model, input: displayCurrency(model.inputUsd, true), output: displayCurrency(model.outputUsd, true) }));
+  const displayedTextModels = visibleTextModels.map((model) => ({ ...model, input: model.local ? "Free" : displayCurrency(model.inputUsd, true), output: model.local ? "Free" : displayCurrency(model.outputUsd, true) }));
   const displayedTtsModels = ttsModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
   const displayedTranscriptionModels = transcriptionModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
   const displayedDubbingModels = dubbingModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
@@ -824,7 +825,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
             displayPrice={displayCurrency}
             onOpenModel={onOpenModel}
           />
-          <SectionCalculator title={t("textCalculator")} estimateLabel={t("estimate")} estimate={textEstimate === null ? "TBD" : displayCurrency(textEstimate, true)}>
+          <SectionCalculator title={t("textCalculator")} estimateLabel={t("estimate")} estimate={selectedTextModel.local ? "Free - runs locally" : textEstimate === null ? "TBD" : displayCurrency(textEstimate, true)}>
             <SelectField label={t("model")} value={selectedModel} onChange={setSelectedModel}>
               {visibleTextModels.map((model) => (
                 <option key={model.model}>{model.model}</option>
@@ -1126,8 +1127,10 @@ function TextModelGallery({ models, pricingMode, displayPrice, onOpenModel }: {
                 </span>
                 <span className="mt-1 block text-base leading-6 text-neutral-600 dark:text-neutral-400">{presentation?.capability ?? modelDetails[model.model]}</span>
                 <span className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-sm text-neutral-500 dark:text-neutral-500">
-                  <span>Input <strong className="font-medium text-neutral-800 dark:text-neutral-200">{displayPrice(model.inputUsd)}</strong> / 1M</span>
-                  <span>Output <strong className="font-medium text-neutral-800 dark:text-neutral-200">{displayPrice(model.outputUsd)}</strong> / 1M</span>
+                  {model.local ? <span className="font-medium text-emerald-700 dark:text-emerald-300">Free - runs locally on your device</span> : <>
+                    <span>Input <strong className="font-medium text-neutral-800 dark:text-neutral-200">{displayPrice(model.inputUsd)}</strong> / 1M</span>
+                    <span>Output <strong className="font-medium text-neutral-800 dark:text-neutral-200">{displayPrice(model.outputUsd)}</strong> / 1M</span>
+                  </>}
                 </span>
               </span>
             </button>
@@ -1445,6 +1448,7 @@ function ModelDetailPage({
 
   const price = (value: number) => formatCurrencyAmount(value, "USD", 1, true);
   const apiModelId = modelSlug(modelName);
+  const isLocalModel = Boolean(defaultModel.local);
   const activePrice = pricingMode === "batch" ? batchModel : defaultModel;
   const comparisonModels = textModelsByPricingMode[pricingMode];
   const comparisonMax = Math.max(...comparisonModels.map((model) => model[comparisonMetric === "input" ? "inputUsd" : "outputUsd"]));
@@ -1487,7 +1491,7 @@ function ModelDetailPage({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="min-w-0 break-words text-3xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50 xl:text-4xl">{modelName}</h1>
-                <select
+                {!isLocalModel && <select
                   value={pricingMode}
                   onChange={(event) => setPricingMode(event.target.value as TextPricingMode)}
                   aria-label="Processing mode"
@@ -1495,7 +1499,7 @@ function ModelDetailPage({
                 >
                   <option value="instant">Default</option>
                   <option value="batch">Batch</option>
-                </select>
+                </select>}
                 <button type="button" onClick={() => copyText(apiModelId, "model")} aria-label="Copy model ID" className="pressable rounded-md p-2 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-950 dark:hover:bg-white/10 dark:hover:text-white"><Copy className="h-4 w-4" /></button>
                 {copied === "model" && <span className="text-xs font-medium text-neutral-500">Copied</span>}
               </div>
@@ -1513,7 +1517,7 @@ function ModelDetailPage({
         <div className="grid gap-px bg-neutral-200 dark:bg-white/10 sm:grid-cols-2 lg:grid-cols-5">
           <div className="bg-white p-5 text-center dark:bg-[#0d0d0d]"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Reasoning</p><div className="mt-3"><RatingMarks value={profile.reasoningLevel} icon={BrainCircuit} /></div><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">{profile.reasoning}</p></div>
           <div className="bg-white p-5 text-center dark:bg-[#0d0d0d]"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Speed</p><div className="mt-3"><RatingMarks value={profile.speedLevel} icon={Zap} /></div><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">{profile.speed}</p></div>
-          <div className="bg-white p-5 text-center dark:bg-[#0d0d0d]"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Price</p><p className="mt-3 whitespace-nowrap text-lg font-semibold text-neutral-950 dark:text-white">{price(activePrice.inputUsd)} / {price(activePrice.outputUsd)}</p><p className="mt-1 text-sm text-neutral-500">Input / Output</p></div>
+          <div className="bg-white p-5 text-center dark:bg-[#0d0d0d]"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Price</p><p className="mt-3 whitespace-nowrap text-lg font-semibold text-emerald-700 dark:text-emerald-300">{isLocalModel ? "Free" : `${price(activePrice.inputUsd)} / ${price(activePrice.outputUsd)}`}</p><p className="mt-1 text-sm text-neutral-500">{isLocalModel ? "Runs locally" : "Input / Output"}</p></div>
           <div className="bg-white p-5 text-center dark:bg-[#0d0d0d]"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Input</p><Type className="mx-auto mt-3 h-5 w-5 text-neutral-800 dark:text-neutral-200" /><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">Text</p></div>
           <div className="bg-white p-5 text-center dark:bg-[#0d0d0d] sm:col-span-2 lg:col-span-1"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Output</p><FileText className="mx-auto mt-3 h-5 w-5 text-neutral-800 dark:text-neutral-200" /><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">Text</p></div>
         </div>
@@ -1525,13 +1529,19 @@ function ModelDetailPage({
           <div className="flex items-center gap-3"><Layers3 className="h-5 w-5 text-neutral-500" /><div><dt className="text-neutral-500">Context window</dt><dd className="font-medium text-neutral-950 dark:text-white">{profile.contextWindow} tokens</dd></div></div>
           <div className="flex items-center gap-3"><Gauge className="h-5 w-5 text-neutral-500" /><div><dt className="text-neutral-500">Maximum output</dt><dd className="font-medium text-neutral-950 dark:text-white">{profile.maxOutput} tokens</dd></div></div>
           <div className="flex items-center gap-3"><Globe2 className="h-5 w-5 text-neutral-500" /><div><dt className="text-neutral-500">Translation quality</dt><dd className="font-medium text-neutral-950 dark:text-white">{profile.quality}</dd></div></div>
-          <div className="flex items-center gap-3"><Clock3 className="h-5 w-5 text-neutral-500" /><div><dt className="text-neutral-500">Processing</dt><dd className="font-medium text-neutral-950 dark:text-white">Default, streaming, Batch</dd></div></div>
+          <div className="flex items-center gap-3"><Clock3 className="h-5 w-5 text-neutral-500" /><div><dt className="text-neutral-500">Processing</dt><dd className="font-medium text-neutral-950 dark:text-white">{isLocalModel ? "Local, streaming" : "Default, streaming, Batch"}</dd></div></div>
         </dl>
       </section>
 
       <section className="site-reveal grid gap-8 border-b border-neutral-200 py-12 dark:border-white/10 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-labelledby="model-pricing-heading">
         <h2 id="model-pricing-heading" className="text-xl font-semibold text-neutral-950 dark:text-white">Pricing</h2>
         <div>
+          {isLocalModel ? (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-400/20 dark:bg-emerald-400/10">
+              <p className="text-lg font-semibold text-emerald-950 dark:text-emerald-50">$0 - runs locally on your device</p>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-emerald-900/80 dark:text-emerald-100/80">Pico uses a local translation model through LM Studio. It does not use LingoFusion servers, API credits, subscriptions, word limits, or token fees. After the model is downloaded, translation can work without an internet connection.</p>
+            </div>
+          ) : <>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <p className="max-w-2xl text-sm leading-6 text-neutral-600 dark:text-neutral-400">Pricing is based on tokens processed. API billing remains in USD, and Batch offers lower-cost asynchronous processing for non-urgent work.</p>
             <span className="shrink-0 text-sm text-neutral-500">Per 1M tokens</span>
@@ -1561,8 +1571,20 @@ function ModelDetailPage({
               );
             })}
           </div>
+          </>}
         </div>
       </section>
+
+      {isLocalModel && <section className="site-reveal grid gap-8 border-b border-neutral-200 py-12 dark:border-white/10 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-labelledby="local-requirements-heading">
+        <div><h2 id="local-requirements-heading" className="text-xl font-semibold text-neutral-950 dark:text-white">Local requirements</h2><p className="mt-2 text-sm leading-6 text-neutral-500">Review these requirements before downloading the model.</p></div>
+        <div>
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-50">Pico uses your own CPU, GPU, RAM or unified memory, storage, and electricity. Do not download it on a device that does not meet the minimum requirements.</p>
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <div className="rounded-lg border border-neutral-200 p-5 dark:border-white/10"><h3 className="font-semibold text-neutral-950 dark:text-white">Windows</h3><ul className="mt-4 space-y-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">{picoLocalRequirements.windows.map((item) => <li key={item}>{item}</li>)}</ul></div>
+            <div className="rounded-lg border border-neutral-200 p-5 dark:border-white/10"><h3 className="font-semibold text-neutral-950 dark:text-white">Mac</h3><ul className="mt-4 space-y-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">{picoLocalRequirements.mac.map((item) => <li key={item}>{item}</li>)}</ul></div>
+          </div>
+        </div>
+      </section>}
 
       <section className="site-reveal grid gap-8 border-b border-neutral-200 py-12 dark:border-white/10 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-labelledby="capabilities-heading">
         <h2 id="capabilities-heading" className="text-xl font-semibold text-neutral-950 dark:text-white">Capabilities</h2>
@@ -1575,8 +1597,9 @@ function ModelDetailPage({
       </section>
 
       <section className="site-reveal grid gap-8 border-b border-neutral-200 py-12 dark:border-white/10 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-labelledby="api-usage-heading">
-        <h2 id="api-usage-heading" className="text-xl font-semibold text-neutral-950 dark:text-white">API usage</h2>
+        <h2 id="api-usage-heading" className="text-xl font-semibold text-neutral-950 dark:text-white">{isLocalModel ? "Local setup" : "API usage"}</h2>
         <div>
+          {isLocalModel ? <div className="rounded-lg border border-neutral-200 p-5 text-sm leading-7 text-neutral-600 dark:border-white/10 dark:text-neutral-400"><p className="font-semibold text-neutral-950 dark:text-white">Run Pico with LM Studio on your computer.</p><p className="mt-2">Download the Qwen 1.7B model, start LM Studio's local server at <code>http://127.0.0.1:1234/v1</code>, then choose Pico in the Playground. No LingoFusion API key is needed.</p><p className="mt-2">An internet connection may be required for the initial model download or updates. Translation requests then stay on your device.</p></div> : <>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div><p className="text-sm text-neutral-500">Model ID</p><code className="mt-1 block font-mono text-sm text-neutral-950 dark:text-white">{apiModelId}</code></div>
             <button type="button" onClick={() => copyText(requestSnippet, "request")} className="pressable inline-flex items-center gap-2 rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50 dark:border-white/20 dark:text-neutral-200 dark:hover:bg-white/10"><Copy className="h-4 w-4" /> {copied === "request" ? "Copied" : "Copy request"}</button>
@@ -1585,6 +1608,7 @@ function ModelDetailPage({
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             {["/v1/responses", "/v1/translate", "/v1/batch"].map((endpoint) => <div key={endpoint} className="rounded-lg border border-neutral-200 p-4 dark:border-white/10"><p className="font-mono text-sm text-neutral-950 dark:text-white">{endpoint}</p><p className="mt-1 text-xs text-neutral-500">Available</p></div>)}
           </div>
+          </>}
         </div>
       </section>
 
@@ -1629,9 +1653,11 @@ function ModelComparisonCard({ model, pricingMode }: { model: TextModel; pricing
         {model.recommended && <span className="rounded-full bg-neutral-950 px-2 py-1 text-xs font-semibold text-white dark:bg-white dark:text-neutral-950">Recommended</span>}
       </div>
       <dl className="mt-5 grid gap-3 border-t border-neutral-200 pt-5 text-sm dark:border-white/10 sm:grid-cols-2">
-        <div><dt className="text-neutral-500 dark:text-neutral-500">Input per 1M tokens</dt><dd className="mt-1 text-lg font-semibold text-neutral-950 dark:text-neutral-50">{price(model.inputUsd)}</dd></div>
-        <div><dt className="text-neutral-500 dark:text-neutral-500">Output per 1M tokens</dt><dd className="mt-1 text-lg font-semibold text-neutral-950 dark:text-neutral-50">{price(model.outputUsd)}</dd></div>
-        <div className="sm:col-span-2"><dt className="text-neutral-500 dark:text-neutral-500">Pricing mode</dt><dd className="mt-1 font-medium text-neutral-950 dark:text-neutral-50">{pricingMode === "batch" ? "Batch, asynchronous processing" : "Default, real-time processing"}</dd></div>
+        {model.local ? <div className="sm:col-span-2"><dt className="text-neutral-500 dark:text-neutral-500">Local mode</dt><dd className="mt-1 font-medium text-emerald-700 dark:text-emerald-300">Free. Runs on your device with no API credits, token fees, or subscription.</dd></div> : <>
+          <div><dt className="text-neutral-500 dark:text-neutral-500">Input per 1M tokens</dt><dd className="mt-1 text-lg font-semibold text-neutral-950 dark:text-neutral-50">{price(model.inputUsd)}</dd></div>
+          <div><dt className="text-neutral-500 dark:text-neutral-500">Output per 1M tokens</dt><dd className="mt-1 text-lg font-semibold text-neutral-950 dark:text-neutral-50">{price(model.outputUsd)}</dd></div>
+          <div className="sm:col-span-2"><dt className="text-neutral-500 dark:text-neutral-500">Pricing mode</dt><dd className="mt-1 font-medium text-neutral-950 dark:text-neutral-50">{pricingMode === "batch" ? "Batch, asynchronous processing" : "Default, real-time processing"}</dd></div>
+        </>}
       </dl>
     </article>
   );
