@@ -28,8 +28,9 @@ export type ImageModel = {
 };
 
 export const textModels: TextModel[] = [
-  { model: "LingoFusion Pico-1.7B", inputUsd: 0, outputUsd: 0, local: true },
-  { model: "LingoFusion Pico-35B", inputUsd: 0, outputUsd: 0, local: true },
+  { model: "LingoFusion Native-1.7B", inputUsd: 0, outputUsd: 0, local: true },
+  { model: "LingoFusion Native-9B", inputUsd: 0, outputUsd: 0, local: true, recommended: true },
+  { model: "LingoFusion Native-35B", inputUsd: 0, outputUsd: 0, local: true },
   { model: "LingoFusion Nano", inputUsd: 0.15, outputUsd: 0.70 },
   { model: "LingoFusion Lite", inputUsd: 0.75, outputUsd: 3.00 },
   {
@@ -53,15 +54,22 @@ export const textModelsByPricingMode: Record<TextPricingMode, TextModel[]> = {
 };
 
 export const textModelPresentations: Record<string, TextModelPresentation> = {
-  "LingoFusion Pico-1.7B": {
-    image: "/assets/models/lingofusion-pico.svg",
+  "LingoFusion Native-1.7B": {
+    image: "/assets/models/lingofusion-native.svg",
     imageScale: 1.72,
-    capability: "Lightweight local translation for everyday language tasks on most modern computers.",
+    capability: "Free local translation for everyday language tasks on most modern computers.",
     bestFor: "Everyday translation, fast local inference, and lower-memory devices.",
     features: ["1.7B parameters", "32K context", "8 GB RAM minimum", "~1.3 GB download", "Free · Runs locally"],
   },
-  "LingoFusion Pico-35B": {
-    image: "/assets/models/lingofusion-pico.svg",
+  "LingoFusion Native-9B": {
+    image: "/assets/models/lingofusion-native.svg",
+    imageScale: 1.72,
+    capability: "Balanced local translation for most users, designed around mainstream 16 GB-class computers.",
+    bestFor: "Everyday professional translation with a practical quality, speed, and hardware balance.",
+    features: ["9B parameters", "Recommended for most users", "Free · Runs locally", "Build-specific local requirements"],
+  },
+  "LingoFusion Native-35B": {
+    image: "/assets/models/lingofusion-native.svg",
     imageScale: 1.72,
     capability: "High-quality local translation for difficult multilingual work, powered entirely by your own hardware.",
     bestFor: "Difficult translations and powerful local computers.",
@@ -151,8 +159,9 @@ export const latestModels = [
   "ExplainFusion",
   "LingoFusion",
   "LingoFusion Lite",
-  "LingoFusion Pico-1.7B",
-  "LingoFusion Pico-35B",
+  "LingoFusion Native-1.7B",
+  "LingoFusion Native-9B",
+  "LingoFusion Native-35B",
   "LingoFusion Nano",
   "LingoFusion TTS Advanced",
   "LingoFusion Live Translate",
@@ -203,8 +212,9 @@ export const navMenus = {
     "ExplainFusion",
     "LingoFusion",
     "LingoFusion Lite",
-    "LingoFusion Pico-1.7B",
-    "LingoFusion Pico-35B",
+    "LingoFusion Native-1.7B",
+    "LingoFusion Native-9B",
+    "LingoFusion Native-35B",
     "LingoFusion Nano",
     "LingoFusion Live Translate",
     "LingoFusion Transcribe",
@@ -259,9 +269,11 @@ export const modelDetails: Record<string, string> = {
     "Low-cost, fast model for simple translation, extraction, and classification.",
   "LingoFusion Nano":
     "Ultra-efficient model for high-volume utility tasks and latency-sensitive flows.",
-  "LingoFusion Pico-1.7B":
+  "LingoFusion Native-1.7B":
     "Lightweight free local translation for everyday tasks on ordinary computers.",
-  "LingoFusion Pico-35B":
+  "LingoFusion Native-9B":
+    "Balanced free local translation for everyday professional work on mainstream computers.",
+  "LingoFusion Native-35B":
     "Higher-quality free local translation for difficult multilingual work on powerful computers.",
   "LingoFusion TTS Advanced":
     "Expressive multilingual speech generation with strong pronunciation control.",
