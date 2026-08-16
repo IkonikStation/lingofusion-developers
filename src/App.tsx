@@ -718,13 +718,13 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
     recommended: t("recommended"),
   };
 
-  const displayedTextModels = visibleTextModels.map((model) => ({ ...model, input: model.local ? "Free" : displayCurrency(model.inputUsd, true), output: model.local ? "Free" : displayCurrency(model.outputUsd, true), inputTone: priceTone(model.inputUsd), outputTone: priceTone(model.outputUsd) }));
-  const displayedTtsModels = ttsModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit), priceTone: priceTone(model.priceUsd) }));
-  const displayedTranscriptionModels = transcriptionModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit), priceTone: priceTone(model.priceUsd) }));
-  const displayedDubbingModels = dubbingModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit), priceTone: priceTone(model.priceUsd) }));
-  const displayedMusicModels = musicModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit), priceTone: priceTone(model.priceUsd) }));
-  const displayedImageModels = imageModels.map((model) => ({ ...model, price: displayCurrency(model.priceUsd), priceTone: priceTone(model.priceUsd) }));
-  const displayedPdfModels = pdfModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit), priceTone: priceTone(model.priceUsd) }));
+  const displayedTextModels = visibleTextModels.map((model) => ({ ...model, input: model.local ? "Free" : displayCurrency(model.inputUsd, true), output: model.local ? "Free" : displayCurrency(model.outputUsd, true) }));
+  const displayedTtsModels = ttsModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
+  const displayedTranscriptionModels = transcriptionModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
+  const displayedDubbingModels = dubbingModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
+  const displayedMusicModels = musicModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
+  const displayedImageModels = imageModels.map((model) => ({ ...model, price: displayCurrency(model.priceUsd) }));
+  const displayedPdfModels = pdfModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
 
   const textEstimate = useMemo(() => {
     return (inputTokens / 1_000_000) * selectedTextModel.inputUsd + (outputTokens / 1_000_000) * selectedTextModel.outputUsd;
@@ -1129,8 +1129,8 @@ function TextModelGallery({ models, pricingMode, displayPrice, onOpenModel }: {
                 <span className="mt-1 block text-base leading-6 text-neutral-600 dark:text-neutral-400">{presentation?.capability ?? modelDetails[model.model]}</span>
                 <span className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-sm text-neutral-500 dark:text-neutral-500">
                   {model.local ? <span className="font-medium text-emerald-700 dark:text-emerald-300">Free - runs locally on your device</span> : <>
-                    <span>Input <strong className={`font-medium ${priceTone(model.inputUsd)}`}>{displayPrice(model.inputUsd)}</strong> / 1M</span>
-                    <span>Output <strong className={`font-medium ${priceTone(model.outputUsd)}`}>{displayPrice(model.outputUsd)}</strong> / 1M</span>
+                    <span>Input <strong className="font-medium text-neutral-800 dark:text-neutral-200">{displayPrice(model.inputUsd)}</strong> / 1M</span>
+                    <span>Output <strong className="font-medium text-neutral-800 dark:text-neutral-200">{displayPrice(model.outputUsd)}</strong> / 1M</span>
                   </>}
                 </span>
               </span>
@@ -1548,8 +1548,8 @@ function ModelDetailPage({
             <span className="shrink-0 text-sm text-neutral-500">Per 1M tokens</span>
           </div>
           <div className="mt-6 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-5 dark:border-white/10 dark:bg-white/[0.04]"><p className="text-sm text-neutral-500">Input</p><p className={`mt-2 text-2xl font-semibold ${priceTone(activePrice.inputUsd)}`}>{price(activePrice.inputUsd)}</p></div>
-            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-5 dark:border-white/10 dark:bg-white/[0.04]"><p className="text-sm text-neutral-500">Output</p><p className={`mt-2 text-2xl font-semibold ${priceTone(activePrice.outputUsd)}`}>{price(activePrice.outputUsd)}</p></div>
+            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-5 dark:border-white/10 dark:bg-white/[0.04]"><p className="text-sm text-neutral-500">Input</p><p className="mt-2 text-2xl font-semibold text-neutral-950 dark:text-white">{price(activePrice.inputUsd)}</p></div>
+            <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-5 dark:border-white/10 dark:bg-white/[0.04]"><p className="text-sm text-neutral-500">Output</p><p className="mt-2 text-2xl font-semibold text-neutral-950 dark:text-white">{price(activePrice.outputUsd)}</p></div>
             <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-5 dark:border-white/10 dark:bg-white/[0.04]"><p className="text-sm text-neutral-500">{pricingMode === "batch" ? "Turnaround" : "Response"}</p><p className="mt-2 text-2xl font-semibold text-neutral-950 dark:text-white">{pricingMode === "batch" ? "Up to 24h" : "Immediate"}</p></div>
           </div>
 
@@ -1567,7 +1567,7 @@ function ModelDetailPage({
                 <div key={model.model} className="grid grid-cols-[8rem_minmax(4rem,1fr)_4rem] items-center gap-3 text-sm">
                   <span className={`truncate ${model.model === modelName ? "font-semibold text-neutral-950 dark:text-white" : "text-neutral-600 dark:text-neutral-400"}`}>{model.model.replace("LingoFusion ", "")}</span>
                   <span className="h-2 overflow-hidden rounded-full bg-neutral-200 dark:bg-white/10"><span className={`block h-full rounded-full ${model.model === modelName ? "bg-neutral-950 dark:bg-white" : "bg-neutral-500"}`} style={{ width: `${visualWidth}%` }} /></span>
-                  <span className={`text-right font-mono text-xs font-medium ${priceTone(value)}`}>{model.local ? "Free" : price(value)}</span>
+                  <span className="text-right font-mono text-xs text-neutral-600 dark:text-neutral-400">{model.local ? "Free" : price(value)}</span>
                 </div>
               );
             })}
@@ -1655,8 +1655,8 @@ function ModelComparisonCard({ model, pricingMode }: { model: TextModel; pricing
       </div>
       <dl className="mt-5 grid gap-3 border-t border-neutral-200 pt-5 text-sm dark:border-white/10 sm:grid-cols-2">
         {model.local ? <div className="sm:col-span-2"><dt className="text-neutral-500 dark:text-neutral-500">Local mode</dt><dd className="mt-1 font-medium text-emerald-700 dark:text-emerald-300">Free. Runs on your device with no API credits, token fees, or subscription.</dd></div> : <>
-          <div><dt className="text-neutral-500 dark:text-neutral-500">Input per 1M tokens</dt><dd className={`mt-1 text-lg font-semibold ${priceTone(model.inputUsd)}`}>{price(model.inputUsd)}</dd></div>
-          <div><dt className="text-neutral-500 dark:text-neutral-500">Output per 1M tokens</dt><dd className={`mt-1 text-lg font-semibold ${priceTone(model.outputUsd)}`}>{price(model.outputUsd)}</dd></div>
+          <div><dt className="text-neutral-500 dark:text-neutral-500">Input per 1M tokens</dt><dd className="mt-1 text-lg font-semibold text-neutral-950 dark:text-neutral-50">{price(model.inputUsd)}</dd></div>
+          <div><dt className="text-neutral-500 dark:text-neutral-500">Output per 1M tokens</dt><dd className="mt-1 text-lg font-semibold text-neutral-950 dark:text-neutral-50">{price(model.outputUsd)}</dd></div>
           <div className="sm:col-span-2"><dt className="text-neutral-500 dark:text-neutral-500">Pricing mode</dt><dd className="mt-1 font-medium text-neutral-950 dark:text-neutral-50">{pricingMode === "batch" ? "Batch, asynchronous processing" : "Default, real-time processing"}</dd></div>
         </>}
       </dl>
