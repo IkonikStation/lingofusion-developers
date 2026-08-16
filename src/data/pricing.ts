@@ -2,6 +2,7 @@ export type TextModel = {
   model: string;
   inputUsd: number;
   outputUsd: number;
+  local?: boolean;
   recommended?: boolean;
 };
 
@@ -27,7 +28,7 @@ export type ImageModel = {
 };
 
 export const textModels: TextModel[] = [
-  { model: "LingoFusion Pico", inputUsd: 0.003, outputUsd: 0.014 },
+  { model: "LingoFusion Pico", inputUsd: 0, outputUsd: 0, local: true },
   { model: "LingoFusion Nano", inputUsd: 0.15, outputUsd: 0.70 },
   { model: "LingoFusion Lite", inputUsd: 0.75, outputUsd: 3.00 },
   {
@@ -54,9 +55,9 @@ export const textModelPresentations: Record<string, TextModelPresentation> = {
   "LingoFusion Pico": {
     image: "/assets/models/lingofusion-pico.svg",
     imageScale: 1.72,
-    capability: "Extremely fast, ultra-low-cost translation for simple language tasks at massive scale.",
-    bestFor: "Simple translations, routing, tagging, and lightweight language tasks where cost and speed matter most.",
-    features: ["Ultra-low-cost translation", "Fast classification", "Language detection", "High-volume processing"],
+    capability: "Free local translation for simple language tasks, running entirely on your own computer.",
+    bestFor: "Simple translations and lightweight language work when you want no API charges, limits, or cloud processing.",
+    features: ["Free local translation", "No API credits or token fees", "Works offline after download", "Uses your CPU, GPU, memory, storage, and electricity"],
   },
   "LingoFusion Nano": {
     image: "/assets/models/lingofusion-nano.png",
@@ -246,10 +247,10 @@ export const modelDetails: Record<string, string> = {
     "Recommended default model for most text generation and translation workloads.",
   "LingoFusion Lite":
     "Low-cost, fast model for simple translation, extraction, and classification.",
-  "LingoFusion Pico":
-    "Extremely fast, ultra-low-cost model for simple translations and lightweight language tasks.",
   "LingoFusion Nano":
     "Ultra-efficient model for high-volume utility tasks and latency-sensitive flows.",
+  "LingoFusion Pico":
+    "Extremely fast, ultra-low-cost model for simple translations and lightweight language tasks.",
   "LingoFusion TTS Advanced":
     "Expressive multilingual speech generation with strong pronunciation control.",
   "LingoFusion Live Translate":
