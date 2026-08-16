@@ -31,8 +31,6 @@ const port = Number(process.env.LINGOFUSION_API_PORT || 8787);
 const MICRO_CENTS_PER_DOLLAR = 100_000_000;
 
 const textModels = [
-  { model: "LingoFusion Pico-1.7B", input: 0, output: 0 },
-  { model: "LingoFusion Pico-35B", input: 0, output: 0 },
   { model: "LingoFusion Nano", input: 0.15, output: 0.70 },
   { model: "LingoFusion Lite", input: 0.75, output: 3.00 },
   { model: "LingoFusion", input: 3.50, output: 20.00 },
@@ -58,8 +56,6 @@ const lmStudio = {
 };
 
 const realModelRouting = {
-  "LingoFusion Pico-1.7B": { provider: "lm_studio" },
-  "LingoFusion Pico-35B": { provider: "lm_studio" },
   "LingoFusion Nano": { provider: "openai", model: "gpt-5-nano" },
   "LingoFusion Lite": { provider: "openai", model: "gpt-5-mini" },
   "LingoFusion": { provider: "deepseek", model: "deepseek-v4-flash", thinking: "disabled" },
@@ -269,7 +265,7 @@ function lmStudioErrorFromConnection(error) {
   return providerError("lm_studio_server_not_running", 503, "LM Studio is not running or its local server is unavailable. Start the server in LM Studio and try again.");
 }
 
-async function resolveLmStudioModel(modelName = "LingoFusion Pico-1.7B") {
+async function resolveLmStudioModel(modelName = "LingoFusion Native-1.7B") {
   let response;
   try {
     response = await fetch(`${lmStudio.baseUrl}/models`, {
@@ -287,9 +283,9 @@ async function resolveLmStudioModel(modelName = "LingoFusion Pico-1.7B") {
 
   const models = (payload.data || []).filter((model) => typeof model?.id === "string" && model.id.trim());
   if (models.length === 0) {
-    throw providerError("lm_studio_no_model_loaded", 503, "No model is loaded in LM Studio. Load the selected Pico model, start the local server, and try again.");
+    throw providerError("lm_studio_no_model_loaded", 503, "No model is loaded in LM Studio. Load the selected Native model, start the local server, and try again.");
   }
-  const matcher = modelName === "LingoFusion Pico-35B" ? /(?:qwen|pico).*35b/i : /qwen.*1[._-]?7b/i;
+  const matcher = modelName === "LingoFusion Native-35B" ? /(?:qwen|native).*35b/i : modelName === "LingoFusion Native-9B" ? /qwen.*9b/i : /qwen.*1[._-]?7b/i;
   const localModel = models.find((model) => matcher.test(model.id));
   if (!localModel) {
     throw providerError("lm_studio_model_not_loaded", 503, `${modelName} is not available from LM Studio. Load it in LM Studio and try again.`);
@@ -376,7 +372,7 @@ async function runLmStudioTranslation({ modelName, input, fromLanguage, toLangua
     const payload = await response.json().catch(() => ({}));
     const details = JSON.stringify(payload).toLowerCase();
     if (response.status === 400 || response.status === 404 || details.includes("model")) {
-      throw providerError("lm_studio_invalid_model_id", 502, "LM Studio rejected the loaded model ID. Reload Qwen 1.7B in LM Studio and try again.");
+      throw providerError("lm_studio_invalid_model_id", 502, "LM Studio rejected the loaded model ID. Reload the matching Native model in LM Studio and try again.");
     }
     throw providerError("lm_studio_request_failed", 502, "LM Studio could not complete the translation request.");
   }
@@ -993,7 +989,7 @@ async function route(req, res) {
       if (!text) return send(res, 400, { error: "invalid_request", message: "input is required", request_id: requestId });
       if (text.length > 20_000) return send(res, 413, { error: "input_too_large", message: "Tokenizer input is limited to 20,000 characters.", request_id: requestId });
 
-      if (model.model.startsWith("LingoFusion Pico-")) {
+      if (model.model.startsWith("LingoFusion Native-")) {
         const { modelId, tokenIds } = await tokenizeWithLmStudio(text, model.model);
         return send(res, 200, {
           model: model.model,
