@@ -51,7 +51,7 @@ import type { TextModel, TextModelPresentation, TextPricingMode } from "./data/p
 import { priceForBillingInterval, subscriptionPlans } from "./data/subscriptions";
 import type { BillingInterval, ProVariantKey } from "./data/subscriptions";
 import { submitSalesRequest } from "./data/sales";
-import { picoLocalRequirements } from "./data/picoLocal";
+import { picoLocalModels } from "./data/picoLocal";
 import { modelPriceTone } from "./data/priceTone";
 
 const billingNotes = [
@@ -1140,11 +1140,12 @@ function TextModelGallery({ models, pricingMode, displayPrice, onOpenModel }: {
               <span className="min-w-0 flex-1 pt-0.5">
                 <span className="flex flex-wrap items-center gap-2">
                   <span className="text-xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50">{model.model}</span>
+                  {model.local && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200">{picoLocalModels[model.model as keyof typeof picoLocalModels].badge}</span>}
                   {model.recommended && <span className="rounded-full bg-neutral-950 px-2 py-0.5 text-[10px] font-semibold text-white dark:bg-white dark:text-neutral-950">Recommended</span>}
                 </span>
                 <span className="mt-1 block text-base leading-6 text-neutral-600 dark:text-neutral-400">{presentation?.capability ?? modelDetails[model.model]}</span>
                 <span className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-sm text-neutral-500 dark:text-neutral-500">
-                  {model.local ? <span className="font-medium text-emerald-700 dark:text-emerald-300">Free - runs locally on your device</span> : <>
+                  {model.local ? <><span className="font-medium text-emerald-700 dark:text-emerald-300">Free · Runs locally</span><span>{picoLocalModels[model.model as keyof typeof picoLocalModels].parameters}</span><span>{picoLocalModels[model.model as keyof typeof picoLocalModels].context}</span><span>{picoLocalModels[model.model as keyof typeof picoLocalModels].downloadSize} download</span></> : <>
                     <span>Input <strong className="font-medium text-neutral-800 dark:text-neutral-200">{displayPrice(model.inputUsd)}</strong> / 1M</span>
                     <span>Output <strong className="font-medium text-neutral-800 dark:text-neutral-200">{displayPrice(model.outputUsd)}</strong> / 1M</span>
                   </>}
@@ -1360,6 +1361,7 @@ function ModelComparisonPage({ onOpenModel }: { onOpenModel: (model: string) => 
 
 function ModelGalleryItem({ model, onOpen }: { model: TextModel; onOpen: () => void }) {
   const presentation = textModelPresentations[model.model];
+  const localModel = model.local ? picoLocalModels[model.model as keyof typeof picoLocalModels] : null;
 
   return (
     <button type="button" onClick={onOpen} className="model-catalog-item pressable group flex min-w-0 items-start gap-5 rounded-lg p-2 text-left opacity-90 outline-none transition hover:opacity-100 focus-visible:ring-2 focus-visible:ring-neutral-950 focus-visible:ring-offset-4 dark:focus-visible:ring-white dark:focus-visible:ring-offset-[#0a0a0a]">
@@ -1367,9 +1369,11 @@ function ModelGalleryItem({ model, onOpen }: { model: TextModel; onOpen: () => v
       <div className="min-w-0 flex-1 pt-0.5">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50">{model.model}</h3>
+          {localModel && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200">{localModel.badge}</span>}
           {model.recommended && <span className="rounded-full bg-neutral-900 px-2 py-0.5 text-[11px] font-semibold text-white dark:bg-white dark:text-neutral-950">Recommended</span>}
         </div>
         <p className="mt-1 text-base leading-6 text-neutral-600 dark:text-neutral-400">{presentation?.capability ?? modelDetails[model.model]}</p>
+        {localModel && <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-sm text-neutral-500 dark:text-neutral-400"><span>{localModel.parameters}</span><span>{localModel.context}</span>{localModel.maxOutput && <span>{localModel.maxOutput}</span>}<span>{localModel.downloadSize} download</span><span className="font-medium text-emerald-700 dark:text-emerald-300">Free · Local</span></div>}
       </div>
     </button>
   );
@@ -1388,16 +1392,27 @@ type ModelProfileSpec = {
 };
 
 const modelProfileSpecs: Record<string, ModelProfileSpec> = {
-  "LingoFusion Pico": {
+  "LingoFusion Pico-1.7B": {
     reasoning: "Minimal",
     reasoningLevel: 1,
     speed: "Hardware-dependent",
     speedLevel: 0,
-    contextWindow: "128,000",
+    contextWindow: "32,000",
     maxOutput: "32,000",
     quality: "Essential",
-    description: "LingoFusion Pico is the fastest and most cost-efficient model in the family, designed for simple translation and lightweight language tasks at high volume.",
-    limitations: ["Best for short, straightforward source text", "Limited contextual analysis", "Not intended for specialized terminology or document-scale review"],
+    description: "LingoFusion Pico-1.7B runs directly on your computer for lightweight, everyday translation without the LingoFusion cloud API, API credits, or monthly source-word allowances.",
+    limitations: ["Performance depends on your local hardware", "Best for everyday and straightforward source text", "Not intended for specialist terminology or document-scale review"],
+  },
+  "LingoFusion Pico-35B": {
+    reasoning: "Higher",
+    reasoningLevel: 4,
+    speed: "Hardware-dependent",
+    speedLevel: 0,
+    contextWindow: "131,072",
+    maxOutput: "32,768",
+    quality: "Highest local",
+    description: "LingoFusion Pico-35B runs directly on your computer and is designed to provide the highest local translation quality in the Pico family, without consuming cloud API credits or monthly source-word allowances.",
+    limitations: ["Requires powerful local hardware and substantial storage", "Performance depends on CPU, GPU, memory, and local runtime settings", "No cloud fallback is used if the local model is unavailable"],
   },
   "LingoFusion Nano": {
     reasoning: "Light",
@@ -1498,6 +1513,7 @@ function ModelDetailPage({
   const price = (value: number) => formatCurrencyAmount(value, "USD", 1, true);
   const apiModelId = modelSlug(modelName);
   const isLocalModel = Boolean(defaultModel.local);
+  const localModel = isLocalModel ? picoLocalModels[modelName as keyof typeof picoLocalModels] : null;
   const activePrice = pricingMode === "batch" ? batchModel : defaultModel;
   const comparisonModels = textModelsByPricingMode[pricingMode];
   const comparisonMax = Math.max(...comparisonModels.map((model) => model[comparisonMetric === "input" ? "inputUsd" : "outputUsd"]));
@@ -1628,9 +1644,10 @@ function ModelDetailPage({
         <div><h2 id="local-requirements-heading" className="text-xl font-semibold text-neutral-950 dark:text-white">Local requirements</h2><p className="mt-2 text-sm leading-6 text-neutral-500">Review these requirements before downloading the model.</p></div>
         <div>
           <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-50">Pico uses your own CPU, GPU, RAM or unified memory, storage, and electricity. Do not download it on a device that does not meet the minimum requirements.</p>
+          {localModel && <div className="mt-4 flex flex-wrap gap-2 text-xs font-medium text-neutral-600 dark:text-neutral-300"><span className="rounded-full border border-neutral-200 px-2.5 py-1 dark:border-white/10">{localModel.parameters}</span><span className="rounded-full border border-neutral-200 px-2.5 py-1 dark:border-white/10">{localModel.context}</span>{localModel.maxOutput && <span className="rounded-full border border-neutral-200 px-2.5 py-1 dark:border-white/10">{localModel.maxOutput}</span>}<span className="rounded-full border border-neutral-200 px-2.5 py-1 dark:border-white/10">{localModel.downloadSize} download</span></div>}
           <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <div className="rounded-lg border border-neutral-200 p-5 dark:border-white/10"><h3 className="font-semibold text-neutral-950 dark:text-white">Windows</h3><ul className="mt-4 space-y-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">{picoLocalRequirements.windows.map((item) => <li key={item}>{item}</li>)}</ul></div>
-            <div className="rounded-lg border border-neutral-200 p-5 dark:border-white/10"><h3 className="font-semibold text-neutral-950 dark:text-white">Mac</h3><ul className="mt-4 space-y-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">{picoLocalRequirements.mac.map((item) => <li key={item}>{item}</li>)}</ul></div>
+            <div className="rounded-lg border border-neutral-200 p-5 dark:border-white/10"><h3 className="font-semibold text-neutral-950 dark:text-white">Windows</h3><ul className="mt-4 space-y-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">{localModel?.windows.map((item) => <li key={item}>{item}</li>)}</ul></div>
+            <div className="rounded-lg border border-neutral-200 p-5 dark:border-white/10"><h3 className="font-semibold text-neutral-950 dark:text-white">Mac</h3><ul className="mt-4 space-y-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">{localModel?.mac.map((item) => <li key={item}>{item}</li>)}</ul></div>
           </div>
         </div>
       </section>}
