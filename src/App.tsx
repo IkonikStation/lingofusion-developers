@@ -1344,7 +1344,7 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     reasoningLevel: 1,
     speed: "Hardware-dependent",
     speedLevel: 0,
-    contextWindow: "400,000",
+    contextWindow: "32,000",
     maxOutput: "128,000",
     quality: "Essential",
     description: "LingoFusion Pico is the fastest and most cost-efficient model in the family, designed for simple translation and lightweight language tasks at high volume.",
