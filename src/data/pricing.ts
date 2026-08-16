@@ -55,7 +55,7 @@ export const textModelPresentations: Record<string, TextModelPresentation> = {
   "LingoFusion Pico": {
     image: "/assets/models/lingofusion-pico.svg",
     imageScale: 1.72,
-    capability: "Free local translation for simple language tasks, running entirely on your own computer.",
+    capability: "Free local translation for simple language tasks, with speed determined by your computer's hardware.",
     bestFor: "Simple translations and lightweight language work when you want no API charges, limits, or cloud processing.",
     features: ["Free local translation", "No API credits or token fees", "Works offline after download", "Uses your CPU, GPU, memory, storage, and electricity"],
   },
