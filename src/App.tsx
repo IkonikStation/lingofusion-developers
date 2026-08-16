@@ -719,6 +719,8 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
   };
 
   const displayedTextModels = visibleTextModels.map((model) => ({ ...model, input: model.local ? "Free" : displayCurrency(model.inputUsd, true), output: model.local ? "Free" : displayCurrency(model.outputUsd, true) }));
+  const displayedOpenSourceModels = displayedTextModels.filter((model) => model.local);
+  const displayedCloudTextModels = displayedTextModels.filter((model) => !model.local);
   const displayedTtsModels = ttsModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
   const displayedTranscriptionModels = transcriptionModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
   const displayedDubbingModels = dubbingModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
@@ -850,11 +852,20 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
             />
           </SectionCalculator>
           <PricingCard
+            key="open-source-text"
+            title="Open source models"
+            unit="Free local models"
+            kind="text"
+            rows={displayedOpenSourceModels}
+            labels={pricingLabels}
+            headerNote="Pico runs entirely on your own computer. No API credits, token fees, or subscription are required."
+          />
+          <PricingCard
             key={`text-${textPricingMode}-${currencyPresentationKey}`}
             title={t("textModels")}
             unit={t("pricesPer1MTokens")}
             kind="text"
-            rows={displayedTextModels}
+            rows={displayedCloudTextModels}
             labels={pricingLabels}
             tableClassName="pricing-table-change"
             headerAction={
@@ -1101,17 +1112,22 @@ function TextModelGallery({ models, pricingMode, displayPrice, onOpenModel }: {
   displayPrice: (usdAmount: number) => string;
   onOpenModel: (model: string) => void;
 }) {
+  const openSourceModels = models.filter((model) => model.local);
+  const cloudModels = models.filter((model) => !model.local);
   return (
     <section className="mb-8" aria-labelledby="pricing-model-gallery-heading">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
         <div>
-          <h2 id="pricing-model-gallery-heading" className="text-2xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50">LingoFusion models</h2>
-          <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">Our text models, designed for fast, capable multilingual work.</p>
+          <h2 id="pricing-model-gallery-heading" className="text-2xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50">Model catalog</h2>
+          <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">Open source and cloud models for multilingual work.</p>
         </div>
         <span className="text-xs font-medium text-neutral-500 dark:text-neutral-500">{pricingMode === "batch" ? "Batch" : "Default"} pricing - open a model for details</span>
       </div>
-      <div className="mt-8 grid gap-x-12 gap-y-7 md:grid-cols-2">
-        {models.map((model) => {
+      <div className="mt-8">
+        <h3 className="text-lg font-semibold text-neutral-950 dark:text-neutral-50">Open source models</h3>
+        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">Run these models locally on your own hardware.</p>
+        <div className="mt-5 grid gap-x-12 gap-y-7 md:grid-cols-2">
+        {openSourceModels.map((model) => {
           const presentation = textModelPresentations[model.model];
           return (
             <button
@@ -1137,6 +1153,26 @@ function TextModelGallery({ models, pricingMode, displayPrice, onOpenModel }: {
             </button>
           );
         })}
+        </div>
+      </div>
+      <div className="mt-10 border-t border-neutral-200 pt-8 dark:border-white/10">
+        <h3 className="text-lg font-semibold text-neutral-950 dark:text-neutral-50">LingoFusion cloud models</h3>
+        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">Managed models available through the LingoFusion API.</p>
+        <div className="mt-5 grid gap-x-12 gap-y-7 md:grid-cols-2">
+        {cloudModels.map((model) => {
+          const presentation = textModelPresentations[model.model];
+          return (
+            <button key={model.model} type="button" onClick={() => onOpenModel(model.model)} className="model-catalog-item pressable group flex min-w-0 items-start gap-5 rounded-lg p-2 text-left opacity-90 outline-none transition hover:opacity-100 focus-visible:ring-2 focus-visible:ring-neutral-950 focus-visible:ring-offset-4 dark:focus-visible:ring-white dark:focus-visible:ring-offset-[#0a0a0a]">
+              <ModelIcon presentation={presentation} />
+              <span className="min-w-0 flex-1 pt-0.5">
+                <span className="flex flex-wrap items-center gap-2"><span className="text-xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50">{model.model}</span>{model.recommended && <span className="rounded-full bg-neutral-950 px-2 py-0.5 text-[10px] font-semibold text-white dark:bg-white dark:text-neutral-950">Recommended</span>}</span>
+                <span className="mt-1 block text-base leading-6 text-neutral-600 dark:text-neutral-400">{presentation?.capability ?? modelDetails[model.model]}</span>
+                <span className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-sm text-neutral-500 dark:text-neutral-500"><span>Input <strong className="font-medium text-neutral-800 dark:text-neutral-200">{displayPrice(model.inputUsd)}</strong> / 1M</span><span>Output <strong className="font-medium text-neutral-800 dark:text-neutral-200">{displayPrice(model.outputUsd)}</strong> / 1M</span></span>
+              </span>
+            </button>
+          );
+        })}
+        </div>
       </div>
     </section>
   );
@@ -1248,6 +1284,8 @@ function ModelComparisonPage({ onOpenModel }: { onOpenModel: (model: string) => 
   const [leftModelName, setLeftModelName] = useState("LingoFusion");
   const [rightModelName, setRightModelName] = useState("LingoFusion Pro");
   const models = textModelsByPricingMode[pricingMode];
+  const openSourceModels = models.filter((model) => model.local);
+  const cloudModels = models.filter((model) => !model.local);
   const leftModel = models.find((model) => model.model === leftModelName) ?? models[2];
   const rightModel = models.find((model) => model.model === rightModelName) ?? models[3];
 
@@ -1269,11 +1307,21 @@ function ModelComparisonPage({ onOpenModel }: { onOpenModel: (model: string) => 
 
       <section className="site-reveal mt-10" aria-labelledby="model-gallery-heading">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:gap-3">
-          <h2 id="model-gallery-heading" className="text-lg font-semibold text-neutral-950 dark:text-neutral-50">Translation models</h2>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">LingoFusion's text models for multilingual tasks at every scale.</p>
+          <h2 id="model-gallery-heading" className="text-lg font-semibold text-neutral-950 dark:text-neutral-50">Open source models</h2>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">Run locally on your own hardware.</p>
         </div>
         <div className="mt-8 grid gap-x-12 gap-y-7 md:grid-cols-2">
-          {models.map((model) => <ModelGalleryItem key={model.model} model={model} onOpen={() => onOpenModel(model.model)} />)}
+          {openSourceModels.map((model) => <ModelGalleryItem key={model.model} model={model} onOpen={() => onOpenModel(model.model)} />)}
+        </div>
+      </section>
+
+      <section className="site-reveal mt-10 border-t border-neutral-200 pt-8 dark:border-white/10" aria-labelledby="cloud-model-gallery-heading">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:gap-3">
+          <h2 id="cloud-model-gallery-heading" className="text-lg font-semibold text-neutral-950 dark:text-neutral-50">LingoFusion cloud models</h2>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">Managed text models for multilingual tasks at every scale.</p>
+        </div>
+        <div className="mt-8 grid gap-x-12 gap-y-7 md:grid-cols-2">
+          {cloudModels.map((model) => <ModelGalleryItem key={model.model} model={model} onOpen={() => onOpenModel(model.model)} />)}
         </div>
       </section>
 
