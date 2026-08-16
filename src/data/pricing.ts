@@ -28,7 +28,8 @@ export type ImageModel = {
 };
 
 export const textModels: TextModel[] = [
-  { model: "LingoFusion Pico", inputUsd: 0, outputUsd: 0, local: true },
+  { model: "LingoFusion Pico-1.7B", inputUsd: 0, outputUsd: 0, local: true },
+  { model: "LingoFusion Pico-35B", inputUsd: 0, outputUsd: 0, local: true },
   { model: "LingoFusion Nano", inputUsd: 0.15, outputUsd: 0.70 },
   { model: "LingoFusion Lite", inputUsd: 0.75, outputUsd: 3.00 },
   {
@@ -52,12 +53,19 @@ export const textModelsByPricingMode: Record<TextPricingMode, TextModel[]> = {
 };
 
 export const textModelPresentations: Record<string, TextModelPresentation> = {
-  "LingoFusion Pico": {
+  "LingoFusion Pico-1.7B": {
     image: "/assets/models/lingofusion-pico.svg",
     imageScale: 1.72,
-    capability: "Free local translation for simple language tasks, with speed determined by your computer's hardware.",
-    bestFor: "Simple translations and lightweight language work when you want no API charges, limits, or cloud processing.",
-    features: ["Free local translation", "No API credits or token fees", "Works offline after download", "Uses your CPU, GPU, memory, storage, and electricity"],
+    capability: "Lightweight local translation for everyday language tasks on most modern computers.",
+    bestFor: "Everyday translation, fast local inference, and lower-memory devices.",
+    features: ["1.7B parameters", "32K context", "8 GB RAM minimum", "~1.3 GB download", "Free · Runs locally"],
+  },
+  "LingoFusion Pico-35B": {
+    image: "/assets/models/lingofusion-pico.svg",
+    imageScale: 1.72,
+    capability: "High-quality local translation for difficult multilingual work, powered entirely by your own hardware.",
+    bestFor: "Difficult translations and powerful local computers.",
+    features: ["35B total · ~3B active parameters", "MoE architecture", "128K context · 32K max output", "24 GB memory minimum", "~15 GB download", "Free · Runs locally"],
   },
   "LingoFusion Nano": {
     image: "/assets/models/lingofusion-nano.png",
@@ -143,7 +151,8 @@ export const latestModels = [
   "ExplainFusion",
   "LingoFusion",
   "LingoFusion Lite",
-  "LingoFusion Pico",
+  "LingoFusion Pico-1.7B",
+  "LingoFusion Pico-35B",
   "LingoFusion Nano",
   "LingoFusion TTS Advanced",
   "LingoFusion Live Translate",
@@ -194,7 +203,8 @@ export const navMenus = {
     "ExplainFusion",
     "LingoFusion",
     "LingoFusion Lite",
-    "LingoFusion Pico",
+    "LingoFusion Pico-1.7B",
+    "LingoFusion Pico-35B",
     "LingoFusion Nano",
     "LingoFusion Live Translate",
     "LingoFusion Transcribe",
@@ -249,8 +259,10 @@ export const modelDetails: Record<string, string> = {
     "Low-cost, fast model for simple translation, extraction, and classification.",
   "LingoFusion Nano":
     "Ultra-efficient model for high-volume utility tasks and latency-sensitive flows.",
-  "LingoFusion Pico":
-    "Extremely fast, ultra-low-cost model for simple translations and lightweight language tasks.",
+  "LingoFusion Pico-1.7B":
+    "Lightweight free local translation for everyday tasks on ordinary computers.",
+  "LingoFusion Pico-35B":
+    "Higher-quality free local translation for difficult multilingual work on powerful computers.",
   "LingoFusion TTS Advanced":
     "Expressive multilingual speech generation with strong pronunciation control.",
   "LingoFusion Live Translate":
