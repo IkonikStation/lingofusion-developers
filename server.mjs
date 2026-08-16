@@ -31,7 +31,8 @@ const port = Number(process.env.LINGOFUSION_API_PORT || 8787);
 const MICRO_CENTS_PER_DOLLAR = 100_000_000;
 
 const textModels = [
-  { model: "LingoFusion Pico", input: 0, output: 0 },
+  { model: "LingoFusion Pico-1.7B", input: 0, output: 0 },
+  { model: "LingoFusion Pico-35B", input: 0, output: 0 },
   { model: "LingoFusion Nano", input: 0.15, output: 0.70 },
   { model: "LingoFusion Lite", input: 0.75, output: 3.00 },
   { model: "LingoFusion", input: 3.50, output: 20.00 },
@@ -57,7 +58,8 @@ const lmStudio = {
 };
 
 const realModelRouting = {
-  "LingoFusion Pico": { provider: "lm_studio" },
+  "LingoFusion Pico-1.7B": { provider: "lm_studio" },
+  "LingoFusion Pico-35B": { provider: "lm_studio" },
   "LingoFusion Nano": { provider: "openai", model: "gpt-5-nano" },
   "LingoFusion Lite": { provider: "openai", model: "gpt-5-mini" },
   "LingoFusion": { provider: "deepseek", model: "deepseek-v4-flash", thinking: "disabled" },
@@ -267,7 +269,7 @@ function lmStudioErrorFromConnection(error) {
   return providerError("lm_studio_server_not_running", 503, "LM Studio is not running or its local server is unavailable. Start the server in LM Studio and try again.");
 }
 
-async function resolveLmStudioModel() {
+async function resolveLmStudioModel(modelName = "LingoFusion Pico-1.7B") {
   let response;
   try {
     response = await fetch(`${lmStudio.baseUrl}/models`, {
@@ -285,13 +287,14 @@ async function resolveLmStudioModel() {
 
   const models = (payload.data || []).filter((model) => typeof model?.id === "string" && model.id.trim());
   if (models.length === 0) {
-    throw providerError("lm_studio_no_model_loaded", 503, "No model is loaded in LM Studio. Load Qwen 1.7B, start the local server, and try again.");
+    throw providerError("lm_studio_no_model_loaded", 503, "No model is loaded in LM Studio. Load the selected Pico model, start the local server, and try again.");
   }
-  const qwenModel = models.find((model) => /qwen.*1[._-]?7b/i.test(model.id));
-  if (!qwenModel) {
-    throw providerError("lm_studio_qwen_not_loaded", 503, "Qwen 1.7B is not available from LM Studio. Load it in LM Studio and try again.");
+  const matcher = modelName === "LingoFusion Pico-35B" ? /(?:qwen|pico).*35b/i : /qwen.*1[._-]?7b/i;
+  const localModel = models.find((model) => matcher.test(model.id));
+  if (!localModel) {
+    throw providerError("lm_studio_model_not_loaded", 503, `${modelName} is not available from LM Studio. Load it in LM Studio and try again.`);
   }
-  return qwenModel.id;
+  return localModel.id;
 }
 
 function lmStudioSdkBaseUrl() {
@@ -301,8 +304,8 @@ function lmStudioSdkBaseUrl() {
   return baseUrl.toString().replace(/\/$/, "");
 }
 
-async function tokenizeWithLmStudio(text) {
-  const modelId = await resolveLmStudioModel();
+async function tokenizeWithLmStudio(text, modelName) {
+  const modelId = await resolveLmStudioModel(modelName);
   try {
     const client = new LMStudioClient({ baseUrl: lmStudioSdkBaseUrl() });
     const model = await client.llm.model(modelId);
@@ -346,8 +349,8 @@ async function readLmStudioStream(response) {
   return { outputText: outputText.trim(), usage };
 }
 
-async function runLmStudioTranslation({ input, fromLanguage, toLanguage, tone, stream }) {
-  const model = await resolveLmStudioModel();
+async function runLmStudioTranslation({ modelName, input, fromLanguage, toLanguage, tone, stream }) {
+  const model = await resolveLmStudioModel(modelName);
   const systemPrompt = buildTranslationSystemPrompt({ fromLanguage, toLanguage, tone });
   let response;
   try {
@@ -404,7 +407,7 @@ async function runRealTranslation({ modelName, input, fromLanguage, toLanguage, 
   const route = realModelRouting[modelName];
   if (!route) throw providerError("unsupported_model", 400, "This model is not configured for live execution.");
   if (route.provider === "lm_studio") {
-    return runLmStudioTranslation({ input, fromLanguage, toLanguage, tone, stream });
+    return runLmStudioTranslation({ modelName, input, fromLanguage, toLanguage, tone, stream });
   }
   const systemPrompt = buildTranslationSystemPrompt({ fromLanguage, toLanguage, tone });
 
@@ -990,8 +993,8 @@ async function route(req, res) {
       if (!text) return send(res, 400, { error: "invalid_request", message: "input is required", request_id: requestId });
       if (text.length > 20_000) return send(res, 413, { error: "input_too_large", message: "Tokenizer input is limited to 20,000 characters.", request_id: requestId });
 
-      if (model.model === "LingoFusion Pico") {
-        const { modelId, tokenIds } = await tokenizeWithLmStudio(text);
+      if (model.model.startsWith("LingoFusion Pico-")) {
+        const { modelId, tokenIds } = await tokenizeWithLmStudio(text, model.model);
         return send(res, 200, {
           model: model.model,
           tokenizer_model: modelId,
