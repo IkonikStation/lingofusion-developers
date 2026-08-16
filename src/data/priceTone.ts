@@ -6,7 +6,7 @@ export function modelPriceTone(modelName: string) {
     LingoFusion: "text-blue-700 dark:text-blue-300",
     "LingoFusion Pro": "text-violet-700 dark:text-violet-300",
     ExplainFusion: "text-sky-700 dark:text-sky-300",
-    "LingoFusion Ultra": "text-amber-700 dark:text-amber-300",
+    "LingoFusion Ultra": "text-yellow-500 dark:text-yellow-300",
   };
 
   return tones[modelName] ?? "text-neutral-950 dark:text-white";
