@@ -1,7 +1,8 @@
 export function modelPriceTone(modelName: string) {
   const tones: Record<string, string> = {
-    "LingoFusion Pico-1.7B": "text-emerald-700 dark:text-emerald-300",
-    "LingoFusion Pico-35B": "text-emerald-700 dark:text-emerald-300",
+    "LingoFusion Native-1.7B": "text-emerald-700 dark:text-emerald-300",
+    "LingoFusion Native-9B": "text-emerald-700 dark:text-emerald-300",
+    "LingoFusion Native-35B": "text-emerald-700 dark:text-emerald-300",
     "LingoFusion Nano": "text-slate-600 dark:text-slate-300",
     "LingoFusion Lite": "text-lime-700 dark:text-lime-300",
     LingoFusion: "text-blue-700 dark:text-blue-300",
