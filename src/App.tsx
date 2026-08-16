@@ -1342,8 +1342,8 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
   "LingoFusion Pico": {
     reasoning: "Minimal",
     reasoningLevel: 1,
-    speed: "Fastest",
-    speedLevel: 4,
+    speed: "Hardware-dependent",
+    speedLevel: 0,
     contextWindow: "400,000",
     maxOutput: "128,000",
     quality: "Essential",
@@ -1516,7 +1516,7 @@ function ModelDetailPage({
       <section className="site-reveal mt-10 overflow-hidden rounded-lg border border-neutral-200 dark:border-white/10" aria-label="Model summary">
         <div className="grid gap-px bg-neutral-200 dark:bg-white/10 sm:grid-cols-2 lg:grid-cols-5">
           <div className="bg-white p-5 text-center dark:bg-[#0d0d0d]"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Reasoning</p><div className="mt-3"><RatingMarks value={profile.reasoningLevel} icon={BrainCircuit} /></div><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">{profile.reasoning}</p></div>
-          <div className="bg-white p-5 text-center dark:bg-[#0d0d0d]"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Speed</p><div className="mt-3"><RatingMarks value={profile.speedLevel} icon={Zap} /></div><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">{profile.speed}</p></div>
+          <div className="bg-white p-5 text-center dark:bg-[#0d0d0d]"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Speed</p>{isLocalModel ? <><Gauge className="mx-auto mt-3 h-5 w-5 text-neutral-800 dark:text-neutral-200" /><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">Hardware-dependent</p><p className="mt-1 text-xs text-neutral-500">CPU, GPU, memory, and settings</p></> : <><div className="mt-3"><RatingMarks value={profile.speedLevel} icon={Zap} /></div><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">{profile.speed}</p></>}</div>
           <div className="bg-white p-5 text-center dark:bg-[#0d0d0d]"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Price</p><p className="mt-3 whitespace-nowrap text-lg font-semibold text-emerald-700 dark:text-emerald-300">{isLocalModel ? "Free" : `${price(activePrice.inputUsd)} / ${price(activePrice.outputUsd)}`}</p><p className="mt-1 text-sm text-neutral-500">{isLocalModel ? "Runs locally" : "Input / Output"}</p></div>
           <div className="bg-white p-5 text-center dark:bg-[#0d0d0d]"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Input</p><Type className="mx-auto mt-3 h-5 w-5 text-neutral-800 dark:text-neutral-200" /><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">Text</p></div>
           <div className="bg-white p-5 text-center dark:bg-[#0d0d0d] sm:col-span-2 lg:col-span-1"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Output</p><FileText className="mx-auto mt-3 h-5 w-5 text-neutral-800 dark:text-neutral-200" /><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">Text</p></div>
