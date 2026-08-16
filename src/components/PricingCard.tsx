@@ -4,21 +4,17 @@ type DisplayTextModel = {
   model: string;
   input: string;
   output: string;
-  inputTone?: string;
-  outputTone?: string;
   recommended?: boolean;
 };
 
 type DisplaySimpleModel = {
   model: string;
   price: string;
-  priceTone?: string;
 };
 
 type DisplayImageModel = {
   size: string;
   price: string;
-  priceTone?: string;
 };
 
 type PricingCardHeader = {
@@ -111,8 +107,8 @@ function TextTable({ rows, labels }: { rows: DisplayTextModel[]; labels: Pricing
                   )}
                 </div>
               </td>
-              <td data-label={labels.input} className={`px-4 py-3.5 font-mono text-sm font-medium ${row.inputTone ?? "text-neutral-800 dark:text-neutral-300"}`}>{row.input}</td>
-              <td data-label={labels.output} className={`px-4 py-3.5 font-mono text-sm font-medium ${row.outputTone ?? "text-neutral-800 dark:text-neutral-300"}`}>{row.output}</td>
+              <td data-label={labels.input} className="px-4 py-3.5 font-mono text-sm text-neutral-800 dark:text-neutral-300">{row.input}</td>
+              <td data-label={labels.output} className="px-4 py-3.5 font-mono text-sm text-neutral-800 dark:text-neutral-300">{row.output}</td>
             </tr>
           ))}
         </tbody>
@@ -135,7 +131,7 @@ function SimpleTable({ rows, labels }: { rows: DisplaySimpleModel[]; labels: Pri
           {rows.map((row) => (
             <tr key={row.model} className="pricing-row-motion hover:bg-neutral-50 dark:hover:bg-white/[0.04]">
               <td data-label={labels.model} className="px-4 py-3.5 font-medium text-neutral-950 dark:text-neutral-50">{row.model}</td>
-              <td data-label={labels.price} className={`px-4 py-3.5 font-mono text-sm font-medium ${row.priceTone ?? "text-neutral-800 dark:text-neutral-300"}`}>{row.price}</td>
+              <td data-label={labels.price} className="px-4 py-3.5 font-mono text-sm text-neutral-800 dark:text-neutral-300">{row.price}</td>
             </tr>
           ))}
         </tbody>
@@ -158,7 +154,7 @@ function ImageTable({ rows, labels }: { rows: DisplayImageModel[]; labels: Prici
           {rows.map((row) => (
             <tr key={row.size} className="pricing-row-motion hover:bg-neutral-50 dark:hover:bg-white/[0.04]">
               <td data-label={labels.imageSize} className="px-4 py-3.5 font-medium text-neutral-950 dark:text-neutral-50">{row.size}</td>
-              <td data-label={labels.price} className={`px-4 py-3.5 font-mono text-sm font-medium ${row.priceTone ?? "text-neutral-800 dark:text-neutral-300"}`}>{row.price}</td>
+              <td data-label={labels.price} className="px-4 py-3.5 font-mono text-sm text-neutral-800 dark:text-neutral-300">{row.price}</td>
             </tr>
           ))}
         </tbody>
