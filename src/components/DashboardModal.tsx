@@ -17,7 +17,6 @@ import { musicModels, textModelsByPricingMode } from "../data/pricing";
 import type { TextPricingMode } from "../data/pricing";
 import { playgroundLanguages } from "../data/playgroundLanguages";
 import { browserApi, getApiBaseUrl, shouldUseBrowserApi } from "../data/browserApi";
-import { isPicoModel, picoLocalBaseUrl, picoLocalModels } from "../data/picoLocal";
 import { sdkExamples } from "../data/sdkExamples";
 import type { SdkLanguage } from "../data/sdkExamples";
 import { highlightCode } from "../lib/highlightCode";
@@ -233,84 +232,8 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
   return body;
 }
 
-function picoSystemPrompt(fromLanguage: string, toLanguage: string) {
-  return `You are LingoFusion Pico, a precise local translation model. Translate from ${fromLanguage} to ${toLanguage}. Preserve meaning, tone, names, code, formatting, punctuation, and line breaks. Output only the translation.`;
-}
-
 function tokenEstimate(text: string) {
   return Math.max(1, Math.ceil(text.length / 4));
-}
-
-async function localPicoTranslation({ modelName, input, fromLanguage, toLanguage, stream }: { modelName: keyof typeof picoLocalModels; input: string; fromLanguage: string; toLanguage: string; stream: boolean }) {
-  let modelsResponse: Response;
-  try {
-    modelsResponse = await fetch(`${picoLocalBaseUrl}/models`);
-  } catch {
-    throw new Error("LM Studio is not reachable. Start its local server at http://127.0.0.1:1234/v1, load Qwen 1.7B, then try again.");
-  }
-  if (!modelsResponse.ok) throw new Error("LM Studio could not list local models. Confirm its local server is running.");
-  const models = await modelsResponse.json() as { data?: Array<{ id?: string }> };
-  const localModel = picoLocalModels[modelName];
-  const modelId = models.data?.map((model) => model.id || "").find((id) => localModel.modelMatcher.test(id));
-  if (!modelId) throw new Error(`${modelName} is not loaded in LM Studio. Install and load the matching local model before trying again.`);
-
-  let response: Response;
-  try {
-    response = await fetch(`${picoLocalBaseUrl}/chat/completions`, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: "Bearer lm-studio" },
-      body: JSON.stringify({
-        model: modelId,
-        stream,
-        messages: [
-          { role: "system", content: picoSystemPrompt(fromLanguage, toLanguage) },
-          { role: "user", content: input },
-        ],
-      }),
-    });
-  } catch {
-    throw new Error("LM Studio refused the local translation request. Check that its server is running and allows browser access.");
-  }
-  if (!response.ok) throw new Error("LM Studio could not run Qwen 1.7B. Confirm the model is fully loaded and try again.");
-
-  let outputText = "";
-  let usage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
-  if (stream && response.body) {
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let pending = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      pending += decoder.decode(value || new Uint8Array(), { stream: !done });
-      const lines = pending.split("\n");
-      pending = lines.pop() || "";
-      for (const line of lines) {
-        const payload = line.replace(/^data:\s*/, "").trim();
-        if (!payload || payload === "[DONE]") continue;
-        try {
-          const chunk = JSON.parse(payload) as { choices?: Array<{ delta?: { content?: string } }> };
-          outputText += chunk.choices?.[0]?.delta?.content || "";
-        } catch { /* Ignore non-data SSE lines. */ }
-      }
-      if (done) break;
-    }
-  } else {
-    const body = await response.json() as { choices?: Array<{ message?: { content?: string } }>; usage?: typeof usage };
-    outputText = body.choices?.[0]?.message?.content || "";
-    usage = body.usage;
-  }
-  if (!outputText.trim()) throw new Error("LM Studio returned no translation. Try again after confirming Qwen 1.7B is ready.");
-  const inputTokens = usage?.prompt_tokens ?? tokenEstimate(input);
-  const outputTokens = usage?.completion_tokens ?? tokenEstimate(outputText);
-  return {
-    id: `local_${Date.now().toString(36)}`,
-    model: modelName,
-    local: true,
-    execution: "local",
-    stream,
-    output_text: outputText.trim(),
-    usage: { input_tokens: inputTokens, output_tokens: outputTokens, total_tokens: usage?.total_tokens ?? inputTokens + outputTokens, cost_usd: 0 },
-  };
 }
 
 function downloadCsv(filename: string, rows: Record<string, string | number | boolean>[]) {
@@ -375,13 +298,12 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
   const [tryMusicDurationSeconds, setTryMusicDurationSeconds] = useState(30);
   const [tryResult, setTryResult] = useState("");
   const [tryOutput, setTryOutput] = useState("");
-  const [picoRequirementsConfirmed, setPicoRequirementsConfirmed] = useState(false);
-  const [tokenizerModel, setTokenizerModel] = useState("LingoFusion Pico-1.7B");
+  const [tokenizerModel, setTokenizerModel] = useState("LingoFusion Nano");
   const [tokenizerInput, setTokenizerInput] = useState("Hello, world!");
   const [tokenizerResult, setTokenizerResult] = useState<TokenizerResult | null>(null);
   const [tokenizerLoading, setTokenizerLoading] = useState(false);
 
-  const playgroundModels = textModelsByPricingMode[playgroundPricingMode];
+  const playgroundModels = textModelsByPricingMode[playgroundPricingMode].filter((model) => !model.local);
   const selectedPlaygroundModel =
     playgroundModels.find((model) => model.model === tryModel) ?? playgroundModels[0];
   const selectedMusicPlaygroundModel =
@@ -538,13 +460,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
 
   const sendTryRequest = async () => {
     const isMusic = playgroundMode === "music";
-    const isLocalPico = !isMusic && isPicoModel(tryModel);
-    if (isLocalPico && !picoRequirementsConfirmed) {
-      throw new Error("Review and confirm the LingoFusion Pico system requirements before starting a local translation.");
-    }
-    const result = isLocalPico
-      ? await localPicoTranslation({ modelName: tryModel as keyof typeof picoLocalModels, input: tryInput, fromLanguage: tryFromLanguage, toLanguage: tryToLanguage, stream: tryStream }) as Record<string, unknown>
-      : await api<Record<string, unknown>>(isMusic ? "/v1/music" : "/v1/translate", {
+    const result = await api<Record<string, unknown>>(isMusic ? "/v1/music" : "/v1/translate", {
       method: "POST",
       headers: {
         authorization: `Bearer ${tryKey}`,
@@ -563,8 +479,8 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
       });
     setTryResult(formatPlaygroundResult(result));
     setTryOutput(typeof result.output_text === "string" ? result.output_text : isMusic ? "Music generation completed. The audio response is available in the result payload." : "No output text was returned.");
-    if (!isLocalPico) await refresh();
-    onNotify(isLocalPico ? "Pico translation completed locally. No API credits were used." : tc("Request processed, billed, and logged"));
+    await refresh();
+    onNotify(tc("Request processed, billed, and logged"));
   };
 
   const tokenizeInput = async () => {
@@ -767,25 +683,6 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                             </SelectInput>
                           </>}
                         </div>
-                        {playgroundMode === "text" && isPicoModel(tryModel) && (
-                          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-50">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div>
-                                <p className="font-semibold">{tryModel} is free and local</p>
-                                <p className="mt-1 leading-6 text-emerald-900/80 dark:text-emerald-100/80">It runs through LM Studio on this computer. No LingoFusion API key, credits, subscription, or internet connection is used after the model download.</p>
-                              </div>
-                              <span className="rounded-full bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white dark:bg-emerald-200 dark:text-emerald-950">$0</span>
-                            </div>
-                            <div className="mt-4 grid gap-3 md:grid-cols-2">
-                              <div><p className="font-semibold">Windows</p><ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-5">{picoLocalModels[tryModel as keyof typeof picoLocalModels].windows.slice(0, 6).map((item) => <li key={item}>{item}</li>)}</ul></div>
-                              <div><p className="font-semibold">Mac</p><ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-5">{picoLocalModels[tryModel as keyof typeof picoLocalModels].mac.slice(0, 5).map((item) => <li key={item}>{item}</li>)}</ul></div>
-                            </div>
-                            <label className="mt-4 flex items-start gap-2 text-xs leading-5">
-                              <input type="checkbox" checked={picoRequirementsConfirmed} onChange={(event) => setPicoRequirementsConfirmed(event.target.checked)} className="mt-1 h-4 w-4 rounded border-emerald-500" />
-                              <span>I reviewed the requirements and understand Pico uses this device's CPU, GPU, RAM or unified memory, storage, and electricity.</span>
-                            </label>
-                          </div>
-                        )}
                         <div className={`mt-3 grid gap-3 ${playgroundMode === "music" ? "" : "lg:grid-cols-2"}`}>
                           <label className="block text-sm">
                             <span className="mb-1.5 block font-medium text-neutral-700 dark:text-neutral-300">{playgroundMode === "music" ? "Music prompt" : "Input text"}</span>
@@ -794,11 +691,11 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                           {playgroundMode === "text" && <label className="block text-sm"><span className="mb-1.5 block font-medium text-neutral-700 dark:text-neutral-300">Translated output</span><textarea readOnly value={tryOutput} placeholder="Your translation will appear here." rows={7} className="w-full resize-none rounded-md border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm text-neutral-950 outline-none dark:border-white/15 dark:bg-white/[0.04] dark:text-neutral-100 dark:placeholder:text-neutral-500" /></label>}
                         </div>
                         <div className="mt-4 flex flex-wrap gap-3">
-                          <ActionButton onClick={sendTryRequest} disabled={playgroundMode === "text" && isPicoModel(tryModel) && !picoRequirementsConfirmed}>
+                          <ActionButton onClick={sendTryRequest}>
                             {playgroundMode === "music" ? <Music className="h-4 w-4" /> : <Activity className="h-4 w-4" />}
                             {playgroundMode === "music" ? "Generate simulated music" : tc("Run API call")}
                           </ActionButton>
-                          {!isPicoModel(tryModel) && <button
+                          <button
                             type="button"
                             onClick={() => {
                               setTab("API Keys");
@@ -807,7 +704,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                             className="rounded-md border border-neutral-300 bg-white px-4 py-2.5 text-sm font-medium text-neutral-950 hover:bg-neutral-50 dark:border-white/15 dark:bg-white/5 dark:text-neutral-100 dark:hover:bg-white/10"
                           >
                             {tc("Create key")}
-                          </button>}
+                          </button>
                         </div>
                         {tryResult && (
                           <div className="space-y-2">
@@ -831,11 +728,6 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                               <p className="text-neutral-500 dark:text-neutral-500">Price / minute</p>
                               <p className="mt-1 font-mono font-semibold text-neutral-950 dark:text-neutral-50">{dollars(selectedMusicPlaygroundModel.priceUsd ?? 0)}</p>
                             </div>
-                          ) : isPicoModel(selectedPlaygroundModel.model) ? (
-                            <div className="mt-3 text-sm">
-                              <p className="font-mono text-lg font-semibold text-emerald-700 dark:text-emerald-300">Free</p>
-                              <p className="mt-1 leading-5 text-neutral-500 dark:text-neutral-400">Runs on this device with LM Studio. No token pricing or API credits.</p>
-                            </div>
                           ) : (
                             <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
                               <div><p className="text-neutral-500 dark:text-neutral-500">Input / 1M tokens</p><p className="mt-1 font-mono font-semibold text-neutral-950 dark:text-neutral-50">{dollars(selectedPlaygroundModel.inputUsd)}</p></div>
@@ -843,7 +735,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                             </div>
                           )}
                         </div>
-                        {!isPicoModel(tryModel) && <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
+                        <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
                           <p className="text-sm text-neutral-500 dark:text-neutral-500">{tc("Available fake balance")}</p>
                           <p className="mt-1 text-3xl font-semibold text-neutral-950 dark:text-neutral-50">
                             {dollars(data.account.paidBalance + data.account.rewardBalance)}
@@ -851,21 +743,15 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                           <p className="mt-2 text-sm leading-5 text-neutral-600 dark:text-neutral-400">
                             {tc("Simulated calls deduct from this local test balance. No real payment method is charged.")}
                           </p>
-                        </div>}
+                        </div>
                         <div className="rounded-lg border border-neutral-200 p-4 dark:border-white/10">
                           <h4 className="font-semibold text-neutral-950 dark:text-neutral-50">{tc("What this does")}</h4>
                           <ul className="mt-3 space-y-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">
-                            {isPicoModel(tryModel) ? <>
-                              <li>Connects only to LM Studio at `127.0.0.1:1234` on this computer.</li>
-                              <li>Uses the loaded Qwen 1.7B model identifier.</li>
-                              <li>Does not use LingoFusion API keys, credits, subscriptions, logs, or charges.</li>
-                            </> : <>
-                              <li>{tc(browserMode ? "Authenticates the simulated Bearer key in this browser." : "Authenticates the Bearer key server-side.")}</li>
-                              <li>{playgroundMode === "music" ? "Checks the key has `Music generation` permission." : tc("Checks the key has `Text translation` permission.")}</li>
-                              <li>{playgroundMode === "music" ? "Uses the selected duration to calculate the charge." : tc("Estimates input/output tokens.")}</li>
-                              <li>{tc("Deducts fake prepaid balance.")}</li>
-                              <li>{tc("Adds a request log and ledger charge.")}</li>
-                            </>}
+                            <li>{tc(browserMode ? "Authenticates the simulated Bearer key in this browser." : "Authenticates the Bearer key server-side.")}</li>
+                            <li>{playgroundMode === "music" ? "Checks the key has `Music generation` permission." : tc("Checks the key has `Text translation` permission.")}</li>
+                            <li>{playgroundMode === "music" ? "Uses the selected duration to calculate the charge." : tc("Estimates input/output tokens.")}</li>
+                            <li>{tc("Deducts fake prepaid balance.")}</li>
+                            <li>{tc("Adds a request log and ledger charge.")}</li>
                           </ul>
                         </div>
                       </div>
@@ -890,11 +776,11 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                       </div>
                       <div className="space-y-4">
                         <SelectInput label="Model" value={tokenizerModel} onChange={setTokenizerModel}>
-                          {textModelsByPricingMode.instant.map((model) => <option key={model.model}>{model.model}</option>)}
+                        {textModelsByPricingMode.instant.filter((model) => !model.local).map((model) => <option key={model.model}>{model.model}</option>)}
                         </SelectInput>
                         <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
-                          <p className="text-sm font-medium text-neutral-950 dark:text-neutral-50">{isPicoModel(tokenizerModel) ? "Exact tokenizer" : "Estimated tokenizer"}</p>
-                          <p className="mt-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">{isPicoModel(tokenizerModel) ? "Uses the loaded local model tokenizer in LM Studio." : "This provider does not expose token pieces, so the preview is an estimate."}</p>
+                          <p className="text-sm font-medium text-neutral-950 dark:text-neutral-50">Estimated tokenizer</p>
+                          <p className="mt-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">This provider does not expose token pieces, so the preview is an estimate.</p>
                         </div>
                       </div>
                     </div>
