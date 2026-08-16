@@ -18,6 +18,7 @@ import type { TextPricingMode } from "../data/pricing";
 import { playgroundLanguages } from "../data/playgroundLanguages";
 import { browserApi, getApiBaseUrl, shouldUseBrowserApi } from "../data/browserApi";
 import { isPicoModel, picoLocalBaseUrl, picoLocalRequirements } from "../data/picoLocal";
+import { priceTone } from "../data/priceTone";
 import { sdkExamples } from "../data/sdkExamples";
 import type { SdkLanguage } from "../data/sdkExamples";
 import { highlightCode } from "../lib/highlightCode";
@@ -837,8 +838,8 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                             </div>
                           ) : (
                             <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                              <div><p className="text-neutral-500 dark:text-neutral-500">Input / 1M tokens</p><p className="mt-1 font-mono font-semibold text-neutral-950 dark:text-neutral-50">{dollars(selectedPlaygroundModel.inputUsd)}</p></div>
-                              <div><p className="text-neutral-500 dark:text-neutral-500">Output / 1M tokens</p><p className="mt-1 font-mono font-semibold text-neutral-950 dark:text-neutral-50">{dollars(selectedPlaygroundModel.outputUsd)}</p></div>
+                              <div><p className="text-neutral-500 dark:text-neutral-500">Input / 1M tokens</p><p className={`mt-1 font-mono font-semibold ${priceTone(selectedPlaygroundModel.inputUsd)}`}>{dollars(selectedPlaygroundModel.inputUsd)}</p></div>
+                              <div><p className="text-neutral-500 dark:text-neutral-500">Output / 1M tokens</p><p className={`mt-1 font-mono font-semibold ${priceTone(selectedPlaygroundModel.outputUsd)}`}>{dollars(selectedPlaygroundModel.outputUsd)}</p></div>
                             </div>
                           )}
                         </div>
