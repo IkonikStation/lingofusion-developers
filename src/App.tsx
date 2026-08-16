@@ -51,7 +51,7 @@ import type { TextModel, TextModelPresentation, TextPricingMode } from "./data/p
 import { priceForBillingInterval, subscriptionPlans } from "./data/subscriptions";
 import type { BillingInterval, ProVariantKey } from "./data/subscriptions";
 import { submitSalesRequest } from "./data/sales";
-import { picoLocalModels } from "./data/picoLocal";
+import { nativeLocalModels } from "./data/nativeLocal";
 import { modelPriceTone } from "./data/priceTone";
 
 const billingNotes = [
@@ -696,7 +696,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
     return `${displayCurrency(usdAmount)}${suffix}`;
   };
 
-  const visibleTextModels = textModelsByPricingMode[textPricingMode];
+  const visibleTextModels = textModelsByPricingMode[textPricingMode].filter((model) => !model.local);
   const selectedTextModel = visibleTextModels.find((model) => model.model === selectedModel) ?? visibleTextModels[2];
   const selectedTts = ttsCharacterModels.find((model) => model.model === selectedTtsModel) ?? ttsCharacterModels[0];
   const selectedTranscription =
@@ -719,7 +719,6 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
   };
 
   const displayedTextModels = visibleTextModels.map((model) => ({ ...model, input: model.local ? "Free" : displayCurrency(model.inputUsd, true), output: model.local ? "Free" : displayCurrency(model.outputUsd, true) }));
-  const displayedOpenSourceModels = displayedTextModels.filter((model) => model.local);
   const displayedCloudTextModels = displayedTextModels.filter((model) => !model.local);
   const displayedTtsModels = ttsModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
   const displayedTranscriptionModels = transcriptionModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
@@ -851,15 +850,6 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
               onChange={setOutputTokens}
             />
           </SectionCalculator>
-          <PricingCard
-            key="open-source-text"
-            title="Open source models"
-            unit="Free local models"
-            kind="text"
-            rows={displayedOpenSourceModels}
-            labels={pricingLabels}
-            headerNote="Pico runs entirely on your own computer. No API credits, token fees, or subscription are required."
-          />
           <PricingCard
             key={`text-${textPricingMode}-${currencyPresentationKey}`}
             title={t("textModels")}
@@ -1124,8 +1114,8 @@ function TextModelGallery({ models, pricingMode, displayPrice, onOpenModel }: {
         <span className="text-xs font-medium text-neutral-500 dark:text-neutral-500">{pricingMode === "batch" ? "Batch" : "Default"} pricing - open a model for details</span>
       </div>
       <div className="mt-8">
-        <h3 className="text-lg font-semibold text-neutral-950 dark:text-neutral-50">Open source models</h3>
-        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">Run these models locally on your own hardware.</p>
+        <h3 className="text-lg font-semibold text-neutral-950 dark:text-neutral-50">LingoFusion Native models</h3>
+        <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">Free models that run directly on your own hardware.</p>
         <div className="mt-5 grid gap-x-12 gap-y-7 md:grid-cols-2">
         {openSourceModels.map((model) => {
           const presentation = textModelPresentations[model.model];
@@ -1140,12 +1130,12 @@ function TextModelGallery({ models, pricingMode, displayPrice, onOpenModel }: {
               <span className="min-w-0 flex-1 pt-0.5">
                 <span className="flex flex-wrap items-center gap-2">
                   <span className="text-xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50">{model.model}</span>
-                  {model.local && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200">{picoLocalModels[model.model as keyof typeof picoLocalModels].badge}</span>}
+                  {model.local && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200">{nativeLocalModels[model.model as keyof typeof nativeLocalModels].badge}</span>}
                   {model.recommended && <span className="rounded-full bg-neutral-950 px-2 py-0.5 text-[10px] font-semibold text-white dark:bg-white dark:text-neutral-950">Recommended</span>}
                 </span>
                 <span className="mt-1 block text-base leading-6 text-neutral-600 dark:text-neutral-400">{presentation?.capability ?? modelDetails[model.model]}</span>
                 <span className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-sm text-neutral-500 dark:text-neutral-500">
-                  {model.local ? <><span className="font-medium text-emerald-700 dark:text-emerald-300">Free · Runs locally</span><span>{picoLocalModels[model.model as keyof typeof picoLocalModels].parameters}</span><span>{picoLocalModels[model.model as keyof typeof picoLocalModels].context}</span><span>{picoLocalModels[model.model as keyof typeof picoLocalModels].downloadSize} download</span></> : <>
+                  {model.local ? <><span className="font-medium text-emerald-700 dark:text-emerald-300">Free · Runs locally</span><span>{nativeLocalModels[model.model as keyof typeof nativeLocalModels].parameters}</span><span>{nativeLocalModels[model.model as keyof typeof nativeLocalModels].context}</span><span>{nativeLocalModels[model.model as keyof typeof nativeLocalModels].downloadSize} download</span></> : <>
                     <span>Input <strong className="font-medium text-neutral-800 dark:text-neutral-200">{displayPrice(model.inputUsd)}</strong> / 1M</span>
                     <span>Output <strong className="font-medium text-neutral-800 dark:text-neutral-200">{displayPrice(model.outputUsd)}</strong> / 1M</span>
                   </>}
@@ -1308,8 +1298,8 @@ function ModelComparisonPage({ onOpenModel }: { onOpenModel: (model: string) => 
 
       <section className="site-reveal mt-10" aria-labelledby="model-gallery-heading">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:gap-3">
-          <h2 id="model-gallery-heading" className="text-lg font-semibold text-neutral-950 dark:text-neutral-50">Open source models</h2>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">Run locally on your own hardware.</p>
+          <h2 id="model-gallery-heading" className="text-lg font-semibold text-neutral-950 dark:text-neutral-50">LingoFusion Native models</h2>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">Free models that run directly on your own hardware.</p>
         </div>
         <div className="mt-8 grid gap-x-12 gap-y-7 md:grid-cols-2">
           {openSourceModels.map((model) => <ModelGalleryItem key={model.model} model={model} onOpen={() => onOpenModel(model.model)} />)}
@@ -1361,7 +1351,7 @@ function ModelComparisonPage({ onOpenModel }: { onOpenModel: (model: string) => 
 
 function ModelGalleryItem({ model, onOpen }: { model: TextModel; onOpen: () => void }) {
   const presentation = textModelPresentations[model.model];
-  const localModel = model.local ? picoLocalModels[model.model as keyof typeof picoLocalModels] : null;
+  const localModel = model.local ? nativeLocalModels[model.model as keyof typeof nativeLocalModels] : null;
 
   return (
     <button type="button" onClick={onOpen} className="model-catalog-item pressable group flex min-w-0 items-start gap-5 rounded-lg p-2 text-left opacity-90 outline-none transition hover:opacity-100 focus-visible:ring-2 focus-visible:ring-neutral-950 focus-visible:ring-offset-4 dark:focus-visible:ring-white dark:focus-visible:ring-offset-[#0a0a0a]">
@@ -1392,7 +1382,7 @@ type ModelProfileSpec = {
 };
 
 const modelProfileSpecs: Record<string, ModelProfileSpec> = {
-  "LingoFusion Pico-1.7B": {
+  "LingoFusion Native-1.7B": {
     reasoning: "Minimal",
     reasoningLevel: 1,
     speed: "Hardware-dependent",
@@ -1400,10 +1390,21 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     contextWindow: "32,000",
     maxOutput: "32,000",
     quality: "Essential",
-    description: "LingoFusion Pico-1.7B runs directly on your computer for lightweight, everyday translation without the LingoFusion cloud API, API credits, or monthly source-word allowances.",
+    description: "LingoFusion Native-1.7B runs directly on your computer for lightweight, everyday translation without the LingoFusion cloud API, API credits, or monthly source-word allowances.",
     limitations: ["Performance depends on your local hardware", "Best for everyday and straightforward source text", "Not intended for specialist terminology or document-scale review"],
   },
-  "LingoFusion Pico-35B": {
+  "LingoFusion Native-9B": {
+    reasoning: "Balanced",
+    reasoningLevel: 3,
+    speed: "Hardware-dependent",
+    speedLevel: 0,
+    contextWindow: "Build-specific",
+    maxOutput: "Build-specific",
+    quality: "Balanced local",
+    description: "LingoFusion Native-9B is the recommended free local model for most users, balancing translation quality, speed, and practical 16 GB-class hardware requirements without cloud API usage.",
+    limitations: ["A local Qwen 9B build is required", "Exact context, output, download size, and quantization depend on the chosen build", "Not available through the LingoFusion cloud API or Playground"],
+  },
+  "LingoFusion Native-35B": {
     reasoning: "Higher",
     reasoningLevel: 4,
     speed: "Hardware-dependent",
@@ -1411,8 +1412,8 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     contextWindow: "128,000",
     maxOutput: "32,000",
     quality: "Highest local",
-    description: "LingoFusion Pico-35B runs directly on your computer and is designed to provide the highest local translation quality in the Pico family, without consuming cloud API credits or monthly source-word allowances.",
-    limitations: ["Requires powerful local hardware and substantial storage", "Performance depends on CPU, GPU, memory, and local runtime settings", "No cloud fallback is used if the local model is unavailable"],
+    description: "LingoFusion Native-35B runs directly on your computer and is designed to provide the highest local translation quality in the Native family, without consuming cloud API credits or monthly source-word allowances.",
+    limitations: ["Requires powerful local hardware and substantial storage", "Performance depends on CPU, GPU, memory, and local runtime settings", "Not available through the LingoFusion cloud API or Playground"],
   },
   "LingoFusion Nano": {
     reasoning: "Light",
@@ -1513,7 +1514,7 @@ function ModelDetailPage({
   const price = (value: number) => formatCurrencyAmount(value, "USD", 1, true);
   const apiModelId = modelSlug(modelName);
   const isLocalModel = Boolean(defaultModel.local);
-  const localModel = isLocalModel ? picoLocalModels[modelName as keyof typeof picoLocalModels] : null;
+  const localModel = isLocalModel ? nativeLocalModels[modelName as keyof typeof nativeLocalModels] : null;
   const activePrice = pricingMode === "batch" ? batchModel : defaultModel;
   const comparisonModels = textModelsByPricingMode[pricingMode];
   const comparisonMax = Math.max(...comparisonModels.map((model) => model[comparisonMetric === "input" ? "inputUsd" : "outputUsd"]));
@@ -1604,7 +1605,7 @@ function ModelDetailPage({
           {isLocalModel ? (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-400/20 dark:bg-emerald-400/10">
               <p className="text-lg font-semibold text-emerald-950 dark:text-emerald-50">$0 - runs locally on your device</p>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-emerald-900/80 dark:text-emerald-100/80">Pico uses a local translation model through LM Studio. It does not use LingoFusion servers, API credits, subscriptions, word limits, or token fees. After the model is downloaded, translation can work without an internet connection.</p>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-emerald-900/80 dark:text-emerald-100/80">Native is a free open-source local model family. It does not use LingoFusion API credits, subscriptions, word limits, or token fees, and is listed separately from cloud models.</p>
             </div>
           ) : <>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -1643,7 +1644,7 @@ function ModelDetailPage({
       {isLocalModel && <section className="site-reveal grid gap-8 border-b border-neutral-200 py-12 dark:border-white/10 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-labelledby="local-requirements-heading">
         <div><h2 id="local-requirements-heading" className="text-xl font-semibold text-neutral-950 dark:text-white">Local requirements</h2><p className="mt-2 text-sm leading-6 text-neutral-500">Review these requirements before downloading the model.</p></div>
         <div>
-          <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-50">Pico uses your own CPU, GPU, RAM or unified memory, storage, and electricity. Do not download it on a device that does not meet the minimum requirements.</p>
+          <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-50">Native uses your own CPU, GPU, RAM or unified memory, storage, and electricity. Do not download it on a device that does not meet the minimum requirements.</p>
           {localModel && <div className="mt-4 flex flex-wrap gap-2 text-xs font-medium text-neutral-600 dark:text-neutral-300"><span className="rounded-full border border-neutral-200 px-2.5 py-1 dark:border-white/10">{localModel.parameters}</span><span className="rounded-full border border-neutral-200 px-2.5 py-1 dark:border-white/10">{localModel.context}</span>{localModel.maxOutput && <span className="rounded-full border border-neutral-200 px-2.5 py-1 dark:border-white/10">{localModel.maxOutput}</span>}<span className="rounded-full border border-neutral-200 px-2.5 py-1 dark:border-white/10">{localModel.downloadSize} download</span></div>}
           <div className="mt-5 grid gap-4 md:grid-cols-2">
             <div className="rounded-lg border border-neutral-200 p-5 dark:border-white/10"><h3 className="font-semibold text-neutral-950 dark:text-white">Windows</h3><ul className="mt-4 space-y-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">{localModel?.windows.map((item) => <li key={item}>{item}</li>)}</ul></div>
@@ -1665,7 +1666,7 @@ function ModelDetailPage({
       <section className="site-reveal grid gap-8 border-b border-neutral-200 py-12 dark:border-white/10 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-labelledby="api-usage-heading">
         <h2 id="api-usage-heading" className="text-xl font-semibold text-neutral-950 dark:text-white">{isLocalModel ? "Local setup" : "API usage"}</h2>
         <div>
-          {isLocalModel ? <div className="rounded-lg border border-neutral-200 p-5 text-sm leading-7 text-neutral-600 dark:border-white/10 dark:text-neutral-400"><p className="font-semibold text-neutral-950 dark:text-white">Run Pico with LM Studio on your computer.</p><p className="mt-2">Download the Qwen 1.7B model, start LM Studio's local server at <code>http://127.0.0.1:1234/v1</code>, then choose Pico in the Playground. No LingoFusion API key is needed.</p><p className="mt-2">An internet connection may be required for the initial model download or updates. Translation requests then stay on your device.</p></div> : <>
+          {isLocalModel ? <div className="rounded-lg border border-neutral-200 p-5 text-sm leading-7 text-neutral-600 dark:border-white/10 dark:text-neutral-400"><p className="font-semibold text-neutral-950 dark:text-white">Open-source local model family.</p><p className="mt-2">{modelName} is listed separately from LingoFusion cloud models and is not billed through the API or available in the Playground.</p></div> : <>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div><p className="text-sm text-neutral-500">Model ID</p><code className="mt-1 block font-mono text-sm text-neutral-950 dark:text-white">{apiModelId}</code></div>
             <button type="button" onClick={() => copyText(requestSnippet, "request")} className="pressable inline-flex items-center gap-2 rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50 dark:border-white/20 dark:text-neutral-200 dark:hover:bg-white/10"><Copy className="h-4 w-4" /> {copied === "request" ? "Copied" : "Copy request"}</button>
