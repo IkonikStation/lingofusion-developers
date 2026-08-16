@@ -17,7 +17,7 @@ import { musicModels, textModelsByPricingMode } from "../data/pricing";
 import type { TextPricingMode } from "../data/pricing";
 import { playgroundLanguages } from "../data/playgroundLanguages";
 import { browserApi, getApiBaseUrl, shouldUseBrowserApi } from "../data/browserApi";
-import { isPicoModel, picoLocalBaseUrl, picoLocalRequirements } from "../data/picoLocal";
+import { isPicoModel, picoLocalBaseUrl, picoLocalModels } from "../data/picoLocal";
 import { sdkExamples } from "../data/sdkExamples";
 import type { SdkLanguage } from "../data/sdkExamples";
 import { highlightCode } from "../lib/highlightCode";
@@ -241,7 +241,7 @@ function tokenEstimate(text: string) {
   return Math.max(1, Math.ceil(text.length / 4));
 }
 
-async function localPicoTranslation({ input, fromLanguage, toLanguage, stream }: { input: string; fromLanguage: string; toLanguage: string; stream: boolean }) {
+async function localPicoTranslation({ modelName, input, fromLanguage, toLanguage, stream }: { modelName: keyof typeof picoLocalModels; input: string; fromLanguage: string; toLanguage: string; stream: boolean }) {
   let modelsResponse: Response;
   try {
     modelsResponse = await fetch(`${picoLocalBaseUrl}/models`);
@@ -250,8 +250,9 @@ async function localPicoTranslation({ input, fromLanguage, toLanguage, stream }:
   }
   if (!modelsResponse.ok) throw new Error("LM Studio could not list local models. Confirm its local server is running.");
   const models = await modelsResponse.json() as { data?: Array<{ id?: string }> };
-  const modelId = models.data?.map((model) => model.id || "").find((id) => /qwen.*1\.7b/i.test(id));
-  if (!modelId) throw new Error("Qwen 1.7B is not loaded in LM Studio. Download and load it before using LingoFusion Pico.");
+  const localModel = picoLocalModels[modelName];
+  const modelId = models.data?.map((model) => model.id || "").find((id) => localModel.modelMatcher.test(id));
+  if (!modelId) throw new Error(`${modelName} is not loaded in LM Studio. Install and load the matching local model before trying again.`);
 
   let response: Response;
   try {
@@ -303,7 +304,7 @@ async function localPicoTranslation({ input, fromLanguage, toLanguage, stream }:
   const outputTokens = usage?.completion_tokens ?? tokenEstimate(outputText);
   return {
     id: `local_${Date.now().toString(36)}`,
-    model: "LingoFusion Pico",
+    model: modelName,
     local: true,
     execution: "local",
     stream,
@@ -375,7 +376,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
   const [tryResult, setTryResult] = useState("");
   const [tryOutput, setTryOutput] = useState("");
   const [picoRequirementsConfirmed, setPicoRequirementsConfirmed] = useState(false);
-  const [tokenizerModel, setTokenizerModel] = useState("LingoFusion Pico");
+  const [tokenizerModel, setTokenizerModel] = useState("LingoFusion Pico-1.7B");
   const [tokenizerInput, setTokenizerInput] = useState("Hello, world!");
   const [tokenizerResult, setTokenizerResult] = useState<TokenizerResult | null>(null);
   const [tokenizerLoading, setTokenizerLoading] = useState(false);
@@ -542,7 +543,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
       throw new Error("Review and confirm the LingoFusion Pico system requirements before starting a local translation.");
     }
     const result = isLocalPico
-      ? await localPicoTranslation({ input: tryInput, fromLanguage: tryFromLanguage, toLanguage: tryToLanguage, stream: tryStream }) as Record<string, unknown>
+      ? await localPicoTranslation({ modelName: tryModel as keyof typeof picoLocalModels, input: tryInput, fromLanguage: tryFromLanguage, toLanguage: tryToLanguage, stream: tryStream }) as Record<string, unknown>
       : await api<Record<string, unknown>>(isMusic ? "/v1/music" : "/v1/translate", {
       method: "POST",
       headers: {
@@ -770,14 +771,14 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                           <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-50">
                             <div className="flex flex-wrap items-center justify-between gap-2">
                               <div>
-                                <p className="font-semibold">LingoFusion Pico is free and local</p>
-                                <p className="mt-1 leading-6 text-emerald-900/80 dark:text-emerald-100/80">It runs Qwen 1.7B through LM Studio on this computer. No LingoFusion API key, credits, subscription, or internet connection is used after the model download.</p>
+                                <p className="font-semibold">{tryModel} is free and local</p>
+                                <p className="mt-1 leading-6 text-emerald-900/80 dark:text-emerald-100/80">It runs through LM Studio on this computer. No LingoFusion API key, credits, subscription, or internet connection is used after the model download.</p>
                               </div>
                               <span className="rounded-full bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white dark:bg-emerald-200 dark:text-emerald-950">$0</span>
                             </div>
                             <div className="mt-4 grid gap-3 md:grid-cols-2">
-                              <div><p className="font-semibold">Windows</p><ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-5">{picoLocalRequirements.windows.slice(0, 6).map((item) => <li key={item}>{item}</li>)}</ul></div>
-                              <div><p className="font-semibold">Mac</p><ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-5">{picoLocalRequirements.mac.slice(0, 5).map((item) => <li key={item}>{item}</li>)}</ul></div>
+                              <div><p className="font-semibold">Windows</p><ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-5">{picoLocalModels[tryModel as keyof typeof picoLocalModels].windows.slice(0, 6).map((item) => <li key={item}>{item}</li>)}</ul></div>
+                              <div><p className="font-semibold">Mac</p><ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-5">{picoLocalModels[tryModel as keyof typeof picoLocalModels].mac.slice(0, 5).map((item) => <li key={item}>{item}</li>)}</ul></div>
                             </div>
                             <label className="mt-4 flex items-start gap-2 text-xs leading-5">
                               <input type="checkbox" checked={picoRequirementsConfirmed} onChange={(event) => setPicoRequirementsConfirmed(event.target.checked)} className="mt-1 h-4 w-4 rounded border-emerald-500" />
@@ -892,8 +893,8 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                           {textModelsByPricingMode.instant.map((model) => <option key={model.model}>{model.model}</option>)}
                         </SelectInput>
                         <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
-                          <p className="text-sm font-medium text-neutral-950 dark:text-neutral-50">{tokenizerModel === "LingoFusion Pico" ? "Exact tokenizer" : "Estimated tokenizer"}</p>
-                          <p className="mt-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">{tokenizerModel === "LingoFusion Pico" ? "Uses the loaded Qwen model's tokenizer in LM Studio." : "This provider does not expose token pieces, so the preview is an estimate."}</p>
+                          <p className="text-sm font-medium text-neutral-950 dark:text-neutral-50">{isPicoModel(tokenizerModel) ? "Exact tokenizer" : "Estimated tokenizer"}</p>
+                          <p className="mt-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">{isPicoModel(tokenizerModel) ? "Uses the loaded local model tokenizer in LM Studio." : "This provider does not expose token pieces, so the preview is an estimate."}</p>
                         </div>
                       </div>
                     </div>
