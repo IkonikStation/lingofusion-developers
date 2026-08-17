@@ -35,7 +35,7 @@ const textModels = [
   { model: "LingoFusion Lite", input: 0.75, output: 3.00 },
   { model: "LingoFusion", input: 3.50, output: 20.00 },
   { model: "LingoFusion Pro", input: 4.00, output: 25.00 },
-  { model: "ExplainFusion", input: 2.00, output: 10.00 },
+  { model: "ExplainFusion", input: 3.00, output: 2.00 },
   { model: "LingoFusion Ultra", input: 25.00, output: 150.00 },
 ];
 
