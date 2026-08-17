@@ -1402,7 +1402,7 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     maxOutput: "Build-specific",
     quality: "Balanced local",
     description: "LingoFusion Native-9B is the recommended free local model for most users, balancing translation quality, speed, and practical 16 GB-class hardware requirements without cloud API usage.",
-    limitations: ["A local Qwen 9B build is required", "Exact context, output, download size, and quantization depend on the chosen build", "Not available through the LingoFusion cloud API or Playground"],
+    limitations: ["A compatible local build is required", "Exact context, output, download size, and quantization depend on the chosen build", "Not available through the LingoFusion cloud API or Playground"],
   },
   "LingoFusion Native-35B": {
     reasoning: "Higher",
@@ -1666,7 +1666,7 @@ function ModelDetailPage({
       <section className="site-reveal grid gap-8 border-b border-neutral-200 py-12 dark:border-white/10 lg:grid-cols-[14rem_minmax(0,1fr)]" aria-labelledby="api-usage-heading">
         <h2 id="api-usage-heading" className="text-xl font-semibold text-neutral-950 dark:text-white">{isLocalModel ? "Local setup" : "API usage"}</h2>
         <div>
-          {isLocalModel ? <div className="rounded-lg border border-neutral-200 p-5 text-sm leading-7 text-neutral-600 dark:border-white/10 dark:text-neutral-400"><p className="font-semibold text-neutral-950 dark:text-white">Open-source local model family.</p><p className="mt-2">{modelName} is listed separately from LingoFusion cloud models and is not billed through the API or available in the Playground.</p></div> : <>
+          {isLocalModel ? <div className="rounded-lg border border-neutral-200 p-5 text-sm leading-7 text-neutral-600 dark:border-white/10 dark:text-neutral-400"><p className="font-semibold text-neutral-950 dark:text-white">Open-source local model family.</p><p className="mt-2">Run {modelName} locally through LM Studio or llama.cpp. It is listed separately from LingoFusion cloud models and is not billed through the API or available in the Playground.</p></div> : <>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div><p className="text-sm text-neutral-500">Model ID</p><code className="mt-1 block font-mono text-sm text-neutral-950 dark:text-white">{apiModelId}</code></div>
             <button type="button" onClick={() => copyText(requestSnippet, "request")} className="pressable inline-flex items-center gap-2 rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50 dark:border-white/20 dark:text-neutral-200 dark:hover:bg-white/10"><Copy className="h-4 w-4" /> {copied === "request" ? "Copied" : "Copy request"}</button>
