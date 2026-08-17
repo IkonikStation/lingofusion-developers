@@ -1298,21 +1298,21 @@ function ModelComparisonPage({ onOpenModel }: { onOpenModel: (model: string) => 
 
       <section className="site-reveal mt-10" aria-labelledby="model-gallery-heading">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:gap-3">
-          <h2 id="model-gallery-heading" className="text-lg font-semibold text-neutral-950 dark:text-neutral-50">LingoFusion Native models</h2>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">Free models that run directly on your own hardware.</p>
+          <h2 id="model-gallery-heading" className="text-lg font-semibold text-neutral-950 dark:text-neutral-50">LingoFusion Models</h2>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">Managed text models for multilingual tasks at every scale.</p>
         </div>
         <div className="mt-8 grid gap-x-12 gap-y-7 md:grid-cols-2">
-          {openSourceModels.map((model) => <ModelGalleryItem key={model.model} model={model} onOpen={() => onOpenModel(model.model)} />)}
+          {cloudModels.map((model) => <ModelGalleryItem key={model.model} model={model} onOpen={() => onOpenModel(model.model)} />)}
         </div>
       </section>
 
       <section className="site-reveal mt-10 border-t border-neutral-200 pt-8 dark:border-white/10" aria-labelledby="cloud-model-gallery-heading">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:gap-3">
-          <h2 id="cloud-model-gallery-heading" className="text-lg font-semibold text-neutral-950 dark:text-neutral-50">LingoFusion cloud models</h2>
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">Managed text models for multilingual tasks at every scale.</p>
+          <h2 id="cloud-model-gallery-heading" className="text-lg font-semibold text-neutral-950 dark:text-neutral-50">Open Source Models</h2>
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">Free models that run directly on your own hardware.</p>
         </div>
         <div className="mt-8 grid gap-x-12 gap-y-7 md:grid-cols-2">
-          {cloudModels.map((model) => <ModelGalleryItem key={model.model} model={model} onOpen={() => onOpenModel(model.model)} />)}
+          {openSourceModels.map((model) => <ModelGalleryItem key={model.model} model={model} onOpen={() => onOpenModel(model.model)} />)}
         </div>
       </section>
 
