@@ -41,7 +41,7 @@ export const textModels: TextModel[] = [
     recommended: true,
   },
   { model: "LingoFusion Pro", inputUsd: 4.00, outputUsd: 25.00 },
-  { model: "ExplainFusion", inputUsd: 2.00, outputUsd: 10.00 },
+  { model: "ExplainFusion", inputUsd: 3.00, outputUsd: 2.00 },
   { model: "LingoFusion Ultra", inputUsd: 25.00, outputUsd: 150.00 },
 ];
 
