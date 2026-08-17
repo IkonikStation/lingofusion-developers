@@ -57,7 +57,7 @@ export const textModelsByPricingMode: Record<TextPricingMode, TextModel[]> = {
 export const textModelPresentations: Record<string, TextModelPresentation> = {
   "LingoFusion Native-1.7B": {
     image: "/assets/models/lingofusion-native-1-7b.png",
-    imageScale: 2,
+    imageScale: 2.35,
     imageFit: "cover",
     capability: "Free local translation for everyday language tasks on most modern computers.",
     bestFor: "Everyday translation, fast local inference, and lower-memory devices.",
@@ -65,7 +65,7 @@ export const textModelPresentations: Record<string, TextModelPresentation> = {
   },
   "LingoFusion Native-9B": {
     image: "/assets/models/lingofusion-native-9b.png",
-    imageScale: 2,
+    imageScale: 2.35,
     imageFit: "cover",
     capability: "Balanced local translation for most users, designed around mainstream 16 GB-class computers.",
     bestFor: "Everyday professional translation with a practical quality, speed, and hardware balance.",
