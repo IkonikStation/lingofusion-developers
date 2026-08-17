@@ -73,7 +73,7 @@ export const textModelPresentations: Record<string, TextModelPresentation> = {
   },
   "LingoFusion Native-35B": {
     image: "/assets/models/lingofusion-native-35b.png",
-    imageScale: 2,
+    imageScale: 2.3,
     imageFit: "cover",
     capability: "High-quality local translation for difficult multilingual work, powered entirely by your own hardware.",
     bestFor: "Difficult translations and powerful local computers.",
