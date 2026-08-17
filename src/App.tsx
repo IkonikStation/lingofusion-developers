@@ -1261,7 +1261,7 @@ function ModelIcon({
       <img
         src={`${import.meta.env.BASE_URL}${(presentation?.image ?? "/assets/models/lingofusion.png").replace(/^\/+/, "")}`}
         alt=""
-        className="h-full w-full object-cover transition-transform duration-300"
+        className={`h-full w-full ${presentation?.imageFit === "contain" ? "object-contain" : "object-cover"} transition-transform duration-300`}
         style={{ transform: imageTransform }}
       />
     </span>
