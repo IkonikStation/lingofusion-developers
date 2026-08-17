@@ -19,7 +19,7 @@ export const nativeLocalModels: Record<NativeModelId, {
     mac: ["Modern 64-bit macOS", "8 GB RAM or unified memory minimum", "16 GB+ recommended", "Apple Silicon M1 or newer recommended", "Dedicated GPU not required on Apple Silicon", "3 GB minimum free storage", "5 GB+ free storage recommended"],
   },
   "LingoFusion Native-9B": {
-    badge: "Balanced · Recommended", downloadSize: "Build-specific", parameters: "9B parameters", context: "Build-specific context", bestFor: "Most users on mainstream 16 GB-class computers", buildSpecific: true,
+    badge: "Capable · Recommended", downloadSize: "Build-specific", parameters: "9B parameters", context: "Build-specific context", bestFor: "Most users on mainstream 16 GB-class computers", buildSpecific: true,
     windows: ["Windows 10 or Windows 11, 64-bit", "16 GB-class system recommended", "Actual memory and storage needs depend on the selected local build", "Modern 64-bit Intel or AMD processor", "GPU optional; compatible GPU can improve speed"],
     mac: ["Apple Silicon recommended", "16 GB-class unified memory recommended", "Actual memory and storage needs depend on the selected local build", "Integrated Apple Silicon GPU supported"],
   },
