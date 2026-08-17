@@ -67,7 +67,7 @@ export const textModelPresentations: Record<string, TextModelPresentation> = {
     image: "/assets/models/lingofusion-native-9b.png",
     imageScale: 1.12,
     imageFit: "contain",
-    capability: "Balanced local translation for most users, designed around mainstream 16 GB-class computers.",
+    capability: "Capable local translation for most users, designed around mainstream 16 GB-class computers.",
     bestFor: "Everyday professional translation with a practical quality, speed, and hardware balance.",
     features: ["9B parameters", "Recommended for most users", "Free · Runs locally", "Build-specific local requirements"],
   },
@@ -264,7 +264,7 @@ export const modelDetails: Record<string, string> = {
   "LingoFusion Ultra":
     "Highest-quality multilingual reasoning and long-form translation for enterprise workflows.",
   "LingoFusion Pro":
-    "Balanced premium model for product-grade translation, writing, and localization tasks.",
+    "Professional model for product-grade translation, writing, and localization tasks.",
   ExplainFusion:
     "Premium model for explanation-heavy translation, rewriting, and educational localization workflows.",
   LingoFusion:
@@ -276,7 +276,7 @@ export const modelDetails: Record<string, string> = {
   "LingoFusion Native-1.7B":
     "Lightweight free local translation for everyday tasks on ordinary computers.",
   "LingoFusion Native-9B":
-    "Balanced free local translation for everyday professional work on mainstream computers.",
+    "Capable free local translation for everyday professional work on mainstream computers.",
   "LingoFusion Native-35B":
     "Higher-quality free local translation for difficult multilingual work on powerful computers.",
   "LingoFusion TTS Advanced":
