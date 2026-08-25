@@ -671,7 +671,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                               <SelectInput label="Model" value={tryModel} onChange={setTryModel}>
                                 {musicModels.map((model) => <option key={model.model}>{model.model}</option>)}
                               </SelectInput>
-                              <NumberInput label="Duration (seconds)" value={tryMusicDurationSeconds} min={1} max={3600} onChange={setTryMusicDurationSeconds} />
+                              <NumberInput label="Duration (seconds)" value={tryMusicDurationSeconds} min={0} max={3600} onChange={setTryMusicDurationSeconds} />
                             </>
                           )}
                           {playgroundMode === "text" && <>
@@ -811,7 +811,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                     <div className="grid gap-3 md:grid-cols-[1fr_1fr_9rem_auto]">
                       <TextInput label="Name" value={newProject.name} onChange={(value) => setNewProject({ ...newProject, name: value })} />
                       <TextInput label="Description" value={newProject.description} onChange={(value) => setNewProject({ ...newProject, description: value })} />
-                      <NumberInput label="Budget" value={newProject.budget} min={1} max={1000000} onChange={(value) => setNewProject({ ...newProject, budget: value })} />
+                      <NumberInput label="Budget" value={newProject.budget} min={0} max={1000000} onChange={(value) => setNewProject({ ...newProject, budget: value })} />
                       <ActionButton onClick={createProject} className="self-end">
                         <Plus className="h-4 w-4" />
                         {tc("Create")}
@@ -1040,7 +1040,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                         <option value="Disabled">{tc("Disabled")}</option>
                         <option value="Enabled">{tc("Enabled")}</option>
                       </SelectInput>
-                      <NumberInput label="Threshold" value={autoRecharge.threshold} min={1} max={999} onChange={(value) => setAutoRecharge({ ...autoRecharge, threshold: value })} />
+                      <NumberInput label="Threshold" value={autoRecharge.threshold} min={0} max={999} onChange={(value) => setAutoRecharge({ ...autoRecharge, threshold: value })} />
                       <NumberInput label="Recharge amount" value={autoRecharge.amount} min={5} max={1000} onChange={(value) => setAutoRecharge({ ...autoRecharge, amount: value })} />
                       <NumberInput label="Monthly limit" value={autoRecharge.monthlyLimit} min={0} max={10000} onChange={(value) => setAutoRecharge({ ...autoRecharge, monthlyLimit: value })} />
                       <TextInput label="Payment method" value={autoRecharge.paymentMethod} onChange={(value) => setAutoRecharge({ ...autoRecharge, paymentMethod: value })} />
