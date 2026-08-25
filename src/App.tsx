@@ -835,16 +835,16 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
             </SelectField>
             <NumberField
               label={t("inputTokens")}
-              min={1}
-              max={1_000_000_000}
+              min={0}
+              max={Infinity}
               step={1}
               value={inputTokens}
               onChange={setInputTokens}
             />
             <NumberField
               label={t("outputTokens")}
-              min={1}
-              max={1_000_000_000}
+              min={0}
+              max={Infinity}
               step={1}
               value={outputTokens}
               onChange={setOutputTokens}
@@ -899,8 +899,8 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
             </SelectField>
             <NumberField
               label={t("characters")}
-              min={1}
-              max={100000000}
+              min={0}
+              max={Infinity}
               step={1}
               value={ttsCharacters}
               onChange={setTtsCharacters}
@@ -911,8 +911,8 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
               <ReadOnlyField label={t("model")} value={liveTranslateModel.model} />
               <NumberField
                 label={t("minutes")}
-                min={1}
-                max={1000000}
+                min={0}
+                max={Infinity}
                 step={0.01}
                 value={liveTranslateMinutes}
                 onChange={setLiveTranslateMinutes}
@@ -944,8 +944,8 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
             </SelectField>
             <NumberField
               label={t("minutes")}
-              min={1}
-              max={1000000}
+              min={0}
+              max={Infinity}
               step={0.01}
               value={transcriptionMinutes}
               onChange={setTranscriptionMinutes}
@@ -972,8 +972,8 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
             </SelectField>
             <NumberField
               label={t("minutes")}
-              min={1}
-              max={1000000}
+              min={0}
+              max={Infinity}
               step={0.01}
               value={dubbingMinutes}
               onChange={setDubbingMinutes}
@@ -1000,8 +1000,8 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
             </SelectField>
             <NumberField
               label={t("images")}
-              min={1}
-              max={1000000}
+              min={0}
+              max={Infinity}
               step={1}
               value={imageCount}
               onChange={setImageCount}
@@ -1026,8 +1026,8 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
             </SelectField>
             <NumberField
               label={selectedPdf.model === "PDF text extraction" ? t("extractions") : t("documents")}
-              min={1}
-              max={1000000}
+              min={0}
+              max={Infinity}
               step={1}
               value={pdfCount}
               onChange={setPdfCount}
@@ -1052,8 +1052,8 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
             </SelectField>
             <NumberField
               label={t("minutes")}
-              min={1}
-              max={1000000}
+              min={0}
+              max={Infinity}
               step={0.01}
               value={musicMinutes}
               onChange={setMusicMinutes}
@@ -1816,7 +1816,7 @@ function NumberField({
       <input
         type="number"
         min={min}
-        max={max}
+        {...(Number.isFinite(max) ? { max } : {})}
         step={step}
         value={value}
         onChange={(event) =>
