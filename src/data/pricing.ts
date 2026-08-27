@@ -124,7 +124,7 @@ export const textModelPresentations: Record<string, TextModelPresentation> = {
 };
 
 export const ttsModels: SimpleModel[] = [
-  { model: "LingoFusion TTS Basic", priceUsd: 0.12, pricingUnit: "per_1k_characters" },
+  { model: "LingoFusion TTS Basic", priceUsd: 0.05, pricingUnit: "per_1k_characters" },
   { model: "LingoFusion TTS Advanced", priceUsd: 0.25, pricingUnit: "per_1k_characters" },
   { model: "LingoFusion Live Translate", priceUsd: 0.10, pricingUnit: "per_minute" },
 ];

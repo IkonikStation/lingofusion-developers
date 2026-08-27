@@ -24,6 +24,7 @@ import {
   yearlyDiscountPercent,
 } from "../data/subscriptions";
 import type { BillingInterval, ProVariant, ProVariantKey, UltraVariant, UltraVariantKey } from "../data/subscriptions";
+import { submitSalesRequest } from "../data/sales";
 
 type SubscriptionPageProps = {
   onApiPrices: () => void;
@@ -724,8 +725,33 @@ function SalesContactForm({ seatCount, seatName, billingInterval, onClose, onSub
   onClose: () => void;
   onSubmit: () => void;
 }) {
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSubmitting(true);
+    setError("");
+    const form = new FormData(event.currentTarget);
+    try {
+      await submitSalesRequest({
+        email: String(form.get("email") || ""),
+        organization: String(form.get("organization") || ""),
+        message: `Interested in Enterprise for ${formatNumber(seatCount)} seats.`,
+        seats: seatCount,
+        planId: seatName,
+        billingInterval,
+      });
+      onSubmit();
+    } catch {
+      setError("We could not send the acknowledgement email. Please try again shortly.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
-    <form onSubmit={(event) => { event.preventDefault(); onSubmit(); }} className="border-t border-[#dbe4f0] bg-[#f8fbff] p-6 dark:border-white/10 dark:bg-white/[0.03] sm:p-8">
+    <form onSubmit={handleSubmit} className="border-t border-[#dbe4f0] bg-[#f8fbff] p-6 dark:border-white/10 dark:bg-white/[0.03] sm:p-8">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#3679cc] dark:text-[#8ec1ff]">Enterprise sales</p>
@@ -742,8 +768,9 @@ function SalesContactForm({ seatCount, seatName, billingInterval, onClose, onSub
       </div>
       <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs leading-5 text-[#637289] dark:text-slate-400">Enterprise requests are quoted individually with your selected {formatNumber(seatCount)} seats preserved.</p>
-        <button type="submit" className="pressable click-feedback inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#16284a] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#203b6d] dark:bg-white dark:text-[#14233d]">Send sales request <ArrowRight className="h-4 w-4" /></button>
+        <button type="submit" disabled={submitting} className="pressable click-feedback inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#16284a] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#203b6d] disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-[#14233d]">{submitting ? "Sending..." : "Send sales request"} <ArrowRight className="h-4 w-4" /></button>
       </div>
+      {error && <p className="mt-3 text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>}
     </form>
   );
 }

@@ -30,6 +30,10 @@ GitHub Pages hosts only the frontend. To make live calls from the public site, d
 
 Local dashboard ledger data is intentionally excluded from version control.
 
+## Enterprise sales acknowledgements
+
+Enterprise forms for 1,000 or more seats send an automatic acknowledgement to the submitted work email through [Resend](https://resend.com). Add `RESEND_API_KEY` and a verified `LINGOFUSION_EMAIL_FROM` address to the API server's `.env`, then run `pnpm api` or deploy `server.mjs` with those variables. The confirmation is only shown after Resend accepts the email; configuration or provider failures are shown to the requester instead.
+
 ## Deployment
 
 Pushes to `main` deploy the static frontend to GitHub Pages. The Pages build includes an SPA fallback for model and subscription routes.
