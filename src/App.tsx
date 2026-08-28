@@ -693,7 +693,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
   const displayPrice = (usdAmount: number | null, unit?: string) => {
     if (usdAmount === null) return "TBD";
     const suffix = unit === "per_minute" ? "/min" : unit === "per_500_extractions" ? " / 500 extractions" : "";
-    return `${displayCurrency(usdAmount)}${suffix}`;
+    return `${displayCurrency(usdAmount, true)}${suffix}`;
   };
 
   const visibleTextModels = textModelsByPricingMode[textPricingMode].filter((model) => !model.local);
