@@ -131,7 +131,7 @@ export const ttsModels: SimpleModel[] = [
 
 export const transcriptionModels: SimpleModel[] = [
   { model: "LingoFusion Transcribe", priceUsd: 0.017, pricingUnit: "per_minute" },
-  { model: "LingoFusion Transcribe Live", priceUsd: 0.07, pricingUnit: "per_minute" },
+  { model: "LingoFusion Transcribe Live", priceUsd: 0.04, pricingUnit: "per_minute" },
 ];
 
 export const dubbingModels: SimpleModel[] = [
