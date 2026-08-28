@@ -142,8 +142,7 @@ export const dubbingModels: SimpleModel[] = [
 ];
 
 export const musicModels: SimpleModel[] = [
-  { model: "Aurora Music V1", priceUsd: 0.60, pricingUnit: "per_minute" },
-  { model: "Aurora Music V2", priceUsd: 0.99, pricingUnit: "per_minute" },
+  { model: "Aurora Music", priceUsd: 0.60, pricingUnit: "per_minute" },
 ];
 
 export const imageModels: ImageModel[] = [
@@ -175,8 +174,7 @@ export const latestModels = [
   "LingoFusion Audio Dubbing",
   "LingoFusion Video Dub (Basic)",
   "LingoFusion Video Dub (Advanced)",
-  "Aurora Music V1",
-  "Aurora Music V2",
+  "Aurora Music",
   "PDF text extraction",
   "PDF editing and translation",
   "Image Translate",

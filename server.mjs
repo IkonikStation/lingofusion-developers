@@ -46,8 +46,7 @@ const batchTextModels = textModels.map((model) => ({
 }));
 
 const musicModels = [
-  { model: "Aurora Music V1", pricePerMinute: 0.60 },
-  { model: "Aurora Music V2", pricePerMinute: 0.99 },
+  { model: "Aurora Music", pricePerMinute: 0.60 },
 ];
 
 const lmStudio = {
