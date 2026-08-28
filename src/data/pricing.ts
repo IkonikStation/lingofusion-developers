@@ -131,6 +131,7 @@ export const ttsModels: SimpleModel[] = [
 
 export const transcriptionModels: SimpleModel[] = [
   { model: "LingoFusion Transcribe", priceUsd: 0.017, pricingUnit: "per_minute" },
+  { model: "LingoFusion Transcribe Mini", priceUsd: 0.008, pricingUnit: "per_minute" },
   { model: "LingoFusion Transcribe Live", priceUsd: 0.04, pricingUnit: "per_minute" },
 ];
 
@@ -168,6 +169,7 @@ export const latestModels = [
   "LingoFusion TTS Advanced",
   "LingoFusion Live Translate",
   "LingoFusion Transcribe",
+  "LingoFusion Transcribe Mini",
   "LingoFusion Transcribe Live",
   "LingoFusion Audio Dubbing",
   "LingoFusion Video Dub (Basic)",
@@ -218,6 +220,7 @@ export const navMenus = {
     "LingoFusion Nano",
     "LingoFusion Live Translate",
     "LingoFusion Transcribe",
+    "LingoFusion Transcribe Mini",
     "LingoFusion Transcribe Live",
     "PDF text extraction",
     "PDF editing and translation",
@@ -280,6 +283,8 @@ export const modelDetails: Record<string, string> = {
     "Live translation model for real-time spoken language workflows.",
   "LingoFusion Transcribe":
     "Production transcription model for accurate speech-to-text workflows.",
+  "LingoFusion Transcribe Mini":
+    "Lower-latency transcription model for lightweight speech-to-text tasks.",
   "LingoFusion Transcribe Live":
     "Real-time transcription model for streaming audio and live captioning.",
   "PDF text extraction":
