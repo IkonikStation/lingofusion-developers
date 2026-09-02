@@ -640,10 +640,10 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
   const [selectedModel, setSelectedModel] = useState("LingoFusion");
   const [inputTokens, setInputTokens] = useState(1_000_000);
   const [outputTokens, setOutputTokens] = useState(1_000_000);
-  const ttsCharacterModels = ttsModels.filter((model) => model.pricingUnit === "per_1k_characters");
+  const ttsWordModels = ttsModels.filter((model) => model.pricingUnit === "per_word");
   const liveTranslateModel = ttsModels.find((model) => model.model === "LingoFusion Live Translate");
-  const [selectedTtsModel, setSelectedTtsModel] = useState(ttsCharacterModels[0]?.model ?? "");
-  const [ttsCharacters, setTtsCharacters] = useState(1000);
+  const [selectedTtsModel, setSelectedTtsModel] = useState(ttsWordModels[0]?.model ?? "");
+  const [ttsWords, setTtsWords] = useState(1000);
   const [liveTranslateMinutes, setLiveTranslateMinutes] = useState(1);
   const [selectedTranscriptionModel, setSelectedTranscriptionModel] = useState(transcriptionModels[0].model);
   const [transcriptionMinutes, setTranscriptionMinutes] = useState(1);
@@ -692,13 +692,13 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
   const displayCurrency = (usdAmount: number, precise = false) => formatCurrencyAmount(usdAmount, activeCurrency, activeRate, precise);
   const displayPrice = (usdAmount: number | null, unit?: string) => {
     if (usdAmount === null) return "TBD";
-    const suffix = unit === "per_minute" ? "/min" : unit === "per_500_extractions" ? " / 500 extractions" : "";
+    const suffix = unit === "per_word" ? "/word" : unit === "per_minute" ? "/min" : unit === "per_500_extractions" ? " / 500 extractions" : "";
     return `${displayCurrency(usdAmount, true)}${suffix}`;
   };
 
   const visibleTextModels = textModelsByPricingMode[textPricingMode].filter((model) => !model.local);
   const selectedTextModel = visibleTextModels.find((model) => model.model === selectedModel) ?? visibleTextModels[2];
-  const selectedTts = ttsCharacterModels.find((model) => model.model === selectedTtsModel) ?? ttsCharacterModels[0];
+  const selectedTts = ttsWordModels.find((model) => model.model === selectedTtsModel) ?? ttsWordModels[0];
   const selectedTranscription =
     transcriptionModels.find((model) => model.model === selectedTranscriptionModel) ?? transcriptionModels[0];
   const selectedDubbing = dubbingModels.find((model) => model.model === selectedDubbingModel) ?? dubbingModels[0];
@@ -732,8 +732,8 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
   }, [inputTokens, outputTokens, selectedTextModel]);
 
   const ttsEstimate = useMemo(() => {
-    return !selectedTts || selectedTts.priceUsd === null ? null : (ttsCharacters / 1000) * selectedTts.priceUsd;
-  }, [selectedTts, ttsCharacters]);
+    return !selectedTts || selectedTts.priceUsd === null ? null : ttsWords * selectedTts.priceUsd;
+  }, [selectedTts, ttsWords]);
 
   const liveTranslateEstimate = useMemo(() => {
     return !liveTranslateModel || liveTranslateModel.priceUsd === null ? null : minuteNotationToMinutes(liveTranslateMinutes) * liveTranslateModel.priceUsd;
@@ -893,17 +893,17 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
         <div id="tts-models" className="site-reveal section-enter [--section-index:2]">
           <SectionCalculator title={t("ttsCalculator")} estimateLabel={t("estimate")} estimate={ttsEstimate === null ? "TBD" : displayCurrency(ttsEstimate, true)}>
             <SelectField label={t("model")} value={selectedTtsModel} onChange={setSelectedTtsModel}>
-              {ttsCharacterModels.map((model) => (
+              {ttsWordModels.map((model) => (
                 <option key={model.model}>{model.model}</option>
               ))}
             </SelectField>
             <NumberField
-              label={t("characters")}
+              label={t("words")}
               min={0}
               max={Infinity}
               step={1}
-              value={ttsCharacters}
-              onChange={setTtsCharacters}
+              value={ttsWords}
+              onChange={setTtsWords}
             />
           </SectionCalculator>
           {liveTranslateModel && (
@@ -924,7 +924,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
           <PricingCard
             key={`tts-${currencyPresentationKey}`}
             title={t("ttsModels")}
-            unit={t("pricesPer1KCharactersAndMinute")}
+            unit={t("pricesPerWordAndMinute")}
             kind="simple"
             rows={displayedTtsModels}
             labels={pricingLabels}
@@ -1422,7 +1422,7 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     speedLevel: 4,
     contextWindow: "400,000",
     maxOutput: "128,000",
-    quality: "Essential",
+    quality: "Fluent",
     description: "LingoFusion Nano is optimized for low-latency, high-volume language work where predictable structure and cost matter more than deep linguistic analysis.",
     limitations: ["Best with short or clearly structured source text", "Limited terminology research", "Not intended for document-scale review"],
   },
@@ -1433,7 +1433,7 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     speedLevel: 4,
     contextWindow: "400,000",
     maxOutput: "128,000",
-    quality: "Reliable",
+    quality: "Native-Level",
     description: "LingoFusion Lite balances low cost with stronger multilingual comprehension for production translation, extraction, classification, and summarization.",
     limitations: ["May simplify highly specialized language", "Limited cross-document consistency", "Complex tone may require review"],
   },
@@ -1444,7 +1444,7 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     speedLevel: 3,
     contextWindow: "1,000,000",
     maxOutput: "384,000",
-    quality: "Dependable",
+    quality: "Expert Linguist",
     description: "LingoFusion is the recommended default for dependable translation and multilingual generation, balancing quality, latency, and cost across everyday workloads.",
     limitations: ["Specialist terminology may benefit from supplied glossaries", "Long legal or medical documents should be reviewed", "Deep research is reserved for higher tiers"],
   },
@@ -1455,7 +1455,7 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     speedLevel: 3,
     contextWindow: "1,000,000",
     maxOutput: "384,000",
-    quality: "Professional",
+    quality: "Professional Translator",
     description: "LingoFusion Pro is designed for professional localization and complex translation where context, tone, ambiguity, and terminology must remain consistent.",
     limitations: ["Higher latency than standard LingoFusion", "Very long jobs may be better suited to Batch", "Human review remains recommended for regulated content"],
   },
@@ -1477,7 +1477,7 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     speedLevel: 2,
     contextWindow: "1,000,000",
     maxOutput: "384,000",
-    quality: "Exceptional",
+    quality: "Master Linguist",
     description: "LingoFusion Ultra is built for the hardest multilingual work, combining deep reasoning, specialist terminology handling, and document-scale consistency review.",
     limitations: ["Highest price in the LingoFusion text family", "Longer response time for deep analysis", "Batch is recommended for large non-urgent jobs"],
   },

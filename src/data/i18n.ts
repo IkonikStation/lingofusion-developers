@@ -57,6 +57,7 @@ export type TranslationKey =
   | "inputTokens"
   | "outputTokens"
   | "characters"
+  | "words"
   | "minutes"
   | "minuteHelp"
   | "images"
@@ -73,7 +74,7 @@ export type TranslationKey =
   | "pdfExtractionEditing"
   | "billingNotes"
   | "pricesPer1MTokens"
-  | "pricesPer1KCharactersAndMinute"
+  | "pricesPerWordAndMinute"
   | "pricesPerMinute"
   | "pricesPerImage"
   | "pdfWorkflows"
@@ -133,6 +134,7 @@ const en: Record<TranslationKey, string> = {
   inputTokens: "Input tokens",
   outputTokens: "Output tokens",
   characters: "Characters",
+  words: "Words",
   minutes: "Minutes (mm.ss)",
   minuteHelp: "Use minute.second format, so `1.30` means 1 minute 30 seconds.",
   images: "Images",
@@ -149,7 +151,7 @@ const en: Record<TranslationKey, string> = {
   pdfExtractionEditing: "PDF extraction and editing",
   billingNotes: "Billing notes",
   pricesPer1MTokens: "Prices per 1M tokens",
-  pricesPer1KCharactersAndMinute: "Prices per 1K characters and per minute",
+  pricesPerWordAndMinute: "Prices per word and per minute",
   pricesPerMinute: "Prices per minute",
   pricesPerImage: "Prices per image",
   pdfWorkflows: "PDF document workflows",
@@ -160,7 +162,7 @@ const en: Record<TranslationKey, string> = {
   tableImageSize: "Image size",
   recommended: "Recommended",
   billingText: "Text models are billed per 1M tokens.",
-  billingTts: "TTS models are billed per 1K characters.",
+  billingTts: "TTS models are billed per word.",
   billingTranscription: "Transcription models are billed per minute.",
   billingDubbing: "Dubbing models are billed per minute.",
   billingMusic: "Music models are billed per minute.",

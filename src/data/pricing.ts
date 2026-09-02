@@ -20,7 +20,7 @@ export type TextPricingMode = "instant" | "batch";
 export type SimpleModel = {
   model: string;
   priceUsd: number | null;
-  pricingUnit?: "per_1k_characters" | "per_minute" | "per_500_extractions";
+  pricingUnit?: "per_word" | "per_1k_characters" | "per_minute" | "per_500_extractions";
 };
 
 export type ImageModel = {
@@ -124,8 +124,8 @@ export const textModelPresentations: Record<string, TextModelPresentation> = {
 };
 
 export const ttsModels: SimpleModel[] = [
-  { model: "LingoFusion TTS Basic", priceUsd: 0.05, pricingUnit: "per_1k_characters" },
-  { model: "LingoFusion TTS Advanced", priceUsd: 0.25, pricingUnit: "per_1k_characters" },
+  { model: "LingoFusion TTS Basic", priceUsd: 0.0003, pricingUnit: "per_word" },
+  { model: "LingoFusion TTS Advanced", priceUsd: 0.002, pricingUnit: "per_word" },
   { model: "LingoFusion Live Translate", priceUsd: 0.10, pricingUnit: "per_minute" },
 ];
 
