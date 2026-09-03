@@ -31,9 +31,9 @@ const port = Number(process.env.LINGOFUSION_API_PORT || 8787);
 const MICRO_CENTS_PER_DOLLAR = 100_000_000;
 
 const textModels = [
-  { model: "LingoFusion Nano", input: 0.15, output: 0.70 },
+  { model: "LingoFusion Nano", input: 0.06, output: 0.50 },
   { model: "LingoFusion Lite", input: 0.75, output: 3.00 },
-  { model: "LingoFusion", input: 3.50, output: 20.00 },
+  { model: "LingoFusion", input: 3.00, output: 15.00 },
   { model: "LingoFusion Pro", input: 4.00, output: 25.00 },
   { model: "ExplainFusion", input: 3.00, output: 2.00 },
   { model: "LingoFusion Ultra", input: 25.00, output: 150.00 },
