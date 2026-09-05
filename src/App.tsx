@@ -1475,7 +1475,7 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     reasoningLevel: 4,
     speed: "Deliberate",
     speedLevel: 2,
-    contextWindow: "1,000,000",
+    contextWindow: "1,050,000",
     maxOutput: "384,000",
     quality: "Master Linguist",
     description: "LingoFusion Ultra is built for the hardest multilingual work, combining deep reasoning, specialist terminology handling, and document-scale consistency review.",
