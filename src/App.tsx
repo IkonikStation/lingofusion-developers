@@ -1423,7 +1423,7 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     contextWindow: "400,000",
     maxOutput: "128,000",
     quality: "Fluent",
-    description: "LingoFusion Nano is optimized for low-latency, high-volume language work where predictable structure and cost matter more than deep linguistic analysis.",
+    description: "LingoFusion Nano is the smallest and fastest model in the LingoFusion family. It is engineered for high-volume, latency-sensitive work where speed and cost matter more than deep linguistic analysis. Nano handles short, clearly structured text with ease — ideal for classification, extraction, quick translations, and real-time interfaces. It is the lightest way to add LingoFusion to your workflow.",
     limitations: ["Best with short or clearly structured source text", "Limited terminology research", "Not intended for document-scale review"],
   },
   "LingoFusion Lite": {
@@ -1434,7 +1434,7 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     contextWindow: "400,000",
     maxOutput: "128,000",
     quality: "Native-Level",
-    description: "LingoFusion Lite balances low cost with stronger multilingual comprehension for production translation, extraction, classification, and summarization.",
+    description: "LingoFusion Lite is the second-smallest model in the family, offering a meaningful step up in multilingual comprehension while staying fast and affordable. It balances low cost with stronger understanding for production translation, extraction, classification, and summarization. Lite is the sweet spot for teams that want better quality than Nano without paying for the full LingoFusion tier.",
     limitations: ["May simplify highly specialized language", "Limited cross-document consistency", "Complex tone may require review"],
   },
   LingoFusion: {
@@ -1445,7 +1445,7 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     contextWindow: "1,000,000",
     maxOutput: "384,000",
     quality: "Expert Linguist",
-    description: "LingoFusion is the recommended default for dependable translation and multilingual generation, balancing quality, latency, and cost across everyday workloads.",
+    description: "LingoFusion is the recommended default and the dependable all-rounder of the family. It delivers high-quality, natural translation and multilingual generation across everyday workloads, balancing quality, latency, and cost. Whether you are localizing a product, translating documents, or generating multilingual content, LingoFusion handles it reliably — which is why it is the model most developers reach for.",
     limitations: ["Specialist terminology may benefit from supplied glossaries", "Long legal or medical documents should be reviewed", "Deep research is reserved for higher tiers"],
   },
   "LingoFusion Pro": {
@@ -1456,7 +1456,7 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     contextWindow: "1,000,000",
     maxOutput: "384,000",
     quality: "Professional Translator",
-    description: "LingoFusion Pro is designed for professional localization and complex translation where context, tone, ambiguity, and terminology must remain consistent.",
+    description: "LingoFusion Pro is a professional-grade translator built for complex, high-stakes localization. It preserves context, tone, and ambiguity across long documents, keeps terminology consistent, and handles specialized subject matter with care. When accuracy and nuance are non-negotiable — legal, medical, technical, or marketing content — Pro delivers professional-quality results you can trust.",
     limitations: ["Higher latency than standard LingoFusion", "Very long jobs may be better suited to Batch", "Human review remains recommended for regulated content"],
   },
   ExplainFusion: {
@@ -1478,7 +1478,7 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     contextWindow: "1,050,000",
     maxOutput: "384,000",
     quality: "Master Linguist",
-    description: "LingoFusion Ultra is built for the hardest multilingual work, combining deep reasoning, specialist terminology handling, and document-scale consistency review.",
+    description: "LingoFusion Ultra is the most powerful model in the LingoFusion family, built for the hardest multilingual work. It combines maximum reasoning with specialist terminology handling and document-scale consistency review to deliver near-flawless translations. Ultra excels at deep, nuanced, and highly specialized content where every word matters. When you need the absolute best possible output, Ultra is the answer.",
     limitations: ["Highest price in the LingoFusion text family", "Longer response time for deep analysis", "Batch is recommended for large non-urgent jobs"],
   },
 };
