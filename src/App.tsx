@@ -1374,6 +1374,8 @@ type ModelProfileSpec = {
   reasoningLevel: number;
   speed: string;
   speedLevel: number;
+  speedRank?: number;
+  tokensPerSecond?: string;
   contextWindow: string;
   maxOutput: string;
   quality: string;
@@ -1418,8 +1420,9 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
   "LingoFusion Nano": {
     reasoning: "Light",
     reasoningLevel: 1,
-    speed: "Fastest",
-    speedLevel: 4,
+    speed: "Fast",
+    speedLevel: 3,
+    speedRank: 4,
     contextWindow: "400,000",
     maxOutput: "128,000",
     quality: "Fluent",
@@ -1429,8 +1432,9 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
   "LingoFusion Lite": {
     reasoning: "Standard",
     reasoningLevel: 2,
-    speed: "Very fast",
+    speed: "Fast",
     speedLevel: 4,
+    speedRank: 3,
     contextWindow: "400,000",
     maxOutput: "128,000",
     quality: "Native-Level",
@@ -1440,19 +1444,22 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
   LingoFusion: {
     reasoning: "Focused",
     reasoningLevel: 3,
-    speed: "Fast",
-    speedLevel: 3,
+    speed: "Fastest",
+    speedLevel: 4,
+    speedRank: 1,
+    tokensPerSecond: "up to 400 tokens/sec",
     contextWindow: "1,000,000",
     maxOutput: "384,000",
     quality: "Expert Linguist",
-    description: "LingoFusion is the recommended default and the dependable all-rounder of the family. It delivers high-quality, natural translation and multilingual generation across everyday workloads, balancing quality, latency, and cost. Whether you are localizing a product, translating documents, or generating multilingual content, LingoFusion handles it reliably — which is why it is the model most developers reach for.",
+    description: "LingoFusion is the recommended default, the dependable all-rounder of the family, and the fastest model we offer — reaching up to 400 tokens per second. It delivers high-quality, natural translation and multilingual generation across everyday workloads, balancing quality, latency, and cost. Whether you are localizing a product, translating documents, or generating multilingual content, LingoFusion handles it reliably — which is why it is the model most developers reach for.",
     limitations: ["Specialist terminology may benefit from supplied glossaries", "Long legal or medical documents should be reviewed", "Deep research is reserved for higher tiers"],
   },
   "LingoFusion Pro": {
     reasoning: "Higher",
     reasoningLevel: 4,
     speed: "Moderate",
-    speedLevel: 3,
+    speedLevel: 2,
+    speedRank: 5,
     contextWindow: "1,000,000",
     maxOutput: "384,000",
     quality: "Professional Translator",
@@ -1462,8 +1469,9 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
   ExplainFusion: {
     reasoning: "Higher",
     reasoningLevel: 4,
-    speed: "Moderate",
-    speedLevel: 3,
+    speed: "Very fast",
+    speedLevel: 4,
+    speedRank: 2,
     contextWindow: "1,000,000",
     maxOutput: "384,000",
     quality: "Insightful",
@@ -1474,7 +1482,8 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     reasoning: "Maximum",
     reasoningLevel: 4,
     speed: "Deliberate",
-    speedLevel: 2,
+    speedLevel: 1,
+    speedRank: 6,
     contextWindow: "1,050,000",
     maxOutput: "384,000",
     quality: "Master Linguist",
@@ -1582,7 +1591,7 @@ function ModelDetailPage({
       <section className="site-reveal mt-10 overflow-hidden rounded-lg border border-neutral-200 dark:border-white/10" aria-label="Model summary">
         <div className="grid gap-px bg-neutral-200 dark:bg-white/10 sm:grid-cols-2 lg:grid-cols-5">
           <div className="bg-white p-5 text-center dark:bg-[#0d0d0d]"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Reasoning</p><div className="mt-3"><RatingMarks value={profile.reasoningLevel} icon={BrainCircuit} /></div><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">{profile.reasoning}</p></div>
-          <div className="bg-white p-5 text-center dark:bg-[#0d0d0d]"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Speed</p>{isLocalModel ? <><Gauge className="mx-auto mt-3 h-5 w-5 text-neutral-800 dark:text-neutral-200" /><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">Hardware-dependent</p><p className="mt-1 text-xs text-neutral-500">CPU, GPU, memory, and settings</p></> : <><div className="mt-3"><RatingMarks value={profile.speedLevel} icon={Zap} /></div><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">{profile.speed}</p></>}</div>
+          <div className="bg-white p-5 text-center dark:bg-[#0d0d0d]"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Speed</p>{isLocalModel ? <><Gauge className="mx-auto mt-3 h-5 w-5 text-neutral-800 dark:text-neutral-200" /><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">Hardware-dependent</p><p className="mt-1 text-xs text-neutral-500">CPU, GPU, memory, and settings</p></> : <><div className="mt-3"><RatingMarks value={profile.speedLevel} icon={Zap} /></div><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">{profile.speed}</p>{profile.speedRank && <p className="mt-1 text-xs font-medium text-neutral-500">#{profile.speedRank} fastest of 6</p>}{profile.tokensPerSecond && <p className="mt-1 text-xs font-medium text-neutral-500">{profile.tokensPerSecond}</p>}</>}</div>
           <div className="bg-white p-5 text-center dark:bg-[#0d0d0d]"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Price</p><p className={`mt-3 whitespace-nowrap text-lg font-semibold ${modelPriceTone(modelName)}`}>{isLocalModel ? "Free" : `${price(activePrice.inputUsd)} / ${price(activePrice.outputUsd)}`}</p><p className="mt-1 text-sm text-neutral-500">{isLocalModel ? "Runs locally" : "Input / Output"}</p></div>
           <div className="bg-white p-5 text-center dark:bg-[#0d0d0d]"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Input</p><Type className="mx-auto mt-3 h-5 w-5 text-neutral-800 dark:text-neutral-200" /><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">Text</p></div>
           <div className="bg-white p-5 text-center dark:bg-[#0d0d0d] sm:col-span-2 lg:col-span-1"><p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Output</p><FileText className="mx-auto mt-3 h-5 w-5 text-neutral-800 dark:text-neutral-200" /><p className="mt-2 text-sm font-medium text-neutral-800 dark:text-neutral-200">Text</p></div>
@@ -1594,6 +1603,7 @@ function ModelDetailPage({
         <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-1">
           <div className="flex items-center gap-3"><Layers3 className="h-5 w-5 text-neutral-500" /><div><dt className="text-neutral-500">Context window</dt><dd className="font-medium text-neutral-950 dark:text-white">{profile.contextWindow} tokens</dd></div></div>
           <div className="flex items-center gap-3"><Gauge className="h-5 w-5 text-neutral-500" /><div><dt className="text-neutral-500">Maximum output</dt><dd className="font-medium text-neutral-950 dark:text-white">{profile.maxOutput} tokens</dd></div></div>
+          {!isLocalModel && profile.speedRank && <div className="flex items-center gap-3"><Zap className="h-5 w-5 text-neutral-500" /><div><dt className="text-neutral-500">Speed rank</dt><dd className="font-medium text-neutral-950 dark:text-white">#{profile.speedRank} fastest{profile.tokensPerSecond ? ` · ${profile.tokensPerSecond}` : ""}</dd></div></div>}
           <div className="flex items-center gap-3"><Globe2 className="h-5 w-5 text-neutral-500" /><div><dt className="text-neutral-500">Translation quality</dt><dd className="font-medium text-neutral-950 dark:text-white">{profile.quality}</dd></div></div>
           <div className="flex items-center gap-3"><Clock3 className="h-5 w-5 text-neutral-500" /><div><dt className="text-neutral-500">Processing</dt><dd className="font-medium text-neutral-950 dark:text-white">{isLocalModel ? "Local, streaming" : "Default, streaming, Batch"}</dd></div></div>
         </dl>
