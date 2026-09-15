@@ -14,7 +14,8 @@ type DisplaySimpleModel = {
 
 type DisplayImageModel = {
   size: string;
-  price: string;
+  input: string;
+  output: string;
 };
 
 type PricingCardHeader = {
@@ -143,18 +144,20 @@ function SimpleTable({ rows, labels }: { rows: DisplaySimpleModel[]; labels: Pri
 function ImageTable({ rows, labels }: { rows: DisplayImageModel[]; labels: PricingLabels }) {
   return (
     <div className="overflow-x-auto">
-      <table className="mobile-record-table w-full min-w-[360px] text-left text-sm">
+      <table className="mobile-record-table w-full min-w-[520px] text-left text-sm">
         <thead className="border-b border-neutral-200 bg-neutral-50 text-xs font-medium uppercase tracking-wide text-neutral-500 dark:border-white/10 dark:bg-white/5 dark:text-neutral-500">
           <tr>
             <th className="px-4 py-3 font-medium">{labels.imageSize}</th>
-            <th className="px-4 py-3 font-medium">{labels.price}</th>
+            <th className="px-4 py-3 font-medium">{labels.input}</th>
+            <th className="px-4 py-3 font-medium">{labels.output}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-neutral-200 dark:divide-white/10">
           {rows.map((row) => (
             <tr key={row.size} className="pricing-row-motion hover:bg-neutral-50 dark:hover:bg-white/[0.04]">
               <td data-label={labels.imageSize} className="px-4 py-3.5 font-medium text-neutral-950 dark:text-neutral-50">{row.size}</td>
-              <td data-label={labels.price} className="px-4 py-3.5 font-mono text-sm text-neutral-800 dark:text-neutral-300">{row.price}</td>
+              <td data-label={labels.input} className="px-4 py-3.5 font-mono text-sm text-neutral-800 dark:text-neutral-300">{row.input}</td>
+              <td data-label={labels.output} className="px-4 py-3.5 font-mono text-sm text-neutral-800 dark:text-neutral-300">{row.output}</td>
             </tr>
           ))}
         </tbody>
