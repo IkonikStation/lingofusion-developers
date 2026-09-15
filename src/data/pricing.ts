@@ -25,7 +25,8 @@ export type SimpleModel = {
 
 export type ImageModel = {
   size: string;
-  priceUsd: number;
+  inputUsd: number;
+  outputUsd: number;
 };
 
 export const textModels: TextModel[] = [
@@ -146,9 +147,8 @@ export const musicModels: SimpleModel[] = [
 ];
 
 export const imageModels: ImageModel[] = [
-  { size: "Standard", priceUsd: 0.50 },
-  { size: "4K", priceUsd: 1.00 },
-  { size: "8K", priceUsd: 2.50 },
+  { size: "Standard", inputUsd: 12.00, outputUsd: 45.00 },
+  { size: "4K", inputUsd: 15.00, outputUsd: 50.00 },
 ];
 
 export const pdfModels: SimpleModel[] = [
