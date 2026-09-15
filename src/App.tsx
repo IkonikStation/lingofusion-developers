@@ -652,7 +652,8 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
   const [selectedMusicModel, setSelectedMusicModel] = useState(musicModels[0].model);
   const [musicMinutes, setMusicMinutes] = useState(1);
   const [selectedImageSize, setSelectedImageSize] = useState(imageModels[0].size);
-  const [imageCount, setImageCount] = useState(1);
+  const [imageInputTokens, setImageInputTokens] = useState(1_000_000);
+  const [imageOutputTokens, setImageOutputTokens] = useState(1_000_000);
   const [selectedPdfModel, setSelectedPdfModel] = useState(pdfModels[0].model);
   const [pdfCount, setPdfCount] = useState(500);
 
@@ -724,7 +725,11 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
   const displayedTranscriptionModels = transcriptionModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
   const displayedDubbingModels = dubbingModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
   const displayedMusicModels = musicModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
-  const displayedImageModels = imageModels.map((model) => ({ ...model, price: displayCurrency(model.priceUsd) }));
+  const displayedImageModels = imageModels.map((model) => ({
+    ...model,
+    input: displayCurrency(model.inputUsd, true),
+    output: displayCurrency(model.outputUsd, true),
+  }));
   const displayedPdfModels = pdfModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
 
   const textEstimate = useMemo(() => {
@@ -752,8 +757,8 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
   }, [selectedMusic, musicMinutes]);
 
   const imageEstimate = useMemo(() => {
-    return imageCount * selectedImage.priceUsd;
-  }, [selectedImage, imageCount]);
+    return (imageInputTokens / 1_000_000) * selectedImage.inputUsd + (imageOutputTokens / 1_000_000) * selectedImage.outputUsd;
+  }, [selectedImage, imageInputTokens, imageOutputTokens]);
 
   const pdfEstimate = useMemo(() => {
     if (selectedPdf.model === "PDF text extraction" && selectedPdf.priceUsd !== null) {
@@ -999,18 +1004,26 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
               ))}
             </SelectField>
             <NumberField
-              label={t("images")}
+              label={t("inputTokens")}
               min={0}
               max={Infinity}
-              step={1}
-              value={imageCount}
-              onChange={setImageCount}
+              step={1000}
+              value={imageInputTokens}
+              onChange={setImageInputTokens}
+            />
+            <NumberField
+              label={t("outputTokens")}
+              min={0}
+              max={Infinity}
+              step={1000}
+              value={imageOutputTokens}
+              onChange={setImageOutputTokens}
             />
           </SectionCalculator>
           <PricingCard
             key={`images-${currencyPresentationKey}`}
             title={t("imageTranslation")}
-            unit={t("pricesPerImage")}
+            unit={t("pricesPer1MTokens")}
             kind="image"
             rows={displayedImageModels}
             labels={pricingLabels}
