@@ -877,6 +877,9 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
                       type="button"
                       aria-pressed={selected}
                       onClick={() => {
+                        if (mode === "batch" && selectedModel === "LingoFusion Nano") {
+                          setSelectedModel("LingoFusion Lite");
+                        }
                         setTextPricingMode(mode);
                         window.localStorage.setItem("lingofusion-text-pricing-mode", mode);
                       }}
@@ -1531,14 +1534,15 @@ function ModelDetailPage({
   const [pricingMode, setPricingMode] = useState<TextPricingMode>("instant");
   const [comparisonMetric, setComparisonMetric] = useState<"input" | "output">("input");
   const [copied, setCopied] = useState<"model" | "request" | null>(null);
-  if (!defaultModel || !batchModel || !presentation || !profile) return null;
+  if (!defaultModel || !presentation || !profile) return null;
 
   const price = (value: number) => formatCurrencyAmount(value, "USD", 1, true);
   const apiModelId = modelSlug(modelName);
   const isLocalModel = Boolean(defaultModel.local);
+  const hasBatchPricing = Boolean(batchModel);
   const localModel = isLocalModel ? nativeLocalModels[modelName as keyof typeof nativeLocalModels] : null;
-  const activePrice = pricingMode === "batch" ? batchModel : defaultModel;
-  const comparisonModels = textModelsByPricingMode[pricingMode];
+  const activePrice = pricingMode === "batch" && hasBatchPricing ? batchModel! : defaultModel;
+  const comparisonModels = textModelsByPricingMode[pricingMode === "batch" && hasBatchPricing ? "batch" : "instant"];
   const comparisonMax = Math.max(...comparisonModels.map((model) => model[comparisonMetric === "input" ? "inputUsd" : "outputUsd"]));
   const requestSnippet = `curl https://api.lingofusion.ai/v1/translate \\
   -H "Authorization: Bearer $LINGOFUSION_API_KEY" \\
@@ -1579,7 +1583,7 @@ function ModelDetailPage({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="min-w-0 break-words text-3xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50 xl:text-4xl">{modelName}</h1>
-                {!isLocalModel && <select
+                {!isLocalModel && hasBatchPricing && <select
                   value={pricingMode}
                   onChange={(event) => setPricingMode(event.target.value as TextPricingMode)}
                   aria-label="Processing mode"
@@ -1618,7 +1622,7 @@ function ModelDetailPage({
           <div className="flex items-center gap-3"><Gauge className="h-5 w-5 text-neutral-500" /><div><dt className="text-neutral-500">Maximum output</dt><dd className="font-medium text-neutral-950 dark:text-white">{profile.maxOutput} tokens</dd></div></div>
           {!isLocalModel && profile.speedRank && <div className="flex items-center gap-3"><Zap className="h-5 w-5 text-neutral-500" /><div><dt className="text-neutral-500">Speed rank</dt><dd className="font-medium text-neutral-950 dark:text-white">#{profile.speedRank} fastest{profile.tokensPerSecond ? ` · ${profile.tokensPerSecond}` : ""}</dd></div></div>}
           <div className="flex items-center gap-3"><Globe2 className="h-5 w-5 text-neutral-500" /><div><dt className="text-neutral-500">Translation quality</dt><dd className="font-medium text-neutral-950 dark:text-white">{profile.quality}</dd></div></div>
-          <div className="flex items-center gap-3"><Clock3 className="h-5 w-5 text-neutral-500" /><div><dt className="text-neutral-500">Processing</dt><dd className="font-medium text-neutral-950 dark:text-white">{isLocalModel ? "Local, streaming" : "Default, streaming, Batch"}</dd></div></div>
+          <div className="flex items-center gap-3"><Clock3 className="h-5 w-5 text-neutral-500" /><div><dt className="text-neutral-500">Processing</dt><dd className="font-medium text-neutral-950 dark:text-white">{isLocalModel ? "Local, streaming" : hasBatchPricing ? "Default, streaming, Batch" : "Default, streaming"}</dd></div></div>
         </dl>
       </section>
 
@@ -1632,7 +1636,7 @@ function ModelDetailPage({
             </div>
           ) : <>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <p className="max-w-2xl text-sm leading-6 text-neutral-600 dark:text-neutral-400">Pricing is based on tokens processed. API billing remains in USD, and Batch offers lower-cost asynchronous processing for non-urgent work.</p>
+            <p className="max-w-2xl text-sm leading-6 text-neutral-600 dark:text-neutral-400">{hasBatchPricing ? "Pricing is based on tokens processed. API billing remains in USD, and Batch offers lower-cost asynchronous processing for non-urgent work." : "Pricing is based on tokens processed. API billing remains in USD with immediate default processing."}</p>
             <span className="shrink-0 text-sm text-neutral-500">Per 1M tokens</span>
           </div>
           <div className="mt-6 grid gap-3 sm:grid-cols-3">
@@ -2013,7 +2017,3 @@ function DocCard({
       <h2 className="font-semibold text-neutral-950 dark:text-neutral-50">{title}</h2>
       <p className="mt-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">
         {typeof children === "string" ? tc(children) : children}
-      </p>
-    </article>
-  );
-}
