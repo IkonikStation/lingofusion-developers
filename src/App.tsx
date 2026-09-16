@@ -2017,3 +2017,7 @@ function DocCard({
       <h2 className="font-semibold text-neutral-950 dark:text-neutral-50">{title}</h2>
       <p className="mt-2 text-sm leading-6 text-neutral-600 dark:text-neutral-400">
         {typeof children === "string" ? tc(children) : children}
+      </p>
+    </article>
+  );
+}
