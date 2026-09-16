@@ -883,6 +883,9 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
                       type="button"
                       aria-pressed={selected}
                       onClick={() => {
+                        if (mode === "batch" && selectedModel === "LingoFusion Nano") {
+                          setSelectedModel("LingoFusion Lite");
+                        }
                         setTextPricingMode(mode);
                         window.localStorage.setItem("lingofusion-text-pricing-mode", mode);
                       }}
