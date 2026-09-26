@@ -41,10 +41,17 @@ export const textModels: TextModel[] = [
     outputUsd: 15.00,
     recommended: true,
   },
-  { model: "LingoFusion Pro", inputUsd: 4.00, outputUsd: 25.00 },
+  { model: "LingoFusion Pro", inputUsd: 3.50, outputUsd: 18.00 },
   { model: "ExplainFusion", inputUsd: 3.00, outputUsd: 2.00 },
-  { model: "LingoFusion Ultra", inputUsd: 25.00, outputUsd: 150.00 },
+  { model: "LingoFusion Ultra", inputUsd: 20.00, outputUsd: 120.00 },
 ];
+
+export const ultraPricingTiers = [
+  { name: "Standard", condition: "Up to 272K input tokens", inputUsd: 20, outputUsd: 120 },
+  { name: "Long", condition: "More than 272K input tokens", inputUsd: 40, outputUsd: 180 },
+  { name: "Fast", condition: "Fast processing", inputUsd: 40, outputUsd: 240 },
+  { name: "Fast + Long", condition: "Fast processing and more than 272K input tokens", inputUsd: 80, outputUsd: 360 },
+] as const;
 
 export const textModelsByPricingMode: Record<TextPricingMode, TextModel[]> = {
   instant: textModels,

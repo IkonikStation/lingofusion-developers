@@ -34,9 +34,9 @@ const textModels = [
   { model: "LingoFusion Nano", input: 0.06, output: 0.50 },
   { model: "LingoFusion Lite", input: 0.75, output: 3.00 },
   { model: "LingoFusion", input: 3.00, output: 15.00 },
-  { model: "LingoFusion Pro", input: 4.00, output: 25.00 },
+  { model: "LingoFusion Pro", input: 3.50, output: 18.00 },
   { model: "ExplainFusion", input: 3.00, output: 2.00 },
-  { model: "LingoFusion Ultra", input: 25.00, output: 150.00 },
+  { model: "LingoFusion Ultra", input: 20.00, output: 120.00 },
 ];
 
 const batchTextModels = textModels.map((model) => ({

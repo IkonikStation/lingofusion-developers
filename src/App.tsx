@@ -44,6 +44,7 @@ import {
   textModels,
   textModelsByPricingMode,
   textModelPresentations,
+  ultraPricingTiers,
   transcriptionModels,
   ttsModels,
 } from "./data/pricing";
@@ -698,7 +699,11 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
   };
 
   const visibleTextModels = textModelsByPricingMode[textPricingMode].filter((model) => !model.local);
-  const selectedTextModel = visibleTextModels.find((model) => model.model === selectedModel) ?? visibleTextModels[2];
+  // The calculator must retain every cloud model. Nano has Default pricing only,
+  // while the table below can still show the narrower Batch catalogue.
+  const calculatorTextModels = textModelsByPricingMode.instant.filter((model) => !model.local);
+  const selectedTextModel = calculatorTextModels.find((model) => model.model === selectedModel) ?? calculatorTextModels[2];
+  const calculatorUsesDefaultPricing = selectedModel === "LingoFusion Nano" && textPricingMode === "batch";
   const selectedTts = ttsWordModels.find((model) => model.model === selectedTtsModel) ?? ttsWordModels[0];
   const selectedTranscription =
     transcriptionModels.find((model) => model.model === selectedTranscriptionModel) ?? transcriptionModels[0];
@@ -834,7 +839,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
           />
           <SectionCalculator title={t("textCalculator")} estimateLabel={t("estimate")} estimate={selectedTextModel.local ? "Free - runs locally" : textEstimate === null ? "TBD" : displayCurrency(textEstimate, true)}>
             <SelectField label={t("model")} value={selectedModel} onChange={setSelectedModel}>
-              {visibleTextModels.map((model) => (
+              {calculatorTextModels.map((model) => (
                 <option key={model.model}>{model.model}</option>
               ))}
             </SelectField>
@@ -854,6 +859,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
               value={outputTokens}
               onChange={setOutputTokens}
             />
+            {calculatorUsesDefaultPricing && <p className="text-xs leading-5 text-neutral-600 dark:text-neutral-400 md:col-span-2 xl:col-span-3">LingoFusion Nano is calculated using its supported Default price. It is not available for Batch processing.</p>}
           </SectionCalculator>
           <PricingCard
             key={`text-${textPricingMode}-${currencyPresentationKey}`}
@@ -877,9 +883,6 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
                       type="button"
                       aria-pressed={selected}
                       onClick={() => {
-                        if (mode === "batch" && selectedModel === "LingoFusion Nano") {
-                          setSelectedModel("LingoFusion Lite");
-                        }
                         setTextPricingMode(mode);
                         window.localStorage.setItem("lingofusion-text-pricing-mode", mode);
                       }}
@@ -1291,8 +1294,11 @@ function ModelComparisonPage({ onOpenModel }: { onOpenModel: (model: string) => 
   const [leftModelName, setLeftModelName] = useState("LingoFusion");
   const [rightModelName, setRightModelName] = useState("LingoFusion Pro");
   const models = textModelsByPricingMode[pricingMode];
-  const openSourceModels = models.filter((model) => model.local);
-  const cloudModels = models.filter((model) => !model.local);
+  // The catalogue is not a pricing-mode filter: Nano remains discoverable even
+  // though it has no Batch rate.
+  const catalogModels = textModelsByPricingMode.instant;
+  const openSourceModels = catalogModels.filter((model) => model.local);
+  const cloudModels = catalogModels.filter((model) => !model.local);
   const leftModel = models.find((model) => model.model === leftModelName) ?? models[2];
   const rightModel = models.find((model) => model.model === rightModelName) ?? models[3];
 
@@ -1503,7 +1509,7 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     contextWindow: "1,050,000",
     maxOutput: "384,000",
     quality: "Master Linguist",
-    description: "LingoFusion Ultra is the most powerful model in the LingoFusion family, built for the hardest multilingual work. It combines maximum reasoning with specialist terminology handling and document-scale consistency review to deliver near-flawless translations. Ultra excels at deep, nuanced, and highly specialized content where every word matters. When you need the absolute best possible output, Ultra is the answer.",
+    description: "LingoFusion Ultra is built for the hardest multilingual work, with maximum reasoning, specialist terminology handling, and document-scale consistency review. Standard pricing applies up to 272K input tokens. Long pricing applies above 272K input tokens. Fast processing has separate Fast and Fast + Long rates. All rates below are per 1M input and output tokens.",
     limitations: ["Highest price in the LingoFusion text family", "Longer response time for deep analysis", "Batch is recommended for large non-urgent jobs"],
   },
 };
@@ -1644,6 +1650,13 @@ function ModelDetailPage({
             <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-5 dark:border-white/10 dark:bg-white/[0.04]"><p className="text-sm text-neutral-500">Output</p><p className="mt-2 text-2xl font-semibold text-neutral-950 dark:text-white">{price(activePrice.outputUsd)}</p></div>
             <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-5 dark:border-white/10 dark:bg-white/[0.04]"><p className="text-sm text-neutral-500">{pricingMode === "batch" ? "Turnaround" : "Response"}</p><p className="mt-2 text-2xl font-semibold text-neutral-950 dark:text-white">{pricingMode === "batch" ? "Up to 24h" : "Immediate"}</p></div>
           </div>
+
+          {modelName === "LingoFusion Ultra" && <div className="mt-6 overflow-x-auto rounded-lg border border-neutral-200 dark:border-white/10">
+            <table className="w-full min-w-[34rem] text-left text-sm">
+              <thead className="bg-neutral-50 text-neutral-500 dark:bg-white/[0.04]"><tr><th className="px-4 py-3 font-medium">Ultra tier</th><th className="px-4 py-3 font-medium">When it applies</th><th className="px-4 py-3 font-medium">Input / 1M</th><th className="px-4 py-3 font-medium">Output / 1M</th></tr></thead>
+              <tbody>{ultraPricingTiers.map((tier) => <tr key={tier.name} className="border-t border-neutral-200 dark:border-white/10"><th scope="row" className="px-4 py-3 font-medium text-neutral-950 dark:text-white">{tier.name}</th><td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">{tier.condition}</td><td className="px-4 py-3">{price(tier.inputUsd * (pricingMode === "batch" ? 0.5 : 1))}</td><td className="px-4 py-3">{price(tier.outputUsd * (pricingMode === "batch" ? 0.5 : 1))}</td></tr>)}</tbody>
+            </table>
+          </div>}
 
           <div className="mt-8 flex items-center justify-between gap-4">
             <h3 className="text-sm font-semibold text-neutral-950 dark:text-white">Quick comparison</h3>

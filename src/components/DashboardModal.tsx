@@ -303,7 +303,9 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
   const [tokenizerResult, setTokenizerResult] = useState<TokenizerResult | null>(null);
   const [tokenizerLoading, setTokenizerLoading] = useState(false);
 
-  const playgroundModels = textModelsByPricingMode[playgroundPricingMode].filter((model) => !model.local);
+  // Keep all cloud models in the selector. Nano only supports Default pricing;
+  // the event handlers below keep the simulated request on that supported mode.
+  const playgroundModels = textModelsByPricingMode.instant.filter((model) => !model.local);
   const selectedPlaygroundModel =
     playgroundModels.find((model) => model.model === tryModel) ?? playgroundModels[0];
   const selectedMusicPlaygroundModel =
@@ -654,6 +656,10 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                                   const selected = playgroundPricingMode === mode;
                                   return (
                                     <button key={mode} type="button" aria-pressed={selected} onClick={() => {
+                                      if (mode === "batch" && tryModel === "LingoFusion Nano") {
+                                        onNotify("LingoFusion Nano supports Default processing only.");
+                                        return;
+                                      }
                                       setPlaygroundPricingMode(mode);
                                       window.localStorage.setItem("lingofusion-text-pricing-mode", mode);
                                     }} className={`pressable rounded px-3 py-1.5 text-sm font-medium ${selected ? "bg-neutral-950 text-white shadow-sm dark:bg-white dark:text-neutral-950" : "text-neutral-600 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-100"}`}>
@@ -662,7 +668,14 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                                   );
                                 })}
                               </div>
-                              <SelectInput label="Model" value={tryModel} onChange={setTryModel}>
+                              <SelectInput label="Model" value={tryModel} onChange={(model) => {
+                                setTryModel(model);
+                                if (model === "LingoFusion Nano" && playgroundPricingMode === "batch") {
+                                  setPlaygroundPricingMode("instant");
+                                  window.localStorage.setItem("lingofusion-text-pricing-mode", "instant");
+                                  onNotify("LingoFusion Nano uses Default processing.");
+                                }
+                              }}>
                                 {playgroundModels.map((model) => <option key={model.model}>{model.model}</option>)}
                               </SelectInput>
                             </div>
