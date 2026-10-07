@@ -36,7 +36,7 @@ jobs:
         run: |
           pnpm build
           cp dist/index.html dist/404.html
-          for model in lingofusion lingofusion-pro lingofusion-ultra; do
+          for model in lingofusion lingofusion-nano lingofusion-pro lingofusion-ultra; do
             mkdir -p "dist/models/$model"
             cp dist/index.html "dist/models/$model/index.html"
           done
