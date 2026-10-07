@@ -125,12 +125,13 @@ function maskSecret(secret) {
 }
 
 function normalizePricingMode(value) {
-  return value === "batch" ? "batch" : "default";
+  return value === "batch" ? "batch" : value === "ultrafast" ? "ultrafast" : "default";
 }
 
 function normalizeModelName(value, pricingMode = "default") {
   const normalized = String(value || "").trim().toLowerCase();
   const models = pricingMode === "batch" ? batchTextModels : textModels;
+  if (pricingMode === "ultrafast" && !["lingofusion pro", "lingofusion ultra"].includes(normalized)) return undefined;
   return models.find((model) => model.model.toLowerCase() === normalized);
 }
 
@@ -398,8 +399,11 @@ function shouldRunLiveModel(modelName) {
   return realModelRouting[modelName]?.provider === "lm_studio" || realModelsEnabled();
 }
 
-async function runRealTranslation({ modelName, input, fromLanguage, toLanguage, tone, stream }) {
-  const route = realModelRouting[modelName];
+async function runRealTranslation({ modelName, input, fromLanguage, toLanguage, tone, stream, pricingMode }) {
+  const baseRoute = realModelRouting[modelName];
+  const route = pricingMode === "ultrafast" && baseRoute
+    ? { ...baseRoute, thinking: "disabled", reasoningEffort: undefined }
+    : baseRoute;
   if (!route) throw providerError("unsupported_model", 400, "This model is not configured for live execution.");
   if (route.provider === "lm_studio") {
     return runLmStudioTranslation({ modelName, input, fromLanguage, toLanguage, tone, stream });
@@ -818,7 +822,7 @@ async function route(req, res) {
 
       const pricingMode = normalizePricingMode(body.pricing_mode);
       const model = normalizeModelName(body.model, pricingMode);
-      if (!model) return send(res, 400, { error: "unsupported_model", supported_models: (pricingMode === "batch" ? batchTextModels : textModels).map((item) => item.model), request_id: requestId });
+      if (!model) return send(res, 400, { error: "unsupported_model", supported_models: (pricingMode === "batch" ? batchTextModels : pricingMode === "ultrafast" ? textModels.filter((item) => ["LingoFusion Pro", "LingoFusion Ultra"].includes(item.model)) : textModels).map((item) => item.model), request_id: requestId });
       if (!body.input || !body.from_language || !body.to_language) {
         return send(res, 400, { error: "invalid_request", message: "model, input, from_language, and to_language are required", request_id: requestId });
       }
@@ -838,6 +842,7 @@ async function route(req, res) {
             toLanguage: String(body.to_language),
             tone: String(body.tone || "Natural (Default)"),
             stream: Boolean(body.stream),
+            pricingMode,
           });
           execution = "live";
           outputText = result.outputText;
@@ -878,7 +883,10 @@ async function route(req, res) {
         await saveDb(db);
         return send(res, error.status || 502, { error: error.code || "provider_request_failed", message: error.message, request_id: requestId });
       }
-      const costMicroCents = centsCostMicro(inputTokens, outputTokens, model);
+      const pricedModel = pricingMode === "ultrafast"
+        ? { ...model, input: model.input * 6, output: model.output * 6 }
+        : model;
+      const costMicroCents = centsCostMicro(inputTokens, outputTokens, pricedModel);
       const sourceTextTokensEstimate = tokenEstimate(body.input);
       const instructionTokensEstimate = Math.max(0, inputTokens - sourceTextTokensEstimate);
       const charge = applyCharge(db, costMicroCents);
@@ -939,7 +947,7 @@ async function route(req, res) {
         projectId: auth.project.id,
         keyId: auth.key.id,
         requestId,
-        description: `${model.model}${pricingMode === "batch" ? " Batch" : ""} /v1/translate`,
+        description: `${model.model}${pricingMode === "batch" ? " Batch" : pricingMode === "ultrafast" ? " Ultrafast" : ""} /v1/translate`,
         status: "succeeded",
         createdAt: nowIso(),
       });

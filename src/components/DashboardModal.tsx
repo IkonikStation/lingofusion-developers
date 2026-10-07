@@ -287,7 +287,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
   const [tryKey, setTryKey] = useState("");
   const [playgroundPricingMode, setPlaygroundPricingMode] = useState<TextPricingMode>(() => {
     const storedMode = window.localStorage.getItem("lingofusion-text-pricing-mode");
-    return storedMode === "batch" ? "batch" : "instant";
+    return storedMode === "ultrafast" ? "ultrafast" : storedMode === "batch" ? "batch" : "instant";
   });
   const [playgroundMode, setPlaygroundMode] = useState<"text" | "music">("text");
   const [tryModel, setTryModel] = useState("LingoFusion Pro");
@@ -472,7 +472,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
         ? { model: tryModel, prompt: tryInput, duration_seconds: tryMusicDurationSeconds }
         : {
           model: tryModel,
-          pricing_mode: playgroundPricingMode === "batch" ? "batch" : "default",
+          pricing_mode: playgroundPricingMode === "ultrafast" ? "ultrafast" : playgroundPricingMode === "batch" ? "batch" : "default",
           input: tryInput,
           from_language: tryFromLanguage,
           to_language: tryToLanguage,
@@ -652,14 +652,15 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                           {playgroundMode === "text" ? (
                             <div className="grid gap-2">
                               <div role="group" aria-label="Playground text pricing mode" className="inline-flex w-fit rounded-md border border-neutral-300 bg-neutral-100 p-0.5 dark:border-white/15 dark:bg-white/[0.06]">
-                                {(["instant", "batch"] as const).map((mode) => {
+                                {(["instant", "batch", "ultrafast"] as const).map((mode) => {
                                   const selected = playgroundPricingMode === mode;
                                   return (
                                     <button key={mode} type="button" aria-pressed={selected} onClick={() => {
+                                      if (mode === "ultrafast" && !["LingoFusion Pro", "LingoFusion Ultra"].includes(tryModel)) setTryModel("LingoFusion Pro");
                                       setPlaygroundPricingMode(mode);
                                       window.localStorage.setItem("lingofusion-text-pricing-mode", mode);
                                     }} className={`pressable rounded px-3 py-1.5 text-sm font-medium ${selected ? "bg-neutral-950 text-white shadow-sm dark:bg-white dark:text-neutral-950" : "text-neutral-600 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-100"}`}>
-                                      {mode === "instant" ? "Default" : "Batch"}
+                                      {mode === "instant" ? "Default" : mode === "batch" ? "Batch" : "Ultrafast"}
                                     </button>
                                   );
                                 })}
@@ -667,7 +668,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                               <SelectInput label="Model" value={tryModel} onChange={(model) => {
                                 setTryModel(model);
                               }}>
-                                {playgroundModels.map((model) => <option key={model.model}>{model.model}</option>)}
+                                {playgroundModels.filter((model) => playgroundPricingMode !== "ultrafast" || ["LingoFusion Pro", "LingoFusion Ultra"].includes(model.model)).map((model) => <option key={model.model}>{model.model}</option>)}
                               </SelectInput>
                             </div>
                           ) : (

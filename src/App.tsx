@@ -636,7 +636,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
   const [ratesUnavailable, setRatesUnavailable] = useState(false);
   const [textPricingMode, setTextPricingMode] = useState<TextPricingMode>(() => {
     const storedMode = window.localStorage.getItem("lingofusion-text-pricing-mode");
-    return storedMode === "batch" ? "batch" : "instant";
+    return storedMode === "ultrafast" ? "ultrafast" : storedMode === "batch" ? "batch" : "instant";
   });
   const [selectedModel, setSelectedModel] = useState("LingoFusion");
   const [inputTokens, setInputTokens] = useState(1_000_000);
@@ -699,10 +699,8 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
   };
 
   const visibleTextModels = textModelsByPricingMode[textPricingMode].filter((model) => !model.local);
-  // The calculator must retain every cloud model. Nano has Default pricing only,
-  // while the table below can still show the narrower Batch catalogue.
-  const calculatorTextModels = textModelsByPricingMode.instant.filter((model) => !model.local);
-  const selectedTextModel = calculatorTextModels.find((model) => model.model === selectedModel) ?? calculatorTextModels[2];
+  const calculatorTextModels = textModelsByPricingMode[textPricingMode].filter((model) => !model.local);
+  const selectedTextModel = calculatorTextModels.find((model) => model.model === selectedModel) ?? calculatorTextModels[0];
   const selectedTts = ttsWordModels.find((model) => model.model === selectedTtsModel) ?? ttsWordModels[0];
   const selectedTranscription =
     transcriptionModels.find((model) => model.model === selectedTranscriptionModel) ?? transcriptionModels[0];
@@ -710,8 +708,9 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
   const selectedMusic = musicModels.find((model) => model.model === selectedMusicModel) ?? musicModels[0];
   const selectedImage = imageModels.find((model) => model.size === selectedImageSize) ?? imageModels[0];
   const selectedPdf = pdfModels.find((model) => model.model === selectedPdfModel) ?? pdfModels[0];
-  const textPricingDescription =
-    textPricingMode === "instant"
+  const textPricingDescription = textPricingMode === "ultrafast"
+    ? "Ultrafast mode uses non-thinking processing for Pro and Ultra. Rates are 6× Default; actual response speed depends on workload and provider conditions."
+    : textPricingMode === "instant"
       ? "Real-time processing with immediate results."
       : "Lower-cost asynchronous processing for large or non-urgent jobs. Results may take up to 24 hours.";
   const pricingLabels = {
@@ -837,7 +836,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
             onOpenModel={onOpenModel}
           />
           <SectionCalculator title={t("textCalculator")} estimateLabel={t("estimate")} estimate={selectedTextModel.local ? "Free - runs locally" : textEstimate === null ? "TBD" : displayCurrency(textEstimate, true)}>
-            <SelectField label={t("model")} value={selectedModel} onChange={setSelectedModel}>
+            <SelectField label={t("model")} value={selectedTextModel.model} onChange={setSelectedModel}>
               {calculatorTextModels.map((model) => (
                 <option key={model.model}>{model.model}</option>
               ))}
@@ -873,7 +872,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
                 aria-label="Text model pricing mode"
                 className="inline-flex rounded-md border border-neutral-300 bg-neutral-100 p-0.5 dark:border-white/15 dark:bg-white/[0.06]"
               >
-                {(["instant", "batch"] as const).map((mode) => {
+                {(["instant", "batch", "ultrafast"] as const).map((mode) => {
                   const selected = textPricingMode === mode;
                   return (
                     <button
@@ -890,7 +889,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
                           : "text-neutral-600 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-100"
                       }`}
                     >
-                      {mode === "instant" ? "Default" : "Batch"}
+                        {mode === "instant" ? "Default" : mode === "batch" ? "Batch" : "Ultrafast"}
                     </button>
                   );
                 })}
@@ -1128,7 +1127,7 @@ function TextModelGallery({ models, pricingMode, displayPrice, onOpenModel }: {
           <h2 id="pricing-model-gallery-heading" className="text-2xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50">Model catalog</h2>
           <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">Open source and cloud models for multilingual work.</p>
         </div>
-        <span className="text-xs font-medium text-neutral-500 dark:text-neutral-500">{pricingMode === "batch" ? "Batch" : "Default"} pricing - open a model for details</span>
+        <span className="text-xs font-medium text-neutral-500 dark:text-neutral-500">{pricingMode === "ultrafast" ? "Ultrafast" : pricingMode === "batch" ? "Batch" : "Default"} pricing - open a model for details</span>
       </div>
       <div className="mt-8">
         <h3 className="text-lg font-semibold text-neutral-950 dark:text-neutral-50">LingoFusion Native models</h3>
@@ -1286,9 +1285,10 @@ function ModelIcon({
 }
 
 function ModelComparisonPage({ onOpenModel }: { onOpenModel: (model: string) => void }) {
-  const [pricingMode, setPricingMode] = useState<TextPricingMode>(() =>
-    window.localStorage.getItem("lingofusion-model-comparison-mode") === "batch" ? "batch" : "instant",
-  );
+  const [pricingMode, setPricingMode] = useState<TextPricingMode>(() => {
+    const saved = window.localStorage.getItem("lingofusion-model-comparison-mode");
+    return saved === "ultrafast" ? "ultrafast" : saved === "batch" ? "batch" : "instant";
+  });
   const [leftModelName, setLeftModelName] = useState("LingoFusion");
   const [rightModelName, setRightModelName] = useState("LingoFusion Pro");
   const models = textModelsByPricingMode[pricingMode];
@@ -1297,8 +1297,8 @@ function ModelComparisonPage({ onOpenModel }: { onOpenModel: (model: string) => 
   const catalogModels = textModelsByPricingMode.instant;
   const openSourceModels = catalogModels.filter((model) => model.local);
   const cloudModels = catalogModels.filter((model) => !model.local);
-  const leftModel = models.find((model) => model.model === leftModelName) ?? models[2];
-  const rightModel = models.find((model) => model.model === rightModelName) ?? models[3];
+  const leftModel = models.find((model) => model.model === leftModelName) ?? models[0];
+  const rightModel = models.find((model) => model.model === rightModelName) ?? models[1] ?? models[0];
 
   const selectPricingMode = (mode: TextPricingMode) => {
     setPricingMode(mode);
@@ -1344,9 +1344,9 @@ function ModelComparisonPage({ onOpenModel }: { onOpenModel: (model: string) => 
           </div>
           <div className="flex flex-wrap gap-3">
             <div role="group" aria-label="Model comparison pricing mode" className="inline-flex rounded-md border border-neutral-300 bg-neutral-100 p-0.5 dark:border-white/15 dark:bg-white/[0.06]">
-              {(["instant", "batch"] as const).map((mode) => {
+              {(["instant", "batch", "ultrafast"] as const).map((mode) => {
                 const selected = pricingMode === mode;
-                return <button key={mode} type="button" aria-pressed={selected} onClick={() => selectPricingMode(mode)} className={`pressable rounded px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-950 focus-visible:ring-offset-2 dark:focus-visible:ring-white dark:focus-visible:ring-offset-[#161616] ${selected ? "bg-neutral-950 text-white shadow-sm dark:bg-white dark:text-neutral-950" : "text-neutral-600 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-100"}`}>{mode === "instant" ? "Default" : "Batch"}</button>;
+                return <button key={mode} type="button" aria-pressed={selected} onClick={() => selectPricingMode(mode)} className={`pressable rounded px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-950 focus-visible:ring-offset-2 dark:focus-visible:ring-white dark:focus-visible:ring-offset-[#161616] ${selected ? "bg-neutral-950 text-white shadow-sm dark:bg-white dark:text-neutral-950" : "text-neutral-600 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-100"}`}>{mode === "instant" ? "Default" : mode === "batch" ? "Batch" : "Ultrafast"}</button>;
               })}
             </div>
           </div>
@@ -1545,8 +1545,11 @@ function ModelDetailPage({
   const isLocalModel = Boolean(defaultModel.local);
   const hasBatchPricing = Boolean(batchModel);
   const localModel = isLocalModel ? nativeLocalModels[modelName as keyof typeof nativeLocalModels] : null;
-  const activePrice = pricingMode === "batch" && hasBatchPricing ? batchModel! : defaultModel;
-  const comparisonModels = textModelsByPricingMode[pricingMode === "batch" && hasBatchPricing ? "batch" : "instant"];
+  const ultrafastModel = textModelsByPricingMode.ultrafast.find((model) => model.model === modelName);
+  const activePrice = pricingMode === "ultrafast" && ultrafastModel
+    ? ultrafastModel
+    : pricingMode === "batch" && hasBatchPricing ? batchModel! : defaultModel;
+  const comparisonModels = textModelsByPricingMode[pricingMode];
   const comparisonMax = Math.max(...comparisonModels.map((model) => model[comparisonMetric === "input" ? "inputUsd" : "outputUsd"]));
   const requestSnippet = `curl https://api.lingofusion.ai/v1/translate \\
   -H "Authorization: Bearer $LINGOFUSION_API_KEY" \\
@@ -1595,6 +1598,7 @@ function ModelDetailPage({
                 >
                   <option value="instant">Default</option>
                   <option value="batch">Batch</option>
+                  {ultrafastModel && <option value="ultrafast">Ultrafast</option>}
                 </select>}
                 <button type="button" onClick={() => copyText(apiModelId, "model")} aria-label="Copy model ID" className="pressable rounded-md p-2 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-950 dark:hover:bg-white/10 dark:hover:text-white"><Copy className="h-4 w-4" /></button>
                 {copied === "model" && <span className="text-xs font-medium text-neutral-500">Copied</span>}
@@ -1652,7 +1656,7 @@ function ModelDetailPage({
           {modelName === "LingoFusion Ultra" && <div className="mt-6 overflow-x-auto rounded-lg border border-neutral-200 dark:border-white/10">
             <table className="w-full min-w-[34rem] text-left text-sm">
               <thead className="bg-neutral-50 text-neutral-500 dark:bg-white/[0.04]"><tr><th className="px-4 py-3 font-medium">Ultra tier</th><th className="px-4 py-3 font-medium">When it applies</th><th className="px-4 py-3 font-medium">Input / 1M</th><th className="px-4 py-3 font-medium">Output / 1M</th></tr></thead>
-              <tbody>{ultraPricingTiers.map((tier) => <tr key={tier.name} className="border-t border-neutral-200 dark:border-white/10"><th scope="row" className="px-4 py-3 font-medium text-neutral-950 dark:text-white">{tier.name}</th><td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">{tier.condition}</td><td className="px-4 py-3">{price(tier.inputUsd * (pricingMode === "batch" ? 0.5 : 1))}</td><td className="px-4 py-3">{price(tier.outputUsd * (pricingMode === "batch" ? 0.5 : 1))}</td></tr>)}</tbody>
+              <tbody>{ultraPricingTiers.map((tier) => <tr key={tier.name} className="border-t border-neutral-200 dark:border-white/10"><th scope="row" className="px-4 py-3 font-medium text-neutral-950 dark:text-white">{tier.name}</th><td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">{tier.condition}</td><td className="px-4 py-3">{price(tier.inputUsd * (pricingMode === "batch" ? 0.5 : pricingMode === "ultrafast" ? 6 : 1))}</td><td className="px-4 py-3">{price(tier.outputUsd * (pricingMode === "batch" ? 0.5 : pricingMode === "ultrafast" ? 6 : 1))}</td></tr>)}</tbody>
             </table>
           </div>}
 
@@ -1761,7 +1765,7 @@ function ModelComparisonCard({ model, pricingMode }: { model: TextModel; pricing
         {model.local ? <div className="sm:col-span-2"><dt className="text-neutral-500 dark:text-neutral-500">Local mode</dt><dd className="mt-1 font-medium text-emerald-700 dark:text-emerald-300">Free. Runs on your device with no API credits, token fees, or subscription.</dd></div> : <>
           <div><dt className="text-neutral-500 dark:text-neutral-500">Input per 1M tokens</dt><dd className="mt-1 text-lg font-semibold text-neutral-950 dark:text-neutral-50">{price(model.inputUsd)}</dd></div>
           <div><dt className="text-neutral-500 dark:text-neutral-500">Output per 1M tokens</dt><dd className="mt-1 text-lg font-semibold text-neutral-950 dark:text-neutral-50">{price(model.outputUsd)}</dd></div>
-          <div className="sm:col-span-2"><dt className="text-neutral-500 dark:text-neutral-500">Pricing mode</dt><dd className="mt-1 font-medium text-neutral-950 dark:text-neutral-50">{pricingMode === "batch" ? "Batch, asynchronous processing" : "Default, real-time processing"}</dd></div>
+          <div className="sm:col-span-2"><dt className="text-neutral-500 dark:text-neutral-500">Pricing mode</dt><dd className="mt-1 font-medium text-neutral-950 dark:text-neutral-50">{pricingMode === "ultrafast" ? "Ultrafast, non-thinking processing" : pricingMode === "batch" ? "Batch, asynchronous processing" : "Default, real-time processing"}</dd></div>
         </>}
       </dl>
     </article>
