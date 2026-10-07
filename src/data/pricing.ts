@@ -55,9 +55,7 @@ export const ultraPricingTiers = [
 
 export const textModelsByPricingMode: Record<TextPricingMode, TextModel[]> = {
   instant: textModels,
-  batch: textModels
-    .filter((model) => model.model !== "LingoFusion Nano")
-    .map((model) => ({
+  batch: textModels.map((model) => ({
       ...model,
       inputUsd: model.inputUsd / 2,
       outputUsd: model.outputUsd / 2,

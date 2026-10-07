@@ -703,7 +703,6 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
   // while the table below can still show the narrower Batch catalogue.
   const calculatorTextModels = textModelsByPricingMode.instant.filter((model) => !model.local);
   const selectedTextModel = calculatorTextModels.find((model) => model.model === selectedModel) ?? calculatorTextModels[2];
-  const calculatorUsesDefaultPricing = selectedModel === "LingoFusion Nano" && textPricingMode === "batch";
   const selectedTts = ttsWordModels.find((model) => model.model === selectedTtsModel) ?? ttsWordModels[0];
   const selectedTranscription =
     transcriptionModels.find((model) => model.model === selectedTranscriptionModel) ?? transcriptionModels[0];
@@ -859,7 +858,6 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
               value={outputTokens}
               onChange={setOutputTokens}
             />
-            {calculatorUsesDefaultPricing && <p className="text-xs leading-5 text-neutral-600 dark:text-neutral-400 md:col-span-2 xl:col-span-3">LingoFusion Nano is calculated using its supported Default price. It is not available for Batch processing.</p>}
           </SectionCalculator>
           <PricingCard
             key={`text-${textPricingMode}-${currencyPresentationKey}`}

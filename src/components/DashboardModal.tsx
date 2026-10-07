@@ -656,10 +656,6 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                                   const selected = playgroundPricingMode === mode;
                                   return (
                                     <button key={mode} type="button" aria-pressed={selected} onClick={() => {
-                                      if (mode === "batch" && tryModel === "LingoFusion Nano") {
-                                        onNotify("LingoFusion Nano supports Default processing only.");
-                                        return;
-                                      }
                                       setPlaygroundPricingMode(mode);
                                       window.localStorage.setItem("lingofusion-text-pricing-mode", mode);
                                     }} className={`pressable rounded px-3 py-1.5 text-sm font-medium ${selected ? "bg-neutral-950 text-white shadow-sm dark:bg-white dark:text-neutral-950" : "text-neutral-600 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-neutral-100"}`}>
@@ -670,11 +666,6 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                               </div>
                               <SelectInput label="Model" value={tryModel} onChange={(model) => {
                                 setTryModel(model);
-                                if (model === "LingoFusion Nano" && playgroundPricingMode === "batch") {
-                                  setPlaygroundPricingMode("instant");
-                                  window.localStorage.setItem("lingofusion-text-pricing-mode", "instant");
-                                  onNotify("LingoFusion Nano uses Default processing.");
-                                }
                               }}>
                                 {playgroundModels.map((model) => <option key={model.model}>{model.model}</option>)}
                               </SelectInput>
