@@ -884,7 +884,7 @@ async function route(req, res) {
         return send(res, error.status || 502, { error: error.code || "provider_request_failed", message: error.message, request_id: requestId });
       }
       const pricedModel = pricingMode === "ultrafast"
-        ? { ...model, input: model.input * 6, output: model.output * 6 }
+        ? { ...model, input: model.input * 4, output: model.output * 4 }
         : model;
       const costMicroCents = centsCostMicro(inputTokens, outputTokens, pricedModel);
       const sourceTextTokensEstimate = tokenEstimate(body.input);

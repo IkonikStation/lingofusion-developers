@@ -64,8 +64,8 @@ export const textModelsByPricingMode: Record<TextPricingMode, TextModel[]> = {
     .filter((model) => model.model === "LingoFusion Pro" || model.model === "LingoFusion Ultra")
     .map((model) => ({
       ...model,
-      inputUsd: model.inputUsd * 6,
-      outputUsd: model.outputUsd * 6,
+      inputUsd: model.inputUsd * 4,
+      outputUsd: model.outputUsd * 4,
     })),
 };
 
