@@ -44,7 +44,6 @@ import {
   textModels,
   textModelsByPricingMode,
   textModelPresentations,
-  ultraPricingTiers,
   transcriptionModels,
   ttsModels,
 } from "./data/pricing";
@@ -1652,13 +1651,6 @@ function ModelDetailPage({
             <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-5 dark:border-white/10 dark:bg-white/[0.04]"><p className="text-sm text-neutral-500">Output</p><p className="mt-2 text-2xl font-semibold text-neutral-950 dark:text-white">{price(activePrice.outputUsd)}</p></div>
             <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-5 dark:border-white/10 dark:bg-white/[0.04]"><p className="text-sm text-neutral-500">{pricingMode === "batch" ? "Turnaround" : "Response"}</p><p className="mt-2 text-2xl font-semibold text-neutral-950 dark:text-white">{pricingMode === "batch" ? "Up to 24h" : "Immediate"}</p></div>
           </div>
-
-          {modelName === "LingoFusion Ultra" && <div className="mt-6 overflow-x-auto rounded-lg border border-neutral-200 dark:border-white/10">
-            <table className="w-full min-w-[34rem] text-left text-sm">
-              <thead className="bg-neutral-50 text-neutral-500 dark:bg-white/[0.04]"><tr><th className="px-4 py-3 font-medium">Ultra tier</th><th className="px-4 py-3 font-medium">When it applies</th><th className="px-4 py-3 font-medium">Input / 1M</th><th className="px-4 py-3 font-medium">Output / 1M</th></tr></thead>
-              <tbody>{ultraPricingTiers.map((tier) => <tr key={tier.name} className="border-t border-neutral-200 dark:border-white/10"><th scope="row" className="px-4 py-3 font-medium text-neutral-950 dark:text-white">{tier.name}</th><td className="px-4 py-3 text-neutral-600 dark:text-neutral-400">{tier.condition}</td><td className="px-4 py-3">{price(tier.inputUsd * (pricingMode === "batch" ? 0.5 : pricingMode === "ultrafast" ? 4 : 1))}</td><td className="px-4 py-3">{price(tier.outputUsd * (pricingMode === "batch" ? 0.5 : pricingMode === "ultrafast" ? 4 : 1))}</td></tr>)}</tbody>
-            </table>
-          </div>}
 
           <div className="mt-8 flex items-center justify-between gap-4">
             <h3 className="text-sm font-semibold text-neutral-950 dark:text-white">Quick comparison</h3>

@@ -46,13 +46,6 @@ export const textModels: TextModel[] = [
   { model: "LingoFusion Ultra", inputUsd: 20.00, outputUsd: 120.00 },
 ];
 
-export const ultraPricingTiers = [
-  { name: "Standard", condition: "Up to 272K input tokens", inputUsd: 20, outputUsd: 120 },
-  { name: "Long", condition: "More than 272K input tokens", inputUsd: 40, outputUsd: 180 },
-  { name: "Fast", condition: "Fast processing", inputUsd: 40, outputUsd: 240 },
-  { name: "Fast + Long", condition: "Fast processing and more than 272K input tokens", inputUsd: 80, outputUsd: 360 },
-] as const;
-
 export const textModelsByPricingMode: Record<TextPricingMode, TextModel[]> = {
   instant: textModels,
   batch: textModels.map((model) => ({
