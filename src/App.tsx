@@ -1387,7 +1387,7 @@ function WebSearchPricingTable() {
             {webSearchPricing.map(({ model, priceUsd }) => (
               <tr key={model} className="hover:bg-neutral-50 dark:hover:bg-white/[0.04]">
                 <td data-label="Model" className="px-4 py-3.5 font-medium text-neutral-950 dark:text-neutral-50">{model}</td>
-                <td data-label="Price per call" className="px-4 py-3.5 font-mono text-sm text-neutral-800 dark:text-neutral-300">${priceUsd.toFixed(3)} per call</td>
+                <td data-label="Price per call" className="px-4 py-3.5 font-mono text-sm text-neutral-800 dark:text-neutral-300">${priceUsd.toString()}</td>
               </tr>
             ))}
           </tbody>

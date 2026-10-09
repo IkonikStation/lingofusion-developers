@@ -1105,7 +1105,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                     <h3 className="mt-6 text-sm font-semibold text-neutral-950 dark:text-neutral-100">Web search deployment rates</h3>
                     <Table
                       headers={["Model", "Web search / call"]}
-                      rows={webSearchPricing.map(({ model, priceUsd }) => [model, `$${priceUsd.toFixed(3)} per call`])}
+                      rows={webSearchPricing.map(({ model, priceUsd }) => [model, `$${priceUsd}`])}
                     />
                   </Panel>
                 )}
