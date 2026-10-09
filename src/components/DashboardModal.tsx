@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { musicModels, textModelsByPricingMode } from "../data/pricing";
+import { musicModels, textModelsByPricingMode, webSearchPricing } from "../data/pricing";
 import type { TextPricingMode } from "../data/pricing";
 import { playgroundLanguages } from "../data/playgroundLanguages";
 import { browserApi, getApiBaseUrl, shouldUseBrowserApi } from "../data/browserApi";
@@ -1101,6 +1101,11 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                     <Table
                       headers={["Model", "Input / 1M", "Output / 1M"]}
                       rows={data.models.map((model) => [model.model, dollars(model.input), dollars(model.output)])}
+                    />
+                    <h3 className="mt-6 text-sm font-semibold text-neutral-950 dark:text-neutral-100">Web search deployment rates</h3>
+                    <Table
+                      headers={["Model", "Web search / call"]}
+                      rows={webSearchPricing.map(({ model, priceUsd }) => [model, `$${priceUsd.toFixed(3)} per call`])}
                     />
                   </Panel>
                 )}

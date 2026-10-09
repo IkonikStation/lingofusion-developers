@@ -62,6 +62,12 @@ export const textModelsByPricingMode: Record<TextPricingMode, TextModel[]> = {
     })),
 };
 
+export const webSearchPricing = [
+  { model: "LingoFusion", priceUsd: 0.015 },
+  { model: "LingoFusion Pro", priceUsd: 0.04 },
+  { model: "LingoFusion Ultra", priceUsd: 0.15 },
+] as const;
+
 export const textModelPresentations: Record<string, TextModelPresentation> = {
   "LingoFusion Native-1.7B": {
     image: "/assets/models/lingofusion-native-1-7b.png",

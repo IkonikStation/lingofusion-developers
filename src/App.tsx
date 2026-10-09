@@ -46,6 +46,7 @@ import {
   textModelPresentations,
   transcriptionModels,
   ttsModels,
+  webSearchPricing,
 } from "./data/pricing";
 import type { TextModel, TextModelPresentation, TextPricingMode } from "./data/pricing";
 import { priceForBillingInterval, subscriptionPlans } from "./data/subscriptions";
@@ -897,6 +898,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
             headerNote={textPricingDescription}
           />
         </div>
+        <WebSearchPricingTable />
         <div id="tts-models" className="site-reveal section-enter [--section-index:2]">
           <SectionCalculator title={t("ttsCalculator")} estimateLabel={t("estimate")} estimate={ttsEstimate === null ? "TBD" : displayCurrency(ttsEstimate, true)}>
             <SelectField label={t("model")} value={selectedTtsModel} onChange={setSelectedTtsModel}>
@@ -1364,7 +1366,34 @@ function ModelComparisonPage({ onOpenModel }: { onOpenModel: (model: string) => 
           <ModelComparisonCard model={rightModel} pricingMode={pricingMode} />
         </div>
       </section>
+      <WebSearchPricingTable />
     </div>
+  );
+}
+
+function WebSearchPricingTable() {
+  return (
+    <section className="site-reveal mt-10 border-t border-neutral-200 pt-8 dark:border-white/10" aria-labelledby="web-search-pricing-heading">
+      <div className="mb-4">
+        <h2 id="web-search-pricing-heading" className="text-2xl font-semibold tracking-tight text-neutral-950 dark:text-neutral-50">Web search pricing</h2>
+        <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">Per-call rates for web search requests.</p>
+      </div>
+      <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white dark:border-white/10 dark:bg-[#161616]">
+        <table className="mobile-record-table w-full min-w-[360px] text-left text-sm">
+          <thead className="border-b border-neutral-200 bg-neutral-50 text-xs font-medium uppercase tracking-wide text-neutral-500 dark:border-white/10 dark:bg-white/5">
+            <tr><th className="px-4 py-3 font-medium">Model</th><th className="px-4 py-3 font-medium">Price per call</th></tr>
+          </thead>
+          <tbody className="divide-y divide-neutral-200 dark:divide-white/10">
+            {webSearchPricing.map(({ model, priceUsd }) => (
+              <tr key={model} className="hover:bg-neutral-50 dark:hover:bg-white/[0.04]">
+                <td data-label="Model" className="px-4 py-3.5 font-medium text-neutral-950 dark:text-neutral-50">{model}</td>
+                <td data-label="Price per call" className="px-4 py-3.5 font-mono text-sm text-neutral-800 dark:text-neutral-300">${priceUsd.toFixed(3)} per call</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
