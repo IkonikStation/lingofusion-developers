@@ -332,7 +332,7 @@ function runMusic(state: BrowserState, options?: RequestInit) {
   if (!model) fail("unsupported_model");
   if (!prompt || !Number.isFinite(durationSeconds) || durationSeconds < 1 || durationSeconds > 3600) fail("invalid_request");
 
-  const cost = (durationSeconds / 60) * (model.priceUsd ?? 0);
+  const cost = model.priceUsd ?? 0;
   const requestId = randomId("req");
   applyCharge(state, cost);
   createChargeEntry(state, cost, `${model.model} /v1/music`);

@@ -165,7 +165,7 @@ const en: Record<TranslationKey, string> = {
   billingTts: "TTS models are billed per word.",
   billingTranscription: "Transcription models are billed per minute.",
   billingDubbing: "Dubbing models are billed per minute.",
-  billingMusic: "Music models are billed per minute.",
+  billingMusic: "Music generation is billed per generation.",
   billingImage: "Image translation is billed per 1M input and output tokens; rates vary by image size.",
   billingPdf: "PDF text extraction is billed per 500 extractions; PDF editing and translation pricing is TBD.",
   developerDocs: "Developer docs",

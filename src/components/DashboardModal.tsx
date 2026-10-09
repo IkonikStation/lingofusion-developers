@@ -730,7 +730,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                           <p className="mt-2 font-medium text-neutral-950 dark:text-neutral-50">{playgroundMode === "music" ? selectedMusicPlaygroundModel.model : selectedPlaygroundModel.model}</p>
                           {playgroundMode === "music" ? (
                             <div className="mt-3 text-sm">
-                              <p className="text-neutral-500 dark:text-neutral-500">Price / minute</p>
+                              <p className="text-neutral-500 dark:text-neutral-500">Price / generation</p>
                               <p className="mt-1 font-mono font-semibold text-neutral-950 dark:text-neutral-50">{dollars(selectedMusicPlaygroundModel.priceUsd ?? 0)}</p>
                             </div>
                           ) : (

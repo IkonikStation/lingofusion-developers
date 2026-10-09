@@ -20,7 +20,7 @@ export type TextPricingMode = "instant" | "batch" | "ultrafast";
 export type SimpleModel = {
   model: string;
   priceUsd: number | null;
-  pricingUnit?: "per_word" | "per_1k_characters" | "per_minute" | "per_500_extractions";
+  pricingUnit?: "per_word" | "per_1k_characters" | "per_minute" | "per_generation" | "per_500_extractions";
 };
 
 export type ImageModel = {
@@ -156,7 +156,7 @@ export const dubbingModels: SimpleModel[] = [
 ];
 
 export const musicModels: SimpleModel[] = [
-  { model: "Aurora Music", priceUsd: 0.60, pricingUnit: "per_minute" },
+  { model: "Aurora Music", priceUsd: 0.10, pricingUnit: "per_generation" },
 ];
 
 export const imageModels: ImageModel[] = [

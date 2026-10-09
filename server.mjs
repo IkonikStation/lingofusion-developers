@@ -46,7 +46,7 @@ const batchTextModels = textModels.map((model) => ({
 }));
 
 const musicModels = [
-  { model: "Aurora Music", pricePerMinute: 0.60 },
+  { model: "Aurora Music", pricePerGeneration: 0.10 },
 ];
 
 const lmStudio = {
@@ -150,8 +150,8 @@ function normalizeMusicModelName(value) {
   return musicModels.find((model) => model.model.toLowerCase() === normalized);
 }
 
-function musicCostMicro(durationSeconds, model) {
-  return dollarsToMicroCents((durationSeconds / 60) * model.pricePerMinute);
+function musicCostMicro(model) {
+  return dollarsToMicroCents(model.pricePerGeneration);
 }
 
 function tokenEstimate(text) {
@@ -1053,7 +1053,7 @@ async function route(req, res) {
         return send(res, 400, { error: "invalid_request", message: "model, prompt, and duration_seconds (1-3600) are required", request_id: requestId });
       }
 
-      const costMicroCents = musicCostMicro(durationSeconds, model);
+      const costMicroCents = musicCostMicro(model);
       const charge = applyCharge(db, costMicroCents);
 
       if (!charge) {

@@ -651,7 +651,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
   const [selectedDubbingModel, setSelectedDubbingModel] = useState(dubbingModels[0].model);
   const [dubbingMinutes, setDubbingMinutes] = useState(1);
   const [selectedMusicModel, setSelectedMusicModel] = useState(musicModels[0].model);
-  const [musicMinutes, setMusicMinutes] = useState(1);
+  const [musicGenerations, setMusicGenerations] = useState(1);
   const [selectedImageSize, setSelectedImageSize] = useState(imageModels[0].size);
   const [imageInputTokens, setImageInputTokens] = useState(1_000_000);
   const [imageOutputTokens, setImageOutputTokens] = useState(1_000_000);
@@ -694,7 +694,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
   const displayCurrency = (usdAmount: number, precise = false) => formatCurrencyAmount(usdAmount, activeCurrency, activeRate, precise);
   const displayPrice = (usdAmount: number | null, unit?: string) => {
     if (usdAmount === null) return "TBD";
-    const suffix = unit === "per_word" ? "/word" : unit === "per_minute" ? "/min" : unit === "per_500_extractions" ? " / 500 extractions" : "";
+    const suffix = unit === "per_word" ? "/word" : unit === "per_minute" ? "/min" : unit === "per_generation" ? " / generation" : unit === "per_500_extractions" ? " / 500 extractions" : "";
     return `${displayCurrency(usdAmount, true)}${suffix}`;
   };
 
@@ -756,8 +756,8 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
   }, [selectedDubbing, dubbingMinutes]);
 
   const musicEstimate = useMemo(() => {
-    return selectedMusic.priceUsd === null ? null : minuteNotationToMinutes(musicMinutes) * selectedMusic.priceUsd;
-  }, [selectedMusic, musicMinutes]);
+    return selectedMusic.priceUsd === null ? null : musicGenerations * selectedMusic.priceUsd;
+  }, [selectedMusic, musicGenerations]);
 
   const imageEstimate = useMemo(() => {
     return (imageInputTokens / 1_000_000) * selectedImage.inputUsd + (imageOutputTokens / 1_000_000) * selectedImage.outputUsd;
@@ -1068,20 +1068,18 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
               ))}
             </SelectField>
             <NumberField
-              label={t("minutes")}
+              label="Generations"
               min={0}
               max={Infinity}
-              step={0.01}
-              value={musicMinutes}
-              onChange={setMusicMinutes}
-              minuteNotation
-              minuteHelp={t("minuteHelp")}
+              step={1}
+              value={musicGenerations}
+              onChange={setMusicGenerations}
             />
           </SectionCalculator>
           <PricingCard
             key={`music-${currencyPresentationKey}`}
             title={t("musicModels")}
-            unit={t("pricesPerMinute")}
+            unit="Price per generation"
             kind="simple"
             rows={displayedMusicModels}
             labels={pricingLabels}
