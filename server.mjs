@@ -33,7 +33,7 @@ const MICRO_CENTS_PER_DOLLAR = 100_000_000;
 const textModels = [
   { model: "LingoFusion Nano", input: 0.05, output: 0.50 },
   { model: "LingoFusion Lite", input: 0.75, output: 3.00 },
-  { model: "LingoFusion", input: 3.00, output: 15.00 },
+  { model: "LingoFusion", input: 1.00, output: 5.00 },
   { model: "LingoFusion Pro", input: 3.50, output: 18.00 },
   { model: "ExplainFusion", input: 3.00, output: 2.00 },
   { model: "LingoFusion Ultra", input: 20.00, output: 120.00 },
