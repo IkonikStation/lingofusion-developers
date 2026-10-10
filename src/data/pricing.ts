@@ -15,7 +15,7 @@ export type TextModelPresentation = {
   features: string[];
 };
 
-export type TextPricingMode = "instant" | "batch" | "ultrafast";
+export type TextPricingMode = "instant" | "batch" | "fast" | "ultrafast";
 
 export type SimpleModel = {
   model: string;
@@ -52,6 +52,13 @@ export const textModelsByPricingMode: Record<TextPricingMode, TextModel[]> = {
       ...model,
       inputUsd: model.inputUsd / 2,
       outputUsd: model.outputUsd / 2,
+    })),
+  fast: textModels
+    .filter((model) => model.model === "LingoFusion")
+    .map((model) => ({
+      ...model,
+      inputUsd: model.inputUsd * 1.5,
+      outputUsd: model.outputUsd * 1.5,
     })),
   ultrafast: textModels
     .filter((model) => model.model === "LingoFusion Pro" || model.model === "LingoFusion Ultra")

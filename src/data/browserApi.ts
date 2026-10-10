@@ -268,7 +268,7 @@ function runTranslation(state: BrowserState, options?: RequestInit) {
   const { key, project } = authorize(state, options);
   if (!key.scopes.includes("Text translation")) fail("missing_scope");
   const body = requestBody(options);
-  const pricingMode: TextPricingMode = body.pricing_mode === "ultrafast" ? "ultrafast" : body.pricing_mode === "batch" ? "batch" : "instant";
+  const pricingMode: TextPricingMode = body.pricing_mode === "ultrafast" ? "ultrafast" : body.pricing_mode === "fast" ? "fast" : body.pricing_mode === "batch" ? "batch" : "instant";
   const model = textModelsByPricingMode[pricingMode].find((candidate) => candidate.model === body.model);
   if (!model) fail("unsupported_model");
   const input = String(body.input ?? "").trim();
@@ -282,7 +282,7 @@ function runTranslation(state: BrowserState, options?: RequestInit) {
   const cost = (inputTokens / 1_000_000) * model.inputUsd + (outputTokens / 1_000_000) * model.outputUsd;
   const requestId = randomId("req");
   applyCharge(state, cost);
-  createChargeEntry(state, cost, `${model.model}${pricingMode === "batch" ? " Batch" : pricingMode === "ultrafast" ? " Ultrafast" : ""} /v1/translate`);
+  createChargeEntry(state, cost, `${model.model}${pricingMode === "batch" ? " Batch" : pricingMode === "fast" ? " Fast" : pricingMode === "ultrafast" ? " Ultrafast" : ""} /v1/translate`);
   logRequest(state, {
     id: requestId,
     timestamp: new Date().toISOString(),
@@ -305,7 +305,7 @@ function runTranslation(state: BrowserState, options?: RequestInit) {
   return {
     id: requestId,
     model: model.model,
-    pricing_mode: pricingMode === "ultrafast" ? "ultrafast" : pricingMode === "batch" ? "batch" : "default",
+    pricing_mode: pricingMode === "ultrafast" ? "ultrafast" : pricingMode === "fast" ? "fast" : pricingMode === "batch" ? "batch" : "default",
     output_text: outputText,
     stream: Boolean(body.stream),
     usage: {

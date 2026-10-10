@@ -125,12 +125,13 @@ function maskSecret(secret) {
 }
 
 function normalizePricingMode(value) {
-  return value === "batch" ? "batch" : value === "ultrafast" ? "ultrafast" : "default";
+  return value === "batch" ? "batch" : value === "fast" ? "fast" : value === "ultrafast" ? "ultrafast" : "default";
 }
 
 function normalizeModelName(value, pricingMode = "default") {
   const normalized = String(value || "").trim().toLowerCase();
   const models = pricingMode === "batch" ? batchTextModels : textModels;
+  if (pricingMode === "fast" && normalized !== "lingofusion") return undefined;
   if (pricingMode === "ultrafast" && !["lingofusion pro", "lingofusion ultra"].includes(normalized)) return undefined;
   return models.find((model) => model.model.toLowerCase() === normalized);
 }
@@ -822,7 +823,7 @@ async function route(req, res) {
 
       const pricingMode = normalizePricingMode(body.pricing_mode);
       const model = normalizeModelName(body.model, pricingMode);
-      if (!model) return send(res, 400, { error: "unsupported_model", supported_models: (pricingMode === "batch" ? batchTextModels : pricingMode === "ultrafast" ? textModels.filter((item) => ["LingoFusion Pro", "LingoFusion Ultra"].includes(item.model)) : textModels).map((item) => item.model), request_id: requestId });
+      if (!model) return send(res, 400, { error: "unsupported_model", supported_models: (pricingMode === "batch" ? batchTextModels : pricingMode === "fast" ? textModels.filter((item) => item.model === "LingoFusion") : pricingMode === "ultrafast" ? textModels.filter((item) => ["LingoFusion Pro", "LingoFusion Ultra"].includes(item.model)) : textModels).map((item) => item.model), request_id: requestId });
       if (!body.input || !body.from_language || !body.to_language) {
         return send(res, 400, { error: "invalid_request", message: "model, input, from_language, and to_language are required", request_id: requestId });
       }
@@ -885,7 +886,9 @@ async function route(req, res) {
       }
       const pricedModel = pricingMode === "ultrafast"
         ? { ...model, input: model.input * 4, output: model.output * 4 }
-        : model;
+        : pricingMode === "fast"
+          ? { ...model, input: model.input * 1.5, output: model.output * 1.5 }
+          : model;
       const costMicroCents = centsCostMicro(inputTokens, outputTokens, pricedModel);
       const sourceTextTokensEstimate = tokenEstimate(body.input);
       const instructionTokensEstimate = Math.max(0, inputTokens - sourceTextTokensEstimate);
@@ -947,7 +950,7 @@ async function route(req, res) {
         projectId: auth.project.id,
         keyId: auth.key.id,
         requestId,
-        description: `${model.model}${pricingMode === "batch" ? " Batch" : pricingMode === "ultrafast" ? " Ultrafast" : ""} /v1/translate`,
+        description: `${model.model}${pricingMode === "batch" ? " Batch" : pricingMode === "fast" ? " Fast" : pricingMode === "ultrafast" ? " Ultrafast" : ""} /v1/translate`,
         status: "succeeded",
         createdAt: nowIso(),
       });
