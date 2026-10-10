@@ -33,7 +33,7 @@ export const textModels: TextModel[] = [
   { model: "LingoFusion Native-1.7B", inputUsd: 0, outputUsd: 0, local: true },
   { model: "LingoFusion Native-9B", inputUsd: 0, outputUsd: 0, local: true, recommended: true },
   { model: "LingoFusion Native-35B", inputUsd: 0, outputUsd: 0, local: true },
-  { model: "LingoFusion Nano", inputUsd: 0.06, outputUsd: 0.50 },
+  { model: "LingoFusion Nano", inputUsd: 0.05, outputUsd: 0.50 },
   { model: "LingoFusion Lite", inputUsd: 0.50, outputUsd: 2.00 },
   {
     model: "LingoFusion",
