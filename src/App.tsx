@@ -709,7 +709,7 @@ function PricingPage({ t, onDashboard, onOpenModel }: { t: (key: TranslationKey)
   const selectedImage = imageModels.find((model) => model.size === selectedImageSize) ?? imageModels[0];
   const selectedPdf = pdfModels.find((model) => model.model === selectedPdfModel) ?? pdfModels[0];
   const textPricingDescription = textPricingMode === "fast"
-    ? "Fast mode is priced at 1.5× Default for LingoFusion. This provider route does not guarantee a fixed speed increase; response times vary with workload and provider conditions."
+    ? "Fast mode is priced at 1.5× Default for supported LingoFusion models. This provider route does not guarantee a fixed speed increase; response times vary with workload and provider conditions."
     : textPricingMode === "ultrafast"
     ? "Ultrafast mode uses non-thinking processing for Pro and Ultra. Rates are 4× Default; actual response speed depends on workload and provider conditions."
     : textPricingMode === "instant"

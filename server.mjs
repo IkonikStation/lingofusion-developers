@@ -32,7 +32,7 @@ const MICRO_CENTS_PER_DOLLAR = 100_000_000;
 
 const textModels = [
   { model: "LingoFusion Nano", input: 0.05, output: 0.50 },
-  { model: "LingoFusion Lite", input: 0.75, output: 3.00 },
+  { model: "LingoFusion Lite", input: 0.50, output: 2.00 },
   { model: "LingoFusion", input: 1.00, output: 5.00 },
   { model: "LingoFusion Pro", input: 3.50, output: 18.00 },
   { model: "ExplainFusion", input: 3.00, output: 2.00 },
@@ -131,7 +131,7 @@ function normalizePricingMode(value) {
 function normalizeModelName(value, pricingMode = "default") {
   const normalized = String(value || "").trim().toLowerCase();
   const models = pricingMode === "batch" ? batchTextModels : textModels;
-  if (pricingMode === "fast" && normalized !== "lingofusion") return undefined;
+  if (pricingMode === "fast" && !["lingofusion nano", "lingofusion lite", "lingofusion", "lingofusion pro", "lingofusion ultra"].includes(normalized)) return undefined;
   if (pricingMode === "ultrafast" && !["lingofusion pro", "lingofusion ultra"].includes(normalized)) return undefined;
   return models.find((model) => model.model.toLowerCase() === normalized);
 }
@@ -823,7 +823,7 @@ async function route(req, res) {
 
       const pricingMode = normalizePricingMode(body.pricing_mode);
       const model = normalizeModelName(body.model, pricingMode);
-      if (!model) return send(res, 400, { error: "unsupported_model", supported_models: (pricingMode === "batch" ? batchTextModels : pricingMode === "fast" ? textModels.filter((item) => item.model === "LingoFusion") : pricingMode === "ultrafast" ? textModels.filter((item) => ["LingoFusion Pro", "LingoFusion Ultra"].includes(item.model)) : textModels).map((item) => item.model), request_id: requestId });
+      if (!model) return send(res, 400, { error: "unsupported_model", supported_models: (pricingMode === "batch" ? batchTextModels : pricingMode === "fast" ? textModels.filter((item) => ["LingoFusion Nano", "LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(item.model)) : pricingMode === "ultrafast" ? textModels.filter((item) => ["LingoFusion Pro", "LingoFusion Ultra"].includes(item.model)) : textModels).map((item) => item.model), request_id: requestId });
       if (!body.input || !body.from_language || !body.to_language) {
         return send(res, 400, { error: "invalid_request", message: "model, input, from_language, and to_language are required", request_id: requestId });
       }

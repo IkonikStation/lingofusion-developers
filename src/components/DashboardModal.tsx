@@ -669,7 +669,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                               <SelectInput label="Model" value={tryModel} onChange={(model) => {
                                 setTryModel(model);
                               }}>
-                                {playgroundModels.filter((model) => playgroundPricingMode === "fast" ? model.model === "LingoFusion" : playgroundPricingMode !== "ultrafast" || ["LingoFusion Pro", "LingoFusion Ultra"].includes(model.model)).map((model) => <option key={model.model}>{model.model}</option>)}
+                                {playgroundModels.filter((model) => playgroundPricingMode === "fast" ? ["LingoFusion Nano", "LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(model.model) : playgroundPricingMode !== "ultrafast" || ["LingoFusion Pro", "LingoFusion Ultra"].includes(model.model)).map((model) => <option key={model.model}>{model.model}</option>)}
                               </SelectInput>
                             </div>
                           ) : (
