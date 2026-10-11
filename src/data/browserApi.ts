@@ -362,8 +362,8 @@ function runMusic(state: BrowserState, options?: RequestInit) {
     output: {
       prompt,
       duration_seconds: durationSeconds,
-      audio_url: `browser://aurora/${requestId}.wav`,
-      note: "Simulated Aurora music generation. No audio file is created.",
+      audio_url: `browser://lingofusion-music/${requestId}.wav`,
+      note: "Simulated LingoFusion Music generation. No audio file is created.",
     },
     usage: {
       audio_seconds: durationSeconds,

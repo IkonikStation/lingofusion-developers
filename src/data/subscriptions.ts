@@ -83,7 +83,7 @@ export const subscriptionPlans = {
     voiceCharacters: 0,
     liveWebLookups: 0,
     description: "Generous everyday translation tools for individual exploration.",
-    modelAccess: "Access to LingoFusion Core (GPT-6 Luna) for fast, natural translations.",
+    modelAccess: "Access to LingoFusion for fast, natural translations.",
     ctaLabel: "Start Free",
     features: [
       "50,000 words (~300,000 characters) per month",
@@ -116,13 +116,13 @@ export const subscriptionPlans = {
         voiceCharacters: 25_000,
         liveWebLookups: 25,
         description: "For regular professional translation and studio-quality audio.",
-        modelAccess: "Access to LingoFusion Pro (GPT-6 Sol) with Standard Reasoning.",
+        modelAccess: "Access to LingoFusion Pro with standard reasoning.",
         ctaLabel: "Choose Pro",
         usageFeatures: [
           "350,000 words (~2,200,000 characters) per month",
           "50 Image Translations per month",
           "60 min Live Dictation + 30 min File Transcription per month",
-          "25,000 ElevenLabs v4 Voice characters per month",
+          "25,000 voice generation characters per month",
           "25 Live Web Lookups included per month",
         ],
         benefits: [
@@ -149,13 +149,13 @@ export const subscriptionPlans = {
         voiceCharacters: 75_000,
         liveWebLookups: 75,
         description: "For high-volume teams, agencies, and long-form media.",
-        modelAccess: "Access to LingoFusion Pro (GPT-6 Sol) with High Reasoning unlocked.",
+        modelAccess: "Access to LingoFusion Pro with high reasoning.",
         ctaLabel: "Choose Pro Max",
         usageFeatures: [
           "750,000 words (~4,800,000 characters) per month",
           "150 Image Translations per month",
           "150 min Live Dictation + 75 min File Transcription per month",
-          "75,000 ElevenLabs v4 Voice characters per month",
+          "75,000 voice generation characters per month",
           "75 Live Web Lookups included per month",
         ],
         benefits: [
@@ -187,13 +187,13 @@ export const subscriptionPlans = {
         voiceCharacters: 150_000,
         liveWebLookups: 250,
         description: "Flagship model accuracy for localization firms and legal publishing.",
-        modelAccess: "Access to LingoFusion Ultra (GPT-6 Astra) with Pro Reasoning.",
+        modelAccess: "Access to LingoFusion Ultra with advanced reasoning.",
         ctaLabel: "Choose Ultra",
         usageFeatures: [
           "1,200,000 words (~7,500,000 characters) per month",
           "500 Image Translations per month",
           "360 min Live Dictation (6 hrs) + 180 min File Transcription (3 hrs)",
-          "150,000 ElevenLabs v4 Voice characters (~2 hrs)",
+          "150,000 voice generation characters (~2 hrs)",
           "250 Live Web Lookups included per month",
         ],
         benefits: [
@@ -220,13 +220,13 @@ export const subscriptionPlans = {
         voiceCharacters: 220_000,
         liveWebLookups: "Unlimited",
         description: "Maximum compute, certified nuance verification, and dedicated lanes.",
-        modelAccess: "Access to LingoFusion Ultra (GPT-6 Astra) with Max Reasoning unlocked.",
+        modelAccess: "Access to LingoFusion Ultra with maximum reasoning.",
         ctaLabel: "Choose Ultra Max",
         usageFeatures: [
           "1,800,000 words (~11,000,000 characters) per month",
           "1,000 Image Translations per month",
           "500 min Live Dictation (~8.3 hrs) + 250 min File Transcription (~4.1 hrs)",
-          "220,000 ElevenLabs v4 Voice characters (~3 hrs)",
+          "220,000 voice generation characters (~3 hrs)",
           "Unlimited Live Web Lookups included",
         ],
         benefits: [

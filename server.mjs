@@ -35,7 +35,7 @@ const textModels = [
   { model: "LingoFusion Lite", input: 0.50, output: 2.00 },
   { model: "LingoFusion", input: 1.00, output: 5.00 },
   { model: "LingoFusion Pro", input: 3.50, output: 18.00 },
-  { model: "ExplainFusion", input: 3.00, output: 2.00 },
+  { model: "LingoFusion Explain", input: 3.00, output: 2.00 },
   { model: "LingoFusion Ultra", input: 20.00, output: 120.00 },
 ];
 
@@ -46,7 +46,7 @@ const batchTextModels = textModels.map((model) => ({
 }));
 
 const musicModels = [
-  { model: "Aurora Music", pricePerGeneration: 0.10 },
+  { model: "LingoFusion Music", pricePerGeneration: 0.10 },
 ];
 
 const lmStudio = {
@@ -58,7 +58,7 @@ const realModelRouting = {
   "LingoFusion Nano": { provider: "openai", model: "gpt-5-nano" },
   "LingoFusion Lite": { provider: "openai", model: "gpt-5-mini" },
   "LingoFusion": { provider: "deepseek", model: "deepseek-v4-flash", thinking: "disabled" },
-  "ExplainFusion": { provider: "deepseek", model: "deepseek-v4-flash", thinking: "disabled" },
+  "LingoFusion Explain": { provider: "deepseek", model: "deepseek-v4-flash", thinking: "disabled" },
   "LingoFusion Pro": { provider: "deepseek", model: "deepseek-v4-pro", thinking: "enabled", reasoningEffort: "high" },
   "LingoFusion Ultra": { provider: "deepseek", model: "deepseek-v4-pro", thinking: "enabled", reasoningEffort: "max" },
 };
@@ -1092,8 +1092,8 @@ async function route(req, res) {
         output: {
           prompt,
           duration_seconds: durationSeconds,
-          audio_url: `local://aurora/${requestId}.wav`,
-          note: "Simulated local Aurora music generation. No audio file is created.",
+          audio_url: `local://lingofusion-music/${requestId}.wav`,
+          note: "Simulated local LingoFusion Music generation. No audio file is created.",
         },
         usage: {
           audio_seconds: durationSeconds,

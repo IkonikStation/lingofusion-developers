@@ -42,7 +42,7 @@ export const textModels: TextModel[] = [
     recommended: true,
   },
   { model: "LingoFusion Pro", inputUsd: 3.50, outputUsd: 18.00 },
-  { model: "ExplainFusion", inputUsd: 3.00, outputUsd: 2.00 },
+  { model: "LingoFusion Explain", inputUsd: 3.00, outputUsd: 2.00 },
   { model: "LingoFusion Ultra", inputUsd: 20.00, outputUsd: 120.00 },
 ];
 
@@ -128,7 +128,7 @@ export const textModelPresentations: Record<string, TextModelPresentation> = {
     bestFor: "Professional localization and complex content requiring stronger reasoning.",
     features: ["Advanced context handling", "Terminology consistency", "Tone preservation", "Long-form translation"],
   },
-  ExplainFusion: {
+  "LingoFusion Explain": {
     image: "/assets/models/explainfusion.png",
     imageScale: 1.72,
     capability: "Explanation-focused translation, rewriting, and educational localization workflows.",
@@ -163,7 +163,7 @@ export const dubbingModels: SimpleModel[] = [
 ];
 
 export const musicModels: SimpleModel[] = [
-  { model: "Aurora Music", priceUsd: 0.10, pricingUnit: "per_generation" },
+  { model: "LingoFusion Music", priceUsd: 0.10, pricingUnit: "per_generation" },
 ];
 
 export const imageModels: ImageModel[] = [
@@ -179,7 +179,7 @@ export const pdfModels: SimpleModel[] = [
 export const latestModels = [
   "LingoFusion Ultra",
   "LingoFusion Pro",
-  "ExplainFusion",
+  "LingoFusion Explain",
   "LingoFusion",
   "LingoFusion Lite",
   "LingoFusion Native-1.7B",
@@ -194,7 +194,7 @@ export const latestModels = [
   "LingoFusion Audio Dubbing",
   "LingoFusion Video Dub (Basic)",
   "LingoFusion Video Dub (Advanced)",
-  "Aurora Music",
+  "LingoFusion Music",
   "PDF text extraction",
   "PDF editing and translation",
   "Image Translate",
@@ -231,7 +231,7 @@ export const navMenus = {
   Models: [
     "LingoFusion Ultra",
     "LingoFusion Pro",
-    "ExplainFusion",
+    "LingoFusion Explain",
     "LingoFusion",
     "LingoFusion Lite",
     "LingoFusion Native-1.7B",
@@ -283,7 +283,7 @@ export const modelDetails: Record<string, string> = {
     "Highest-quality multilingual reasoning and long-form translation for enterprise workflows.",
   "LingoFusion Pro":
     "Professional model for product-grade translation, writing, and localization tasks.",
-  ExplainFusion:
+  "LingoFusion Explain":
     "Premium model for explanation-heavy translation, rewriting, and educational localization workflows.",
   LingoFusion:
     "Recommended default model for most text generation and translation workloads.",
