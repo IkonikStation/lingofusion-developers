@@ -90,7 +90,7 @@ export const subscriptionPlans = {
       "5 Image Translations per month",
       "5 minutes Live Dictation per month",
       "Standard system voice playback",
-      "Dubbing Studio access via prepaid wallet ($4.50/min)",
+      "Dubbing Studio access via prepaid wallet ($3.50/min)",
       "Live Web Lookups available on-demand ($0.025/search)",
       "Allowance resets automatically on the 1st of each month",
       "Unused monthly allowance does not roll over",
@@ -127,7 +127,7 @@ export const subscriptionPlans = {
         ],
         benefits: [
           "Nuanced phrasing and cultural idiom verification",
-          "Full Dubbing Studio access ($4.50/min PAYG)",
+          "Full Dubbing Studio access ($3.50/min PAYG)",
           "Automatic overage fallback via prepaid wallet",
           "Allowance refreshes every billing cycle",
         ],
@@ -160,7 +160,7 @@ export const subscriptionPlans = {
         ],
         benefits: [
           "Extended reasoning for complex legal and technical prose",
-          "Discounted Studio Dubbing rate ($4.20/min PAYG)",
+          "Studio Dubbing access ($3.50/min PAYG)",
           "Priority processing queue for batch files",
           "Automatic overage fallback via prepaid wallet",
         ],
@@ -198,7 +198,7 @@ export const subscriptionPlans = {
         ],
         benefits: [
           "Deep terminology research and specialist-source verification",
-          "Wholesale Studio Dubbing rate ($3.90/min PAYG)",
+          "Studio Dubbing access ($3.50/min PAYG)",
           "High-speed priority queue and developer API access",
           "Priority technical support",
         ],
@@ -231,7 +231,7 @@ export const subscriptionPlans = {
         ],
         benefits: [
           "Exhaustive multi-pass nuance and consistency verification",
-          "Lowest wholesale Studio Dubbing rate ($3.70/min PAYG)",
+          "Studio Dubbing access ($3.50/min PAYG)",
           "Dedicated enterprise concurrency and API integrations",
           "Direct engineering escalation",
         ],
