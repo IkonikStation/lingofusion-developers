@@ -334,33 +334,34 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
         <div className="flex flex-wrap items-center gap-2 border-y border-[#d9e3f0] py-4 dark:border-white/10">
           <span className="mr-2 text-xs font-bold uppercase tracking-[0.12em] text-[#687a92] dark:text-slate-400">Plan details</span>
           <a href="#comparison" className="rounded-full px-3 py-1.5 text-sm font-medium text-[#385779] hover:bg-[#eaf4ff] hover:text-[#1e5f9f] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white">Compare</a>
-          <a href="#source-words" className="rounded-full px-3 py-1.5 text-sm font-medium text-[#385779] hover:bg-[#eaf4ff] hover:text-[#1e5f9f] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white">Source words</a>
+          <a href="#character-usage" className="rounded-full px-3 py-1.5 text-sm font-medium text-[#385779] hover:bg-[#eaf4ff] hover:text-[#1e5f9f] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white">Character usage</a>
           <a href="#translation-quality" className="rounded-full px-3 py-1.5 text-sm font-medium text-[#385779] hover:bg-[#eaf4ff] hover:text-[#1e5f9f] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white">Translation quality</a>
           <a href="#advanced-tts" className="rounded-full px-3 py-1.5 text-sm font-medium text-[#385779] hover:bg-[#eaf4ff] hover:text-[#1e5f9f] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white">Advanced TTS</a>
           <a href="#teams" className="rounded-full px-3 py-1.5 text-sm font-medium text-[#385779] hover:bg-[#eaf4ff] hover:text-[#1e5f9f] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white">Teams</a>
         </div>
       </nav>
 
-      <SectionBlock id="source-words" eyebrow="Simple accounting" title="How source words are counted" description="Usage follows the original text you submit, so allowances stay predictable across languages.">
+      <SectionBlock id="character-usage" eyebrow="Simple accounting" title="Character-based usage" description="Monthly allowances are measured in characters for the text you submit and the generated translation.">
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <InfoTile icon={Languages} title="Count the source">Usage is measured using source words, not translated output words.</InfoTile>
-          <InfoTile icon={Globe2} title="Each target counts">1,000 source words translated into three languages uses 3,000 source words.</InfoTile>
+          <InfoTile icon={Languages} title="Count characters">Characters in text you submit count toward your input usage.</InfoTile>
+          <InfoTile icon={Globe2} title="Output characters">Generated translation and reasoning characters count as output characters.</InfoTile>
+          <InfoTile icon={BookOpenCheck} title="Each target counts">Input characters count for each target language, and generated output characters count too.</InfoTile>
           <InfoTile icon={WalletCards} title="Included usage first">Monthly usage is consumed before purchased additional usage.</InfoTile>
-          <InfoTile icon={BookOpenCheck} title="Monthly reset">Included allowances reset each billing cycle and do not roll over.</InfoTile>
+          <InfoTile icon={BookOpenCheck} title="Monthly reset">Included character allowances reset each billing cycle and do not roll over.</InfoTile>
           <InfoTile icon={ShieldCheck} title="Extras stay available">Purchased additional usage does not expire.</InfoTile>
         </div>
       </SectionBlock>
 
       <SectionBlock id="translation-quality" eyebrow="Translation quality" title="Choose the right level of reasoning" description="Automatic terminology research is available at every level and becomes more thorough as quality increases.">
         <div className="grid gap-5 lg:grid-cols-3">
-          <QualityCard name="LingoFusion" accent="standard" allowance={`${formatNumber(subscriptionPlans.free.standardWords)} words on Free`} items={[
+          <QualityCard name="LingoFusion" accent="standard" allowance={`${formatNumber(subscriptionPlans.free.standardCharacters)} characters on Free`} items={[
             "Fast, accurate everyday translations",
             "Fast everyday translations",
             "Thinking disabled for speed",
             "Concise term lookup when meaning cannot be resolved confidently",
             "Best for messages, regular documents, and everyday content",
           ]} />
-          <QualityCard name="LingoFusion Pro" accent="pro" allowance={`${formatNumber(pro.proWords)} Pro words on ${pro.label}`} valueKey={pro.id} selector={
+          <QualityCard name="LingoFusion Pro" accent="pro" allowance={`${formatNumber(pro.proCharacters)} characters on ${pro.label}`} valueKey={pro.id} selector={
             <div role="group" aria-label="Choose Pro allowance" className="mt-4 grid grid-cols-2 rounded-lg border border-[#bfd3ec] bg-[#edf5ff] p-1 dark:border-white/10 dark:bg-white/[0.06]">
               {(["350k", "750k"] as ProVariantKey[]).map((key) => {
                 const selected = key === proVariantKey;
@@ -374,7 +375,7 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
             "Automatic terminology research when required",
             "Better for professional and complex translations",
           ]} />
-          <QualityCard name="LingoFusion Ultra" accent="ultra" allowance={`${formatNumber(ultra.ultraWords)} Ultra words on ${ultra.label}`} valueKey={ultra.id} selector={
+          <QualityCard name="LingoFusion Ultra" accent="ultra" allowance={`${formatNumber(ultra.ultraCharacters)} characters on ${ultra.label}`} valueKey={ultra.id} selector={
             <div role="group" aria-label="Choose an Ultra allowance" className="mt-4 grid grid-cols-2 rounded-lg border border-[#bfd3ec] bg-[#edf5ff] p-1 dark:border-white/10 dark:bg-white/[0.06]">
               {(["x1", "x2"] as UltraVariantKey[]).map((key) => {
                 const selected = key === ultraVariantKey;
@@ -416,7 +417,7 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
           <div className="rounded-2xl bg-[#16284a] p-6 text-white shadow-[0_18px_60px_rgba(22,40,74,0.2)] dark:bg-[#18243a] sm:p-8">
             <Sparkles className="h-6 w-6 text-[#8fc4ff]" />
             <h3 className="mt-4 text-xl font-semibold">Ready for future usage packs</h3>
-            <p className="mt-3 text-sm leading-6 text-slate-200">Extra word-pack pricing will come from one central configuration or a backend endpoint when purchasing is connected. No placeholder prices are being presented as real offers.</p>
+            <p className="mt-3 text-sm leading-6 text-slate-200">Extra character-pack pricing will come from one central configuration or a backend endpoint when purchasing is connected. No placeholder prices are being presented as real offers.</p>
           </div>
         </div>
       </SectionBlock>
@@ -539,7 +540,7 @@ function ComparisonPanel({ billingInterval, pro, ultra, proVariantKey, ultraVari
       ],
     },
     { label: "Included model", values: ["LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"] },
-    { label: "Words / month", values: [formatNumber(subscriptionPlans.free.standardWords), formatNumber(pro.proWords), formatNumber(ultra.ultraWords)] },
+    { label: "Characters / month", values: [formatNumber(subscriptionPlans.free.standardCharacters), formatNumber(pro.proCharacters), formatNumber(ultra.ultraCharacters)] },
     { label: "Image translations / month", values: [formatNumber(subscriptionPlans.free.imageTranslations), formatNumber(pro.imageTranslations), formatNumber(ultra.imageTranslations)] },
     { label: "Live dictation / month", values: [`${formatNumber(subscriptionPlans.free.liveDictationMinutes)} min`, `${formatNumber(pro.liveDictationMinutes)} min`, `${formatNumber(ultra.liveDictationMinutes)} min`] },
     { label: "File transcription / month", values: ["-", `${formatNumber(pro.fileTranscriptionMinutes)} min`, `${formatNumber(ultra.fileTranscriptionMinutes)} min`] },

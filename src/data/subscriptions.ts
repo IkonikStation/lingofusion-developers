@@ -17,10 +17,9 @@ export function yearlyDiscountPercent(monthlyPrice: number, yearlyPrice: number)
 }
 
 export type SubscriptionAllowances = {
-  standardWords: number;
-  estimatedCharacters: number;
-  proWords: number;
-  ultraWords: number;
+  standardCharacters: number;
+  proCharacters: number;
+  ultraCharacters: number;
   advancedTtsCharacters: number;
   imageTranslations: number;
   liveDictationMinutes: number;
@@ -42,8 +41,8 @@ export type SubscriptionPlan = SubscriptionAllowances & {
 
 export type ProVariant = SubscriptionAllowances & {
   id: "pro-350k" | "pro-max-750k";
-  label: "350K" | "750K";
-  selectorLabel: "Pro (350K)" | "Pro Max (750K)";
+  label: "Pro" | "Pro Max";
+  selectorLabel: "Pro" | "Pro Max";
   monthlyPrice: number;
   yearlyPrice: number;
   description: string;
@@ -55,8 +54,8 @@ export type ProVariant = SubscriptionAllowances & {
 
 export type UltraVariant = SubscriptionAllowances & {
   id: "ultra-1-2m" | "ultra-max-1-8m";
-  label: "1.2M" | "1.8M";
-  selectorLabel: "Ultra (1.2M)" | "Ultra Max (1.8M)";
+  label: "Ultra" | "Ultra Max";
+  selectorLabel: "Ultra" | "Ultra Max";
   monthlyPrice: number;
   yearlyPrice: number;
   description: string;
@@ -72,10 +71,9 @@ export const subscriptionPlans = {
     name: "Free",
     monthlyPrice: 0,
     yearlyPrice: 0,
-    standardWords: 50_000,
-    estimatedCharacters: 300_000,
-    proWords: 0,
-    ultraWords: 0,
+    standardCharacters: 300_000,
+    proCharacters: 0,
+    ultraCharacters: 0,
     advancedTtsCharacters: 0,
     imageTranslations: 5,
     liveDictationMinutes: 5,
@@ -86,7 +84,7 @@ export const subscriptionPlans = {
     modelAccess: "Access to LingoFusion for fast, natural translations.",
     ctaLabel: "Start Free",
     features: [
-      "50,000 words (~300,000 characters) per month",
+      "300,000 characters per month",
       "5 Image Translations per month",
       "5 minutes Live Dictation per month",
       "Standard system voice playback",
@@ -101,14 +99,13 @@ export const subscriptionPlans = {
     variants: {
       "350k": {
         id: "pro-350k",
-        label: "350K",
-        selectorLabel: "Pro (350K)",
+        label: "Pro",
+        selectorLabel: "Pro",
         monthlyPrice: 19.99,
         yearlyPrice: 204,
-        standardWords: 0,
-        estimatedCharacters: 2_200_000,
-        proWords: 350_000,
-        ultraWords: 0,
+        standardCharacters: 0,
+        proCharacters: 2_200_000,
+        ultraCharacters: 0,
         advancedTtsCharacters: 25_000,
         imageTranslations: 50,
         liveDictationMinutes: 60,
@@ -119,7 +116,7 @@ export const subscriptionPlans = {
         modelAccess: "Access to LingoFusion Pro with standard reasoning.",
         ctaLabel: "Choose Pro",
         usageFeatures: [
-          "350,000 words (~2,200,000 characters) per month",
+          "2,200,000 characters per month",
           "50 Image Translations per month",
           "60 min Live Dictation + 30 min File Transcription per month",
           "25,000 voice generation characters per month",
@@ -134,14 +131,13 @@ export const subscriptionPlans = {
       },
       "750k": {
         id: "pro-max-750k",
-        label: "750K",
-        selectorLabel: "Pro Max (750K)",
+        label: "Pro Max",
+        selectorLabel: "Pro Max",
         monthlyPrice: 39.99,
         yearlyPrice: 408,
-        standardWords: 0,
-        estimatedCharacters: 4_800_000,
-        proWords: 750_000,
-        ultraWords: 0,
+        standardCharacters: 0,
+        proCharacters: 4_800_000,
+        ultraCharacters: 0,
         advancedTtsCharacters: 75_000,
         imageTranslations: 150,
         liveDictationMinutes: 150,
@@ -152,7 +148,7 @@ export const subscriptionPlans = {
         modelAccess: "Access to LingoFusion Pro with high reasoning.",
         ctaLabel: "Choose Pro Max",
         usageFeatures: [
-          "750,000 words (~4,800,000 characters) per month",
+          "4,800,000 characters per month",
           "150 Image Translations per month",
           "150 min Live Dictation + 75 min File Transcription per month",
           "75,000 voice generation characters per month",
@@ -172,14 +168,13 @@ export const subscriptionPlans = {
     variants: {
       x1: {
         id: "ultra-1-2m",
-        label: "1.2M",
-        selectorLabel: "Ultra (1.2M)",
+        label: "Ultra",
+        selectorLabel: "Ultra",
         monthlyPrice: 149.99,
         yearlyPrice: 1_529,
-        standardWords: 0,
-        estimatedCharacters: 7_500_000,
-        proWords: 0,
-        ultraWords: 1_200_000,
+        standardCharacters: 0,
+        proCharacters: 0,
+        ultraCharacters: 7_500_000,
         advancedTtsCharacters: 150_000,
         imageTranslations: 500,
         liveDictationMinutes: 360,
@@ -190,7 +185,7 @@ export const subscriptionPlans = {
         modelAccess: "Access to LingoFusion Ultra with advanced reasoning.",
         ctaLabel: "Choose Ultra",
         usageFeatures: [
-          "1,200,000 words (~7,500,000 characters) per month",
+          "7,500,000 characters per month",
           "500 Image Translations per month",
           "360 min Live Dictation (6 hrs) + 180 min File Transcription (3 hrs)",
           "150,000 voice generation characters (~2 hrs)",
@@ -205,14 +200,13 @@ export const subscriptionPlans = {
       },
       x2: {
         id: "ultra-max-1-8m",
-        label: "1.8M",
-        selectorLabel: "Ultra Max (1.8M)",
+        label: "Ultra Max",
+        selectorLabel: "Ultra Max",
         monthlyPrice: 199,
         yearlyPrice: 2_029,
-        standardWords: 0,
-        estimatedCharacters: 11_000_000,
-        proWords: 0,
-        ultraWords: 1_800_000,
+        standardCharacters: 0,
+        proCharacters: 0,
+        ultraCharacters: 11_000_000,
         advancedTtsCharacters: 220_000,
         imageTranslations: 1_000,
         liveDictationMinutes: 500,
@@ -223,7 +217,7 @@ export const subscriptionPlans = {
         modelAccess: "Access to LingoFusion Ultra with maximum reasoning.",
         ctaLabel: "Choose Ultra Max",
         usageFeatures: [
-          "1,800,000 words (~11,000,000 characters) per month",
+          "11,000,000 characters per month",
           "1,000 Image Translations per month",
           "500 min Live Dictation (~8.3 hrs) + 250 min File Transcription (~4.1 hrs)",
           "220,000 voice generation characters (~3 hrs)",
@@ -264,20 +258,20 @@ export const teamConfiguration = {
   maximumSelfServeSeats: enterpriseConfiguration.minimumSeats - 1,
   maximumSelectableSeats: enterpriseConfiguration.maximumSeats,
   seats: [
-    { name: "Teams Pro (350K)", planId: "pro-350k" as const, variant: "350k" as const },
-    { name: "Teams Pro Max (750K)", planId: "pro-max-750k" as const, variant: "750k" as const },
-    { name: "Teams Ultra (1.2M)", planId: "ultra-1-2m" as const, ultraVariant: "x1" as const },
-    { name: "Teams Ultra Max (1.8M)", planId: "ultra-max-1-8m" as const, ultraVariant: "x2" as const },
+    { name: "Teams Pro", planId: "pro-350k" as const, variant: "350k" as const },
+    { name: "Teams Pro Max", planId: "pro-max-750k" as const, variant: "750k" as const },
+    { name: "Teams Ultra", planId: "ultra-1-2m" as const, ultraVariant: "x1" as const },
+    { name: "Teams Ultra Max", planId: "ultra-max-1-8m" as const, ultraVariant: "x2" as const },
   ],
 } as const;
 
 export const subscriptionFaqs = [
-  ["What is a source word?", "A source word is a word in the original text you submit for translation. Translated output words are not counted."],
-  ["Do unused words roll over?", "No. Included monthly allowances reset each billing cycle and unused monthly allowances do not roll over."],
+  ["How are characters counted?", "Usage is measured in characters from the text you submit and the generated translation. Reasoning characters count as output characters."],
+  ["Do unused characters roll over?", "No. Included monthly allowances reset each billing cycle and unused monthly allowances do not roll over."],
   ["What happens when I reach my limit?", "Eligible paid plans use automatic overage fallback through your prepaid wallet. You can also purchase additional usage or upgrade your plan."],
-  ["Does translating into multiple languages count more than once?", "Yes. Translating the same source into three target languages counts the source words three times."],
+  ["Does translating into multiple languages count more than once?", "Yes. Characters in the source text are counted for each target language, and generated output characters count toward usage too."],
   ["What is the difference between Standard, Pro, and Ultra?", "Standard is optimized for fast everyday work, Pro adds stronger reasoning and terminology verification, and Ultra adds maximum reasoning plus a full terminology and consistency audit."],
-  ["What is the difference between Pro and Pro Max?", "Pro Max includes 750,000 words per month, higher image, dictation, transcription, voice, and web lookup allowances, and High Reasoning for LingoFusion Pro."],
+  ["What is the difference between Pro and Pro Max?", "Pro Max includes 4,800,000 characters per month, higher image, dictation, transcription, voice, and web lookup allowances, and High Reasoning for LingoFusion Pro."],
   ["Can I switch between plan options?", "Plan switching is handled by account billing when checkout integration is connected."],
   ["Can I buy extra usage without upgrading?", "Yes. Additional usage can be purchased separately and paid from a prepaid balance when that billing flow is connected."],
   ["Does purchased additional usage expire?", "No. Purchased additional usage does not expire. Included monthly usage is consumed first."],

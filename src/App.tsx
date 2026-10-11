@@ -494,10 +494,10 @@ function pageQuery() {
 function humanizePlanId(planId: string) {
   const names: Record<string, string> = {
     free: "LingoFusion Free",
-    "pro-350k": "LingoFusion Pro (350K)",
-    "pro-max-750k": "LingoFusion Pro Max (750K)",
-    "ultra-1-2m": "LingoFusion Ultra (1.2M)",
-    "ultra-max-1-8m": "LingoFusion Ultra Max (1.8M)",
+    "pro-350k": "LingoFusion Pro",
+    "pro-max-750k": "LingoFusion Pro Max",
+    "ultra-1-2m": "LingoFusion Ultra",
+    "ultra-max-1-8m": "LingoFusion Ultra Max",
     ultra: "LingoFusion Ultra",
     "pro-500k": "LingoFusion Pro 500K",
     "pro-1m": "LingoFusion Pro 1M",
@@ -1458,7 +1458,7 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     contextWindow: "32,000",
     maxOutput: "32,000",
     quality: "Practical local",
-    description: "LingoFusion Native-1.7B runs directly on your computer for lightweight, everyday translation without the LingoFusion cloud API, API credits, or monthly source-word allowances.",
+    description: "LingoFusion Native-1.7B runs directly on your computer for lightweight, everyday translation without the LingoFusion cloud API, API credits, or monthly character allowances.",
     limitations: ["Performance depends on your local hardware", "Best for everyday and straightforward source text", "Not intended for specialist terminology or document-scale review"],
   },
   "LingoFusion Native-9B": {
@@ -1480,7 +1480,7 @@ const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     contextWindow: "128,000",
     maxOutput: "32,000",
     quality: "Premium local",
-    description: "LingoFusion Native-35B runs directly on your computer and is designed to provide the highest local translation quality in the Native family, without consuming cloud API credits or monthly source-word allowances.",
+    description: "LingoFusion Native-35B runs directly on your computer and is designed to provide the highest local translation quality in the Native family, without consuming cloud API credits or monthly character allowances.",
     limitations: ["Requires powerful local hardware and substantial storage", "Performance depends on CPU, GPU, memory, and local runtime settings", "Not available through the LingoFusion cloud API or Playground"],
   },
   "LingoFusion Nano": {
@@ -1690,7 +1690,7 @@ function ModelDetailPage({
           {isLocalModel ? (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-5 dark:border-emerald-400/20 dark:bg-emerald-400/10">
               <p className="text-lg font-semibold text-emerald-950 dark:text-emerald-50">$0 - runs locally on your device</p>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-emerald-900/80 dark:text-emerald-100/80">Native is a free open-source local model family. It does not use LingoFusion API credits, subscriptions, word limits, or token fees, and is listed separately from cloud models.</p>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-emerald-900/80 dark:text-emerald-100/80">Native is a free open-source local model family. It does not use LingoFusion API credits, subscriptions, character limits, or token fees, and is listed separately from cloud models.</p>
             </div>
           ) : <>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
