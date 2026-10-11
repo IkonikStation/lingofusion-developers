@@ -49,7 +49,7 @@ import {
   webSearchPricing,
 } from "./data/pricing";
 import type { TextModel, TextModelPresentation, TextPricingMode } from "./data/pricing";
-import { priceForBillingInterval, subscriptionPlans } from "./data/subscriptions";
+import { priceForBillingInterval, subscriptionPlans, teamConfiguration } from "./data/subscriptions";
 import type { BillingInterval, ProVariantKey } from "./data/subscriptions";
 import { submitSalesRequest } from "./data/sales";
 import { nativeLocalModels } from "./data/nativeLocal";
@@ -213,7 +213,7 @@ export default function App() {
   const [language, setLanguage] = useState<LanguageCode>("en");
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [proVariantKey, setProVariantKey] = useState<ProVariantKey>(() =>
-    window.localStorage.getItem("lingofusion-pro-variant") === "1m" ? "1m" : "500k",
+    ["750k", "1m"].includes(window.localStorage.getItem("lingofusion-pro-variant") ?? "") ? "750k" : "350k",
   );
   const [toast, setToast] = useState<string | null>(null);
   const scrollProgressRef = useRef<HTMLSpanElement>(null);
@@ -494,11 +494,15 @@ function pageQuery() {
 function humanizePlanId(planId: string) {
   const names: Record<string, string> = {
     free: "LingoFusion Free",
+    "pro-350k": "LingoFusion Pro (350K)",
+    "pro-max-750k": "LingoFusion Pro Max (750K)",
+    "ultra-1-2m": "LingoFusion Ultra (1.2M)",
+    "ultra-max-1-8m": "LingoFusion Ultra Max (1.8M)",
+    ultra: "LingoFusion Ultra",
     "pro-500k": "LingoFusion Pro 500K",
     "pro-1m": "LingoFusion Pro 1M",
     "ultra-x1": "LingoFusion Ultra X1",
     "ultra-x2": "LingoFusion Ultra X2",
-    ultra: "LingoFusion Ultra",
   };
   return names[planId] ?? planId;
 }
@@ -529,7 +533,7 @@ function PlaygroundPage({ onOpenDashboard, onNavigate }: { onOpenDashboard: () =
 
 function CheckoutPage({ onNavigate }: { onNavigate: (page: string) => void }) {
   const query = pageQuery();
-  const planId = query.get("plan") ?? "pro-500k";
+  const planId = query.get("plan") ?? "pro-350k";
   const billing = query.get("billing") === "yearly" ? "yearly" : "monthly";
   const seats = Math.max(1, Number(query.get("seats")) || 1);
 
@@ -554,9 +558,16 @@ function CheckoutPage({ onNavigate }: { onNavigate: (page: string) => void }) {
 function TeamsPage({ onNavigate }: { onNavigate: (page: string, query?: Record<string, string | number | undefined>) => void }) {
   const requestedBilling = pageQuery().get("billing");
   const [billing, setBilling] = useState<BillingInterval>(requestedBilling === "yearly" ? "yearly" : "monthly");
-  const [planId, setPlanId] = useState<"pro-500k" | "pro-1m" | "ultra-x2">("pro-500k");
+  type TeamSeatPlanId = (typeof teamConfiguration.seats)[number]["planId"];
+  const [planId, setPlanId] = useState<TeamSeatPlanId>(() => {
+    const requestedPlan = pageQuery().get("plan");
+    return teamConfiguration.seats.find((seat) => seat.planId === requestedPlan)?.planId ?? teamConfiguration.seats[0].planId;
+  });
   const [seats, setSeats] = useState(2);
-  const plan = planId === "pro-500k" ? subscriptionPlans.pro.variants["500k"] : planId === "pro-1m" ? subscriptionPlans.pro.variants["1m"] : subscriptionPlans.ultra.variants.x2;
+  const selectedSeat = teamConfiguration.seats.find((seat) => seat.planId === planId) ?? teamConfiguration.seats[0];
+  const plan = "variant" in selectedSeat
+    ? subscriptionPlans.pro.variants[selectedSeat.variant]
+    : subscriptionPlans.ultra.variants[selectedSeat.ultraVariant];
   const price = priceForBillingInterval(plan.monthlyPrice, plan.yearlyPrice, billing);
   const total = price * seats;
 
@@ -566,7 +577,7 @@ function TeamsPage({ onNavigate }: { onNavigate: (page: string, query?: Record<s
       <h1 className="mt-3 text-4xl font-semibold tracking-tight text-neutral-950 dark:text-white sm:text-5xl">Build a team plan.</h1>
       <p className="mt-5 max-w-2xl text-base leading-7 text-neutral-600 dark:text-neutral-400">Choose a seat type, billing cycle, and anywhere from 2 to 999 members. Organizations with 1,000 or more seats are routed to Enterprise.</p>
       <div className="mt-10 grid gap-6 rounded-xl border border-neutral-200 p-6 dark:border-white/10 sm:grid-cols-2">
-        <label className="grid gap-2 text-sm font-medium text-neutral-700 dark:text-neutral-300">Seat type<select value={planId} onChange={(event) => setPlanId(event.target.value as typeof planId)} className="h-11 rounded-md border border-neutral-300 bg-white px-3 text-neutral-950 outline-none dark:border-white/20 dark:bg-[#111] dark:text-white"><option value="pro-500k">Pro 500K</option><option value="pro-1m">Pro 1M</option><option value="ultra-x2">Ultra X2</option></select></label>
+        <label className="grid gap-2 text-sm font-medium text-neutral-700 dark:text-neutral-300">Seat type<select value={planId} onChange={(event) => setPlanId(event.target.value as TeamSeatPlanId)} className="h-11 rounded-md border border-neutral-300 bg-white px-3 text-neutral-950 outline-none dark:border-white/20 dark:bg-[#111] dark:text-white">{teamConfiguration.seats.map((seat) => <option key={seat.planId} value={seat.planId}>{seat.name}</option>)}</select></label>
         <label className="grid gap-2 text-sm font-medium text-neutral-700 dark:text-neutral-300">Billing<select value={billing} onChange={(event) => setBilling(event.target.value as BillingInterval)} className="h-11 rounded-md border border-neutral-300 bg-white px-3 text-neutral-950 outline-none dark:border-white/20 dark:bg-[#111] dark:text-white"><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></label>
         <label className="grid gap-2 text-sm font-medium text-neutral-700 dark:text-neutral-300 sm:col-span-2">Seats<input type="number" min="2" max="999" value={seats} onChange={(event) => setSeats(Math.min(999, Math.max(2, Number(event.target.value) || 2)))} className="h-11 rounded-md border border-neutral-300 bg-white px-3 text-neutral-950 outline-none dark:border-white/20 dark:bg-[#111] dark:text-white" /></label>
       </div>

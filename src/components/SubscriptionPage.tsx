@@ -56,19 +56,21 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
     window.localStorage.getItem("lingofusion-subscription-billing") === "yearly" ? "yearly" : "monthly",
   );
   const [ultraVariantKey, setUltraVariantKey] = useState<UltraVariantKey>(() =>
-    window.localStorage.getItem("lingofusion-ultra-variant") === "x1" ? "x1" : "x2",
+    window.localStorage.getItem("lingofusion-ultra-variant") === "x2" ? "x2" : "x1",
   );
   const [teamSeatPlanId, setTeamSeatPlanId] = useState<string>(teamConfiguration.seats[0].planId);
   const [teamMemberCount, setTeamMemberCount] = useState<number>(teamConfiguration.minimumSeats);
   const [salesFormOpen, setSalesFormOpen] = useState(false);
-  const selectorRefs = useRef<Record<ProVariantKey, HTMLButtonElement | null>>({ "500k": null, "1m": null });
+  const selectorRefs = useRef<Record<ProVariantKey, HTMLButtonElement | null>>({ "350k": null, "750k": null });
   const billingRefs = useRef<Record<BillingInterval, HTMLButtonElement | null>>({ monthly: null, yearly: null });
   const scrollProgressRef = useRef<HTMLSpanElement | null>(null);
   const pro = subscriptionPlans.pro.variants[proVariantKey];
   const ultra = subscriptionPlans.ultra.variants[ultraVariantKey];
   const billing = billingIntervals[billingInterval];
   const selectedTeamSeat = teamConfiguration.seats.find((seat) => seat.planId === teamSeatPlanId) ?? teamConfiguration.seats[0];
-  const selectedTeamPlan = "variant" in selectedTeamSeat ? subscriptionPlans.pro.variants[selectedTeamSeat.variant] : ultra;
+  const selectedTeamPlan = "variant" in selectedTeamSeat
+    ? subscriptionPlans.pro.variants[selectedTeamSeat.variant]
+    : subscriptionPlans.ultra.variants[selectedTeamSeat.ultraVariant];
   const teamSeatPrice = priceForBillingInterval(selectedTeamPlan.monthlyPrice, selectedTeamPlan.yearlyPrice, billingInterval);
   const teamTotalPrice = teamSeatPrice * teamMemberCount;
   const isEnterpriseSeatCount = teamMemberCount >= enterpriseConfiguration.minimumSeats;
@@ -164,8 +166,8 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
   const handleSelectorKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
-    if (event.key === "Home" || event.key === "ArrowLeft") selectProVariant("500k", true);
-    if (event.key === "End" || event.key === "ArrowRight") selectProVariant("1m", true);
+    if (event.key === "Home" || event.key === "ArrowLeft") selectProVariant("350k", true);
+    if (event.key === "End" || event.key === "ArrowRight") selectProVariant("750k", true);
   };
 
   const handleBillingKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -175,17 +177,8 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
     if (event.key === "End" || event.key === "ArrowRight") selectBillingInterval("yearly", true);
   };
 
-  const proFeatures = [
-    `${formatNumber(pro.proWords)} Pro source words per month`,
-    `${formatNumber(pro.standardWords)} Standard source words per month`,
-    `${formatNumber(pro.advancedTtsCharacters)} Advanced TTS characters per month`,
-    ...subscriptionPlans.pro.sharedFeatures,
-    ...(pro.variantFeature ? [pro.variantFeature] : []),
-  ];
-  const ultraFeatures = [
-    `${formatNumber(ultra.ultraWords)} Ultra source words per month`,
-    ...subscriptionPlans.ultra.sharedFeatures,
-  ];
+  const proFeatures = [...pro.usageFeatures, ...pro.benefits];
+  const ultraFeatures = [...ultra.usageFeatures, ...ultra.benefits];
 
   const selectUltraVariant = (key: UltraVariantKey) => {
     setUltraVariantKey(key);
@@ -223,7 +216,7 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
                   className={`pressable subscription-segment flex min-h-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[#3679cc] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#090d16] ${selected ? "subscription-segment-active bg-[#16284a] text-white shadow-sm dark:bg-white dark:text-[#14233d]" : "text-[#607089] hover:text-[#163766] dark:text-slate-400 dark:hover:text-white"}`}
                 >
                   <span>{option.label}</span>
-                  {interval === "yearly" && <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${selected ? "bg-white/15 text-white dark:bg-[#16284a]/10 dark:text-[#245796]" : "bg-[#dff4e9] text-[#23704b] dark:bg-emerald-400/10 dark:text-emerald-300"}`}>Save 30%</span>}
+                  {interval === "yearly" && <span className="rounded-full bg-[#dff4e9] px-1.5 py-0.5 text-[10px] text-[#23704b] dark:bg-emerald-400/10 dark:text-emerald-300">Save 15%</span>}
                 </button>
               );
             })}
@@ -256,7 +249,7 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
             billingInterval={billingInterval}
             modelAccess={subscriptionPlans.free.modelAccess}
             features={subscriptionPlans.free.features}
-            usageFeatureCount={2}
+            usageFeatureCount={4}
             ctaLabel={subscriptionPlans.free.ctaLabel}
             valueKey={`${subscriptionPlans.free.id}-${billingInterval}`}
             onSelect={() => onSelectPlan(subscriptionPlans.free.id, billingInterval)}
@@ -272,7 +265,7 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
             billingInterval={billingInterval}
             modelAccess={pro.modelAccess}
             features={proFeatures}
-            usageFeatureCount={3}
+            usageFeatureCount={5}
             ctaLabel={pro.ctaLabel}
             badge="Most Popular"
             recommended
@@ -294,7 +287,7 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
                       onClick={() => selectProVariant(key)}
                       className={`pressable subscription-segment min-h-11 rounded-md px-3 py-2 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[#3679cc] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#111a2a] ${selected ? "subscription-segment-active bg-white text-[#163766] shadow-sm dark:bg-[#eaf4ff] dark:text-[#12284a]" : "text-[#607089] hover:text-[#163766] dark:text-slate-400 dark:hover:text-white"}`}
                     >
-                      {variant.label}
+                      {variant.selectorLabel}
                     </button>
                   );
                 })}
@@ -312,7 +305,7 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
             billingInterval={billingInterval}
             modelAccess={ultra.modelAccess}
             features={ultraFeatures}
-            usageFeatureCount={4}
+            usageFeatureCount={5}
             ctaLabel={ultra.ctaLabel}
             premium
             valueKey={`${ultra.id}-${billingInterval}`}
@@ -321,7 +314,7 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
               <div role="group" aria-label="Choose an Ultra allowance" className="grid grid-cols-2 rounded-lg border border-[#bfd3ec] bg-[#edf5ff] p-1 dark:border-white/10 dark:bg-white/[0.06]">
                 {(["x1", "x2"] as UltraVariantKey[]).map((key) => {
                   const selected = key === ultraVariantKey;
-                  return <button key={key} type="button" aria-pressed={selected} onClick={() => selectUltraVariant(key)} className={`pressable subscription-segment min-h-11 rounded-md px-3 py-2 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[#3679cc] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#111a2a] ${selected ? "bg-white text-[#163766] shadow-sm dark:bg-[#eaf4ff] dark:text-[#12284a]" : "text-[#607089] hover:text-[#163766] dark:text-slate-400 dark:hover:text-white"}`}>{subscriptionPlans.ultra.variants[key].label}</button>;
+                  return <button key={key} type="button" aria-pressed={selected} onClick={() => selectUltraVariant(key)} className={`pressable subscription-segment min-h-11 rounded-md px-3 py-2 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[#3679cc] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#111a2a] ${selected ? "bg-white text-[#163766] shadow-sm dark:bg-[#eaf4ff] dark:text-[#12284a]" : "text-[#607089] hover:text-[#163766] dark:text-slate-400 dark:hover:text-white"}`}>{subscriptionPlans.ultra.variants[key].selectorLabel}</button>;
                 })}
               </div>
             }
@@ -369,9 +362,9 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
           ]} />
           <QualityCard name="LingoFusion Pro" accent="pro" allowance={`${formatNumber(pro.proWords)} Pro words on ${pro.label}`} valueKey={pro.id} selector={
             <div role="group" aria-label="Choose Pro allowance" className="mt-4 grid grid-cols-2 rounded-lg border border-[#bfd3ec] bg-[#edf5ff] p-1 dark:border-white/10 dark:bg-white/[0.06]">
-              {(["500k", "1m"] as ProVariantKey[]).map((key) => {
+              {(["350k", "750k"] as ProVariantKey[]).map((key) => {
                 const selected = key === proVariantKey;
-                return <button key={key} type="button" aria-pressed={selected} onClick={() => onProVariantChange(key)} className={`pressable min-h-10 rounded-md px-2 py-1.5 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[#3679cc] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#111827] ${selected ? "bg-white text-[#163766] shadow-sm dark:bg-[#eaf4ff] dark:text-[#12284a]" : "text-[#607089] hover:text-[#163766] dark:text-slate-400 dark:hover:text-white"}`}>{subscriptionPlans.pro.variants[key].label}</button>;
+                return <button key={key} type="button" aria-pressed={selected} onClick={() => onProVariantChange(key)} className={`pressable min-h-10 rounded-md px-2 py-1.5 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[#3679cc] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#111827] ${selected ? "bg-white text-[#163766] shadow-sm dark:bg-[#eaf4ff] dark:text-[#12284a]" : "text-[#607089] hover:text-[#163766] dark:text-slate-400 dark:hover:text-white"}`}>{subscriptionPlans.pro.variants[key].selectorLabel}</button>;
               })}
             </div>
           } items={[
@@ -385,7 +378,7 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
             <div role="group" aria-label="Choose an Ultra allowance" className="mt-4 grid grid-cols-2 rounded-lg border border-[#bfd3ec] bg-[#edf5ff] p-1 dark:border-white/10 dark:bg-white/[0.06]">
               {(["x1", "x2"] as UltraVariantKey[]).map((key) => {
                 const selected = key === ultraVariantKey;
-                return <button key={key} type="button" aria-pressed={selected} onClick={() => selectUltraVariant(key)} className={`pressable min-h-10 rounded-md px-2 py-1.5 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[#3679cc] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#111827] ${selected ? "bg-white text-[#163766] shadow-sm dark:bg-[#eaf4ff] dark:text-[#12284a]" : "text-[#607089] hover:text-[#163766] dark:text-slate-400 dark:hover:text-white"}`}>{subscriptionPlans.ultra.variants[key].label}</button>;
+                return <button key={key} type="button" aria-pressed={selected} onClick={() => selectUltraVariant(key)} className={`pressable min-h-10 rounded-md px-2 py-1.5 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[#3679cc] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#111827] ${selected ? "bg-white text-[#163766] shadow-sm dark:bg-[#eaf4ff] dark:text-[#12284a]" : "text-[#607089] hover:text-[#163766] dark:text-slate-400 dark:hover:text-white"}`}>{subscriptionPlans.ultra.variants[key].selectorLabel}</button>;
               })}
             </div>
           } items={[
@@ -402,15 +395,15 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
       <SectionBlock id="advanced-tts" eyebrow="Natural speech" title="Advanced TTS included" description="Use expressive speech within your plan, then continue with Standard TTS when the Advanced allowance is used.">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <AllowanceTile label="Free" value={subscriptionPlans.free.advancedTtsCharacters} />
-          <AllowanceTile label={`Pro ${pro.label}`} value={pro.advancedTtsCharacters} valueKey={pro.id} featured />
-          <AllowanceTile label={`Ultra ${ultra.label}`} value={ultra.advancedTtsCharacters} valueKey={ultra.id} />
+          <AllowanceTile label={pro.selectorLabel} value={pro.advancedTtsCharacters} valueKey={pro.id} featured />
+          <AllowanceTile label={ultra.selectorLabel} value={ultra.advancedTtsCharacters} valueKey={ultra.id} />
           <div className="rounded-xl border border-dashed border-[#aac2df] bg-[#f3f8ff] p-5 dark:border-white/15 dark:bg-white/[0.04]">
             <Volume2 className="h-5 w-5 text-[#3679cc] dark:text-[#78aff5]" />
             <p className="mt-4 text-sm font-semibold text-[#53647c] dark:text-slate-400">Additional Advanced TTS</p>
             <p className="mt-1 text-xl font-semibold text-[#14233d] dark:text-white">${advancedTtsAdditionalPrice.usd.toFixed(2)} <span className="text-sm font-medium text-[#6c7b90]">/ {formatNumber(advancedTtsAdditionalPrice.characters)} characters</span></p>
           </div>
         </div>
-        <p className="mt-4 text-sm text-[#637289] dark:text-slate-400">Pro 500K includes 25,000 characters; Pro 1M includes 50,000. Standard TTS remains available after the Advanced TTS allowance is used.</p>
+          <p className="mt-4 text-sm text-[#637289] dark:text-slate-400">Pro and Ultra voice character allowances are included each month. Standard system voice playback remains available on Free.</p>
       </SectionBlock>
 
       <SectionBlock eyebrow="Flexible capacity" title="Need more?" description="Keep working after reaching an included allowance without losing previously purchased capacity.">
@@ -434,7 +427,7 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
             <div>
               <Users className="h-7 w-7 text-[#3679cc] dark:text-[#78aff5]" />
               <h3 className="mt-4 text-2xl font-semibold text-[#14233d] dark:text-white">{isEnterpriseSeatCount ? "Enterprise starts here" : "One team, flexible seats"}</h3>
-              <p className="mt-3 text-sm leading-6 text-[#607089] dark:text-slate-300">{isEnterpriseSeatCount ? enterpriseConfiguration.publicScaleMessage : "Combine Pro 500K, Pro 1M, and Ultra seats. Translation allowances may be pooled depending on organization settings. The two-seat minimum applies to the whole team, not to any one seat type."}</p>
+              <p className="mt-3 text-sm leading-6 text-[#607089] dark:text-slate-300">{isEnterpriseSeatCount ? enterpriseConfiguration.publicScaleMessage : "Combine Pro, Pro Max, Ultra, and Ultra Max seats. Translation allowances may be pooled depending on organization settings. The two-seat minimum applies to the whole team, not to any one seat type."}</p>
               <button type="button" onClick={() => isEnterpriseSeatCount ? openSalesForm() : onBuildTeam(billingInterval)} className="pressable click-feedback mt-6 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#16284a] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#203b6d] dark:bg-white dark:text-[#14233d]">
                 {isEnterpriseSeatCount ? "Contact Sales" : "Continue to checkout"} <ArrowRight className="h-4 w-4" />
               </button>
@@ -496,7 +489,7 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
                 </>}
               </div>
 
-              <p className="mt-4 text-xs leading-5 text-[#637289] dark:text-slate-400">{isEnterpriseSeatCount ? "Enterprise sales will tailor pricing, infrastructure, and support to your organization." : "This estimate uses one seat type for the full team. You can mix Pro 500K, Pro 1M, and Ultra seats when configuring your organization."}</p>
+              <p className="mt-4 text-xs leading-5 text-[#637289] dark:text-slate-400">{isEnterpriseSeatCount ? "Enterprise sales will tailor pricing, infrastructure, and support to your organization." : "This estimate uses one seat type for the full team. You can mix Pro, Pro Max, Ultra, and Ultra Max seats when configuring your organization."}</p>
             </div>
           </div>
           {salesFormOpen && <SalesContactForm seatCount={teamMemberCount} seatName={selectedTeamSeat.name} billingInterval={billingInterval} onClose={() => setSalesFormOpen(false)} onSubmit={() => { onContactSales(teamMemberCount, selectedTeamSeat.planId, billingInterval); setSalesFormOpen(false); }} />}
@@ -535,7 +528,7 @@ function ComparisonPanel({ billingInterval, pro, ultra, proVariantKey, ultraVari
   onViewChange: (view: ComparisonView) => void;
 }) {
   const billing = billingIntervals[billingInterval];
-  const columns = ["Free", `Pro ${pro.label}`, `Ultra ${ultra.label}`];
+  const columns = ["Free", pro.selectorLabel, ultra.selectorLabel];
   const subscriptionRows: ComparisonRow[] = [
     {
       label: "Price",
@@ -545,17 +538,18 @@ function ComparisonPanel({ billingInterval, pro, ultra, proVariantKey, ultraVari
         `${formatPrice(priceForBillingInterval(ultra.monthlyPrice, ultra.yearlyPrice, billingInterval))}${billing.suffix}`,
       ],
     },
-    { label: "Included model", values: ["LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"] },
-    { label: "Standard words / month", values: [formatNumber(subscriptionPlans.free.standardWords), formatNumber(pro.standardWords), formatNumber(ultra.standardWords)] },
-    { label: "Pro words / month", values: ["-", formatNumber(pro.proWords), formatNumber(ultra.proWords)] },
-    { label: "Ultra words / month", values: ["-", "-", formatNumber(ultra.ultraWords)] },
-    { label: "Advanced TTS / month", values: [formatNumber(subscriptionPlans.free.advancedTtsCharacters), formatNumber(pro.advancedTtsCharacters), formatNumber(ultra.advancedTtsCharacters)] },
-    { label: "Terminology research", values: ["Everyday term help", "Automatic when needed", "Deep specialist research"] },
-    { label: "Additional usage", values: ["Available separately", "Available separately", "Available separately"] },
+    { label: "Included model", values: ["LingoFusion Core (GPT-6 Luna)", "LingoFusion Pro (GPT-6 Sol)", "LingoFusion Ultra (GPT-6 Astra)"] },
+    { label: "Words / month", values: [formatNumber(subscriptionPlans.free.standardWords), formatNumber(pro.proWords), formatNumber(ultra.ultraWords)] },
+    { label: "Image translations / month", values: [formatNumber(subscriptionPlans.free.imageTranslations), formatNumber(pro.imageTranslations), formatNumber(ultra.imageTranslations)] },
+    { label: "Live dictation / month", values: [`${formatNumber(subscriptionPlans.free.liveDictationMinutes)} min`, `${formatNumber(pro.liveDictationMinutes)} min`, `${formatNumber(ultra.liveDictationMinutes)} min`] },
+    { label: "File transcription / month", values: ["-", `${formatNumber(pro.fileTranscriptionMinutes)} min`, `${formatNumber(ultra.fileTranscriptionMinutes)} min`] },
+    { label: "ElevenLabs v4 voice characters / month", values: ["-", formatNumber(pro.voiceCharacters), formatNumber(ultra.voiceCharacters)] },
+    { label: "Live web lookups / month", values: ["On-demand", typeof pro.liveWebLookups === "number" ? formatNumber(pro.liveWebLookups) : pro.liveWebLookups, typeof ultra.liveWebLookups === "number" ? formatNumber(ultra.liveWebLookups) : ultra.liveWebLookups] },
+    { label: "Studio dubbing rate", values: ["$4.50/min", pro.id === "pro-350k" ? "$4.50/min" : "$4.20/min", ultra.id === "ultra-1-2m" ? "$3.90/min" : "$3.70/min"] },
   ];
   const modelRows: ComparisonRow[] = [
     { label: "Best for", values: ["Fast, accurate everyday translations", "More accurate and advanced translations", "Hardest translations and highest accuracy"] },
-    { label: "Included with", values: ["Free", `${pro.label} words`, "Ultra"] },
+    { label: "Included with", values: ["Free", pro.label, ultra.label] },
     { label: "Reasoning", values: ["None", "High reasoning effort", "Maximum reasoning effort"] },
     { label: "Terminology research", values: ["Concise lookup when needed", "Automatic research when required", "Specialist-source and broader web research"] },
     { label: "Translation review", values: ["-", "Stronger context and tone handling", "Full terminology and consistency audit"] },
@@ -571,15 +565,15 @@ function ComparisonPanel({ billingInterval, pro, ultra, proVariantKey, ultraVari
         </div>
         <div className="flex flex-wrap gap-3">
           <div role="group" aria-label="Choose Pro allowance" className="grid grid-cols-2 rounded-lg border border-[#c8d8ea] bg-[#f6f9fd] p-1 dark:border-white/10 dark:bg-white/[0.05]">
-            {(["500k", "1m"] as ProVariantKey[]).map((variant) => {
+            {(["350k", "750k"] as ProVariantKey[]).map((variant) => {
               const selected = variant === proVariantKey;
-              return <button key={variant} type="button" aria-pressed={selected} onClick={() => onProVariantChange(variant)} className={`pressable subscription-segment min-h-10 rounded-md px-4 py-2 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[#3679cc] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#111827] ${selected ? "subscription-segment-active bg-[#16284a] text-white shadow-sm dark:bg-white dark:text-[#14233d]" : "text-[#607089] hover:text-[#163766] dark:text-slate-400 dark:hover:text-white"}`}>{variant === "500k" ? "Pro 500K" : "Pro 1M"}</button>;
+              return <button key={variant} type="button" aria-pressed={selected} onClick={() => onProVariantChange(variant)} className={`pressable subscription-segment min-h-10 rounded-md px-4 py-2 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[#3679cc] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#111827] ${selected ? "subscription-segment-active bg-[#16284a] text-white shadow-sm dark:bg-white dark:text-[#14233d]" : "text-[#607089] hover:text-[#163766] dark:text-slate-400 dark:hover:text-white"}`}>{subscriptionPlans.pro.variants[variant].selectorLabel}</button>;
             })}
           </div>
           <div role="group" aria-label="Choose an Ultra allowance" className="grid grid-cols-2 rounded-lg border border-[#c8d8ea] bg-[#f6f9fd] p-1 dark:border-white/10 dark:bg-white/[0.05]">
             {(["x1", "x2"] as UltraVariantKey[]).map((variant) => {
               const selected = variant === ultraVariantKey;
-              return <button key={variant} type="button" aria-pressed={selected} onClick={() => onUltraVariantChange(variant)} className={`pressable subscription-segment min-h-10 rounded-md px-4 py-2 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[#3679cc] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#111827] ${selected ? "subscription-segment-active bg-[#16284a] text-white shadow-sm dark:bg-white dark:text-[#14233d]" : "text-[#607089] hover:text-[#163766] dark:text-slate-400 dark:hover:text-white"}`}>Ultra {subscriptionPlans.ultra.variants[variant].label}</button>;
+              return <button key={variant} type="button" aria-pressed={selected} onClick={() => onUltraVariantChange(variant)} className={`pressable subscription-segment min-h-10 rounded-md px-4 py-2 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[#3679cc] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#111827] ${selected ? "subscription-segment-active bg-[#16284a] text-white shadow-sm dark:bg-white dark:text-[#14233d]" : "text-[#607089] hover:text-[#163766] dark:text-slate-400 dark:hover:text-white"}`}>{subscriptionPlans.ultra.variants[variant].selectorLabel}</button>;
             })}
           </div>
           <div role="group" aria-label="Comparison type" className="grid grid-cols-2 rounded-lg border border-[#c8d8ea] bg-[#f6f9fd] p-1 dark:border-white/10 dark:bg-white/[0.05]">
@@ -647,14 +641,15 @@ function PlanCard({ planId, name, description, price, monthlyPrice, billingInter
         {selector && <div className="mt-4">{selector}</div>}
         <p className="mt-4 text-sm leading-6 text-[#65748a] dark:text-slate-300">{description}</p>
         <div key={valueKey ?? name} className="subscription-value-change mt-5 flex items-end gap-1">
-          <span className="text-4xl font-semibold tracking-tight text-[#101d36] dark:text-white">{formatPrice(price)}</span>
-          <span className="pb-1 text-sm font-medium text-[#6b7890] dark:text-slate-400">{billingIntervals[billingInterval].suffix}</span>
+          <span className="text-4xl font-semibold tracking-tight text-[#101d36] dark:text-white">{formatPrice(billingInterval === "yearly" && monthlyPrice > 0 ? price / 12 : price)}</span>
+          <span className="pb-1 text-sm font-medium text-[#6b7890] dark:text-slate-400">/month</span>
         </div>
-        <p className="mt-1 min-h-5 text-xs text-[#718096] dark:text-slate-500">
-          {billingInterval === "yearly" && monthlyPrice > 0
-            ? `${formatPrice(price / 12)}/month, billed annually · Save ${yearlyDiscountPercent(monthlyPrice, price)}%`
-            : "\u00a0"}
-        </p>
+        <div className="mt-1 flex min-h-5 flex-wrap items-center gap-2 text-xs text-[#718096] dark:text-slate-500">
+          {billingInterval === "yearly" && monthlyPrice > 0 ? <>
+            <span>Billed annually at {formatPrice(price)}/yr</span>
+            <span className="rounded-full bg-[#dff4e9] px-2 py-0.5 font-semibold text-[#23704b] dark:bg-emerald-400/10 dark:text-emerald-300">Save {yearlyDiscountPercent(monthlyPrice, price)}%</span>
+          </> : "\u00a0"}
+        </div>
       </div>
       <div key={`features-${valueKey ?? name}`} className="subscription-value-change flex flex-1 flex-col text-sm leading-5 text-[#43546e] dark:text-slate-300">
         <div className="pt-5">
@@ -679,8 +674,8 @@ function PlanCard({ planId, name, description, price, monthlyPrice, billingInter
 
 function OrganizationPlanStrip({ billingInterval, onBuildTeam, onContactSales }: { billingInterval: BillingInterval; onBuildTeam: () => void; onContactSales: () => void }) {
   const billing = billingIntervals[billingInterval];
-  const pro500k = subscriptionPlans.pro.variants["500k"];
-  const seatPrice = priceForBillingInterval(pro500k.monthlyPrice, pro500k.yearlyPrice, billingInterval);
+  const pro350k = subscriptionPlans.pro.variants["350k"];
+  const seatPrice = priceForBillingInterval(pro350k.monthlyPrice, pro350k.yearlyPrice, billingInterval);
 
   return (
     <section className="subscription-plan-card mt-5 overflow-hidden rounded-xl border border-[#bfd3ec] bg-[#f8fbff] shadow-sm dark:border-[#78aff5]/30 dark:bg-[#101a2b]" aria-label="Organization plans">
