@@ -32,13 +32,13 @@ export function Sidebar({
 }: SidebarProps) {
   const content = (
     <div className="sticky top-20 flex h-[calc(100vh-6rem)] flex-col">
-      <div className="mb-5 grid gap-2 border-b border-neutral-200 pb-5 dark:border-white/10 lg:hidden">
+      <div className="mb-4 grid gap-2 border-b border-neutral-200/80 pb-4 dark:border-white/[0.08] lg:hidden">
         <label className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
           {t("language")}
           <select
             value={language}
             onChange={(event) => onLanguageChange(event.target.value as LanguageCode)}
-            className="clean-select mt-1.5 h-11 w-full rounded-md border border-neutral-300 bg-white px-3 text-neutral-950 outline-none dark:border-white/15 dark:bg-white/5 dark:text-neutral-100"
+            className="clean-select mt-1 h-10 w-full rounded-xl border border-neutral-300/80 bg-white px-3 text-xs text-neutral-950 outline-none dark:border-white/10 dark:bg-white/[0.05] dark:text-neutral-100"
           >
             {languages.map((item) => (
               <option key={item.code} value={item.code}>{item.name}</option>
@@ -48,10 +48,10 @@ export function Sidebar({
         <button
           type="button"
           onClick={onDashboard}
-          className="pressable inline-flex h-11 items-center justify-center gap-2 rounded-md bg-neutral-950 px-4 text-sm font-medium text-white dark:bg-white dark:text-neutral-950"
+          className="pressable inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-neutral-950 px-4 text-xs font-semibold text-white dark:bg-white dark:text-neutral-950"
         >
           {t("dashboard")}
-          <ExternalLink className="h-4 w-4" />
+          <ExternalLink className="h-3.5 w-3.5" />
         </button>
       </div>
 
@@ -70,28 +70,31 @@ export function Sidebar({
 
         <div>
           {!collapsed && (
-              <h2 className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-500">
+            <h2 className="mb-2 px-2 text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
               {t("latestModels")}
             </h2>
           )}
           <ul className="space-y-0.5">
-            {latestModels.map((item) => (
-              <li key={item}>
-                <button
-                  type="button"
-                  title={collapsed ? item : undefined}
-                  onClick={() => onNavigate(item)}
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition ${
-                    activePage === item
-                      ? "bg-neutral-200/75 font-medium text-neutral-950 dark:bg-white/10 dark:text-neutral-50"
-                      : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-400 dark:hover:bg-white/[0.08] dark:hover:text-neutral-100"
-                  } ${collapsed ? "justify-center" : ""}`}
-                >
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-400" />
-                  {!collapsed && item}
-                </button>
-              </li>
-            ))}
+            {latestModels.map((item) => {
+              const selected = activePage === item;
+              return (
+                <li key={item}>
+                  <button
+                    type="button"
+                    title={collapsed ? item : undefined}
+                    onClick={() => onNavigate(item)}
+                    className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-xs transition ${
+                      selected
+                        ? "bg-neutral-100 font-semibold text-neutral-950 dark:bg-white/[0.08] dark:text-white"
+                        : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-950 dark:text-neutral-400 dark:hover:bg-white/[0.04] dark:hover:text-white"
+                    } ${collapsed ? "justify-center" : ""}`}
+                  >
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${selected ? "bg-blue-600 dark:bg-blue-400" : "bg-neutral-300 dark:bg-neutral-600"}`} />
+                    {!collapsed && item}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </div>
 
@@ -111,12 +114,12 @@ export function Sidebar({
       <button
         type="button"
         onClick={onToggleCollapse}
-        className="mt-5 hidden w-full items-center gap-2 rounded-md border border-neutral-200 bg-white px-2.5 py-2 text-sm text-neutral-600 hover:border-neutral-300 hover:text-neutral-950 dark:border-white/10 dark:bg-white/5 dark:text-neutral-400 dark:hover:border-white/20 dark:hover:text-neutral-100 lg:flex"
+        className="mt-4 hidden w-full items-center gap-2 rounded-xl border border-neutral-200/80 bg-white px-3 py-2 text-xs font-medium text-neutral-600 shadow-xs transition hover:border-neutral-300 hover:text-neutral-950 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-400 dark:hover:border-white/20 dark:hover:text-white lg:flex"
       >
         {collapsed ? (
-          <ArrowRightToLine className="h-4 w-4" />
+          <ArrowRightToLine className="h-3.5 w-3.5" />
         ) : (
-          <ArrowLeftToLine className="h-4 w-4" />
+          <ArrowLeftToLine className="h-3.5 w-3.5" />
         )}
         {!collapsed && t("collapse")}
       </button>
@@ -130,14 +133,14 @@ export function Sidebar({
           type="button"
           aria-label="Close navigation overlay"
           onClick={onCloseMobile}
-          className="fixed inset-0 z-30 bg-neutral-950/35 dark:bg-black/60 lg:hidden"
+          className="fixed inset-0 z-30 bg-neutral-950/40 backdrop-blur-xs dark:bg-black/70 lg:hidden"
         />
       )}
 
       <aside
-        className={`fixed bottom-0 left-0 top-14 z-30 w-[min(20rem,calc(100vw-2rem))] border-r border-neutral-200 bg-white px-4 py-5 shadow-2xl transition-transform duration-300 ease-out dark:border-white/10 dark:bg-[#0a0a0a] sm:top-16 lg:sticky lg:top-16 lg:z-20 lg:block lg:h-[calc(100vh-4rem)] lg:translate-x-0 lg:shadow-none ${
+        className={`fixed bottom-0 left-0 top-14 z-30 w-[min(20rem,calc(100vw-2rem))] border-r border-neutral-200/80 bg-white px-3 py-4 shadow-2xl transition-transform duration-300 ease-out dark:border-white/[0.08] dark:bg-[#09090b] sm:top-16 lg:sticky lg:top-16 lg:z-20 lg:block lg:h-[calc(100vh-4rem)] lg:translate-x-0 lg:shadow-none ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
-        } ${collapsed ? "lg:w-[4.75rem]" : "lg:w-72"}`}
+        } ${collapsed ? "lg:w-[4.5rem]" : "lg:w-64"}`}
       >
         {content}
       </aside>
@@ -163,13 +166,16 @@ function Section({
   return (
     <div>
       {!collapsed && (
-        <h2 className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-500">
+        <h2 className="mb-2 px-2 text-[10px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
           {tc(title)}
         </h2>
       )}
       <ul className="space-y-0.5">
         {items.map((item) => {
-          const selected = item === activePage || (item === "API Prices" && activePage === "Pricing");
+          const selected =
+            item === activePage ||
+            (item === "API Prices" && activePage === "Pricing") ||
+            (item === "Models" && activePage === "Models");
 
           return (
             <li key={item}>
@@ -177,14 +183,24 @@ function Section({
                 type="button"
                 title={collapsed ? item : undefined}
                 onClick={() => onNavigate(item)}
-                className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition ${
+                className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-xs transition ${
                   selected
-                    ? "bg-neutral-200/75 font-medium text-neutral-950 dark:bg-white/10 dark:text-neutral-50"
-                    : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-400 dark:hover:bg-white/[0.08] dark:hover:text-neutral-100"
+                    ? "bg-neutral-100 font-semibold text-neutral-950 dark:bg-white/[0.08] dark:text-white"
+                    : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-950 dark:text-neutral-400 dark:hover:bg-white/[0.04] dark:hover:text-white"
                 } ${collapsed ? "justify-center" : ""}`}
               >
-                {collapsed && <Circle className="h-3.5 w-3.5" />}
-                {!collapsed && tc(item)}
+                {collapsed ? (
+                  <Circle className={`h-2.5 w-2.5 ${selected ? "fill-blue-500 text-blue-500" : ""}`} />
+                ) : (
+                  <>
+                    <span
+                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                        selected ? "bg-blue-600 dark:bg-blue-400" : "bg-neutral-300 dark:bg-neutral-600"
+                      }`}
+                    />
+                    <span>{tc(item)}</span>
+                  </>
+                )}
               </button>
             </li>
           );

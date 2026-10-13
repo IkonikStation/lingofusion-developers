@@ -4,7 +4,7 @@
     "dev": "vite",
     "api": "node server.mjs",
     "dev:all": "node scripts/dev-all.mjs",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/generate-spa-fallbacks.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
