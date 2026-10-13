@@ -147,7 +147,11 @@ export function ModelIcon({
   size?: "catalog" | "detail";
 }) {
   const sizeClass = size === "detail" ? "h-16 w-16 rounded-xl" : "h-10 w-10 rounded-lg";
-  const imageScale = size === "detail" ? 1 : presentation?.imageScale ?? 1;
+  const imageScale = presentation?.imageScale ?? 1;
+  const resolvedImageScale = size === "detail" && imageScale > 1 ? imageScale - 0.04 : imageScale;
+  const imageTransform = size === "detail" && imageScale > 1
+    ? `translateY(1.5px) scale(${resolvedImageScale})`
+    : `scale(${resolvedImageScale})`;
 
   return (
     <span
@@ -158,7 +162,7 @@ export function ModelIcon({
         src={`${import.meta.env.BASE_URL}${(presentation?.image ?? "/assets/models/lingofusion.png").replace(/^\/+/, "")}`}
         alt=""
         className={`h-full w-full ${size !== "detail" && presentation?.imageFit === "contain" ? "object-contain" : "object-cover"}`}
-        style={{ transform: `scale(${imageScale})` }}
+        style={{ transform: imageTransform }}
       />
     </span>
   );
