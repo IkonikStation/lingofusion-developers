@@ -1,8 +1,7 @@
-import { ChevronDown, ExternalLink, Menu, Moon, Search, Sun, X } from "lucide-react";
+import { ExternalLink, Menu, Moon, Search, Sun, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { LanguageCode, TranslationKey } from "../data/i18n";
 import { languages } from "../data/i18n";
-import { navMenus } from "../data/pricing";
 
 type HeaderProps = {
   activePage: string;
@@ -20,14 +19,14 @@ type HeaderProps = {
   onToggleMobile: () => void;
 };
 
-const topLevelItems = ["Home", "API", "Models", "Docs", "Resources"] as const;
-const topLevelLabels = {
-  Home: "home",
-  API: "api",
-  Models: "models",
-  Docs: "docs",
-  Resources: "resources",
-} as const;
+const navItems = [
+  { label: "Overview", page: "Overview" },
+  { label: "Models", page: "Models" },
+  { label: "Pricing", page: "Pricing" },
+  { label: "Subscriptions", page: "Subscription Prices" },
+  { label: "Playground", page: "Playground" },
+  { label: "Docs", page: "Quickstart" },
+] as const;
 
 export function Header({
   activePage,
@@ -44,241 +43,164 @@ export function Header({
   onToggleTheme,
   onToggleMobile,
 }: HeaderProps) {
-  const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
 
   const filteredSearch = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-
-    if (!normalized) {
-      return searchItems.slice(0, 7);
-    }
-
+    if (!normalized) return searchItems.slice(0, 6);
     return searchItems
       .filter((item) => item.toLowerCase().includes(normalized))
       .slice(0, 8);
   }, [query, searchItems]);
 
   const navigate = (page: string) => {
-    onNavigate(page === "Home" ? "Overview" : page);
-    setOpenMenu(null);
+    onNavigate(page);
     setSearchOpen(false);
     setQuery("");
   };
 
+  const isCurrent = (page: string) => {
+    if (page === "Pricing") return activePage === "Pricing" || activePage === "API Prices";
+    if (page === "Subscription Prices") return isSubscriptionPage;
+    if (page === "Models") return activePage === "Models";
+    if (page === "Playground") return activePage === "Playground";
+    if (page === "Quickstart") return activePage === "Quickstart" || activePage === "Overview";
+    return activePage === page;
+  };
+
   return (
-    <header className="site-header sticky top-0 z-40 border-b border-neutral-200/80 bg-white/80 backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#09090b]/80">
-      <div className="flex h-14 items-center gap-2.5 px-3 sm:h-16 sm:gap-3 sm:px-6 lg:px-8">
-        {!isSubscriptionPage && (
+    <header className="sticky top-0 z-40 border-b border-neutral-200/80 bg-white/95 backdrop-blur-md dark:border-neutral-800/80 dark:bg-[#0d0d0d]/95">
+      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        {/* Left: Mobile hamburger + Brand logo */}
+        <div className="flex items-center gap-3 sm:gap-6">
+          {!isSubscriptionPage && (
+            <button
+              type="button"
+              aria-label={mobileOpen ? t("closeNavigation") : t("openNavigation")}
+              onClick={onToggleMobile}
+              className="grid h-8 w-8 place-items-center rounded-md text-neutral-600 hover:text-neutral-900 lg:hidden dark:text-neutral-400 dark:hover:text-white"
+            >
+              {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            </button>
+          )}
+
           <button
             type="button"
-            aria-label={mobileOpen ? t("closeNavigation") : t("openNavigation")}
-            onClick={onToggleMobile}
-            className="pressable grid h-9 w-9 place-items-center rounded-xl border border-neutral-300/80 bg-white text-neutral-700 shadow-xs lg:hidden dark:border-white/10 dark:bg-white/[0.05] dark:text-neutral-300"
+            onClick={() => navigate("Overview")}
+            className="flex items-center gap-2.5 text-left"
           >
-            {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-md bg-black dark:bg-white">
+              <img
+                src={`${import.meta.env.BASE_URL}assets/lingofusion-logo-square.png`}
+                alt="LingoFusion"
+                width="28"
+                height="28"
+                className="h-full w-full object-cover"
+              />
+            </span>
+            <span className="text-sm font-semibold tracking-tight text-neutral-900 dark:text-white">
+              LingoFusion <span className="font-normal text-neutral-500">API</span>
+            </span>
           </button>
-        )}
 
-        <button
-          type="button"
-          onClick={() => navigate("Overview")}
-          className="pressable flex shrink-0 items-center gap-2.5 rounded-xl text-left"
-        >
-          <span className="brand-mark-motion block h-9 w-9 shrink-0 overflow-hidden rounded-xl bg-[#070b26] p-0.5 shadow-xs sm:h-10 sm:w-10">
-            <img
-              src={`${import.meta.env.BASE_URL}assets/lingofusion-logo-square.png`}
-              alt="LingoFusion logo"
-              width="40"
-              height="40"
-              className="block h-full w-full rounded-[10px] object-cover"
-            />
-          </span>
-          <span className="hidden text-sm font-bold tracking-tight text-neutral-950 dark:text-white sm:inline">
-            LingoFusion <span className="font-medium text-neutral-500">Devs</span>
-          </span>
-        </button>
-
-        {/* Primary nav pills */}
-        <nav aria-label="Primary navigation" className="ml-3 hidden items-center rounded-xl border border-neutral-200/80 bg-neutral-100/70 p-1 dark:border-white/10 dark:bg-white/[0.05] md:flex">
-          <button
-            type="button"
-            onClick={() => navigate("API Prices")}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-              activePage === "Pricing"
-                ? "bg-white text-neutral-950 shadow-xs dark:bg-neutral-800 dark:text-white"
-                : "text-neutral-500 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white"
-            }`}
-          >
-            API Prices
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate("Models")}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-              activePage === "Models"
-                ? "bg-white text-neutral-950 shadow-xs dark:bg-neutral-800 dark:text-white"
-                : "text-neutral-500 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white"
-            }`}
-          >
-            Models
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate("Subscription Prices")}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-              isSubscriptionPage
-                ? "bg-white text-neutral-950 shadow-xs dark:bg-neutral-800 dark:text-white"
-                : "text-neutral-500 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white"
-            }`}
-          >
-            Subscriptions
-          </button>
-        </nav>
-
-        {/* Extended desktop nav */}
-        <nav className="ml-4 hidden items-center gap-1 2xl:flex">
-          {topLevelItems.map((item) => {
-            const menu = navMenus[item as keyof typeof navMenus];
-            const active =
-              item === "Home"
-                ? activePage === "Overview"
-                : menu?.some((option) => option === activePage || (option === "API Prices" && activePage === "Pricing")) ||
-                  activePage === item;
-
-            return (
-              <div className="relative" key={item}>
+          {/* Center/Left Nav links (OpenAI style) */}
+          <nav className="ml-4 hidden items-center gap-1 md:flex">
+            {navItems.map((item) => {
+              const active = isCurrent(item.page);
+              return (
                 <button
+                  key={item.label}
                   type="button"
-                  onClick={() => (menu ? setOpenMenu(openMenu === item ? null : item) : navigate(item))}
-                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
+                  onClick={() => navigate(item.page)}
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
                     active
-                      ? "bg-neutral-200/80 text-neutral-950 dark:bg-white/10 dark:text-white"
-                      : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-400 dark:hover:bg-white/[0.06] dark:hover:text-white"
+                      ? "bg-neutral-100 text-neutral-950 font-semibold dark:bg-neutral-800/80 dark:text-white"
+                      : "text-neutral-600 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white"
                   }`}
                 >
-                  {t(topLevelLabels[item])}
-                  {menu && <ChevronDown className="h-3 w-3 opacity-60" />}
+                  {item.label}
                 </button>
+              );
+            })}
+          </nav>
+        </div>
 
-                {openMenu === item && menu && (
-                  <div className="absolute left-0 top-9 w-64 rounded-xl border border-neutral-200/90 bg-white/95 p-1.5 shadow-xl backdrop-blur-md dark:border-white/10 dark:bg-[#141417]/95">
-                    {menu.map((option) => (
-                      <button
-                        type="button"
-                        key={option}
-                        onClick={() => navigate(option)}
-                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs font-medium text-neutral-700 transition hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-300 dark:hover:bg-white/[0.08] dark:hover:text-white"
-                      >
-                        {tc(option)}
-                        {(option === activePage || (option === "API Prices" && activePage === "Pricing")) && (
-                          <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </nav>
-
-        {/* Right side controls */}
-        <div className="ml-auto flex min-w-0 items-center justify-end gap-2.5">
-          <div className="relative hidden w-64 xl:block">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400" />
+        {/* Right: Search, Language, Theme, Dashboard */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Minimal Search bar */}
+          <div className="relative hidden w-52 sm:block lg:w-60">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400" />
             <input
               value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
+              onChange={(e) => {
+                setQuery(e.target.value);
                 setSearchOpen(true);
               }}
               onFocus={() => setSearchOpen(true)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && filteredSearch[0]) {
-                  navigate(filteredSearch[0]);
-                }
-                if (event.key === "Escape") {
-                  setSearchOpen(false);
-                }
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && filteredSearch[0]) navigate(filteredSearch[0]);
+                if (e.key === "Escape") setSearchOpen(false);
               }}
-              placeholder={t("searchDocs")}
-              className="h-9 w-full rounded-xl border border-neutral-300/80 bg-neutral-50/80 py-1.5 pl-8 pr-12 text-xs text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-neutral-900 focus:bg-white focus:ring-1 focus:ring-neutral-900 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-100 dark:focus:border-white/40"
+              placeholder="Search API reference..."
+              className="h-8 w-full rounded-md border border-neutral-200 bg-neutral-50/80 pl-8 pr-10 text-xs text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-neutral-400 focus:bg-white dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100 dark:focus:border-neutral-600"
             />
-            <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-neutral-200 bg-white px-1 py-0.5 font-mono text-[9px] font-semibold text-neutral-400 dark:border-white/10 dark:bg-white/5 dark:text-neutral-500">
+            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-neutral-200 bg-white px-1 py-0.2 font-mono text-[9px] text-neutral-400 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-500">
               ⌘K
             </span>
+
             {searchOpen && (
-              <div className="absolute right-0 top-11 w-full rounded-xl border border-neutral-200/90 bg-white/95 p-1.5 shadow-xl backdrop-blur-md dark:border-white/10 dark:bg-[#141417]/95">
+              <div className="absolute right-0 top-10 w-full rounded-md border border-neutral-200 bg-white p-1 shadow-lg dark:border-neutral-800 dark:bg-[#141414]">
                 {filteredSearch.length ? (
                   filteredSearch.map((item) => (
                     <button
-                      type="button"
                       key={item}
-                      onMouseDown={(event) => event.preventDefault()}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
                       onClick={() => navigate(item)}
-                      className="block w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-neutral-700 hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-300 dark:hover:bg-white/[0.08] dark:hover:text-white"
+                      className="block w-full rounded px-2.5 py-1.5 text-left text-xs text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
                     >
                       {tc(item)}
                     </button>
                   ))
                 ) : (
-                  <p className="px-3 py-2 text-xs text-neutral-500">{t("noResults")}</p>
+                  <p className="px-3 py-2 text-xs text-neutral-500">No results found</p>
                 )}
               </div>
             )}
           </div>
 
-          <label className="hidden items-center gap-1 rounded-xl border border-neutral-300/80 bg-white px-2 text-xs font-medium text-neutral-600 shadow-xs dark:border-white/10 dark:bg-white/[0.05] dark:text-neutral-300 md:inline-flex">
-            <span className="sr-only">{t("language")}</span>
-            <select
-              value={language}
-              onChange={(event) => onLanguageChange(event.target.value as LanguageCode)}
-              className="clean-select h-8 max-w-32 bg-transparent text-xs font-medium outline-none"
-              aria-label={t("language")}
-            >
-              {languages.map((item) => (
-                <option key={item.code} value={item.code}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          {/* Language selector */}
+          <select
+            value={language}
+            onChange={(e) => onLanguageChange(e.target.value as LanguageCode)}
+            className="hidden h-8 rounded-md border border-neutral-200 bg-transparent px-2 text-xs text-neutral-600 outline-none dark:border-neutral-800 dark:text-neutral-400 sm:block"
+            aria-label="Language"
+          >
+            {languages.map((item) => (
+              <option key={item.code} value={item.code}>
+                {item.code.toUpperCase()}
+              </option>
+            ))}
+          </select>
 
           {/* Theme switcher */}
           <button
             type="button"
             onClick={onToggleTheme}
-            className="pressable inline-flex h-9 items-center rounded-xl border border-neutral-300/80 bg-neutral-100/60 p-0.5 text-xs text-neutral-600 shadow-xs dark:border-white/10 dark:bg-white/[0.05] dark:text-neutral-300"
-            aria-label={`Switch to ${theme === "light" ? t("dark") : t("light")} mode`}
+            className="flex h-8 w-8 items-center justify-center rounded-md border border-neutral-200 text-neutral-600 hover:text-neutral-900 dark:border-neutral-800 dark:text-neutral-400 dark:hover:text-white"
+            aria-label="Toggle theme"
           >
-            <span
-              className={`inline-flex h-7 items-center gap-1 rounded-lg px-2 transition ${
-                theme === "light"
-                  ? "bg-white text-neutral-950 shadow-xs dark:bg-neutral-800 dark:text-white"
-                  : "text-neutral-400"
-              }`}
-            >
-              <Sun className="h-3.5 w-3.5" />
-            </span>
-            <span
-              className={`inline-flex h-7 items-center gap-1 rounded-lg px-2 transition ${
-                theme === "dark"
-                  ? "bg-white text-neutral-950 shadow-xs dark:bg-neutral-800 dark:text-white"
-                  : "text-neutral-400"
-              }`}
-            >
-              <Moon className="h-3.5 w-3.5" />
-            </span>
+            {theme === "light" ? <Moon className="h-3.5 w-3.5" /> : <Sun className="h-3.5 w-3.5" />}
           </button>
 
+          {/* Dashboard Button (OpenAI black/white pill) */}
           <button
             type="button"
             onClick={onDashboard}
-            className="pressable inline-flex h-9 items-center gap-1.5 rounded-xl bg-neutral-950 px-3.5 text-xs font-semibold text-white shadow-xs transition hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+            className="inline-flex h-8 items-center gap-1.5 rounded-full bg-neutral-950 px-3.5 text-xs font-medium text-white transition hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
           >
-            {t("dashboard")}
+            <span>Dashboard</span>
             <ExternalLink className="h-3 w-3 opacity-70" />
           </button>
         </div>

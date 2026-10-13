@@ -1,24 +1,16 @@
 import {
-  ArrowRight,
-  BadgeDollarSign,
-  Calculator,
-  ChevronRight,
-  Cpu,
   FileText,
   Image as ImageIcon,
   Mic,
   Music,
   Play,
-  Sparkles,
   Video,
-  Zap,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { currencies, defaultCurrencyRates, formatCurrencyAmount } from "../data/currency";
 import type { CurrencyCode } from "../data/currency";
 import type { TranslationKey } from "../data/i18n";
-import { nativeLocalModels } from "../data/nativeLocal";
 import {
   dubbingModels,
   imageModels,
@@ -57,43 +49,43 @@ const showcaseItems = [
   {
     kind: "image",
     title: "Document translation",
-    label: "Before and after",
-    description: "Demonstrates LingoFusion translating a full document while preserving headings, lists, terminology, and tone.",
+    label: "Before & after",
+    description: "Preserves headings, formatting, terminology, and tone across whole documents.",
     src: "",
   },
   {
     kind: "video",
     title: "Live conversation",
-    label: "Real-time demo",
-    description: "Demonstrates LingoFusion Live Translate interpreting a conversation with low latency and natural turn-taking.",
+    label: "Real-time",
+    description: "Interprets two-way speech with sub-500ms latency and natural turn-taking.",
     src: "",
   },
   {
     kind: "video",
     title: "Video dubbing",
-    label: "Dubbing demo",
-    description: "Demonstrates translated speech aligned to the original video with consistent voices and timing.",
+    label: "Audio alignment",
+    description: "Translates speech and synchronizes timing while maintaining original voice timbre.",
     src: "",
   },
   {
     kind: "image",
     title: "PDF localization",
-    label: "Layout preservation",
-    description: "Demonstrates extracting and translating PDF content without losing the document's visual structure.",
+    label: "Layout fidelity",
+    description: "Extracts and translates complex multi-column PDFs without altering visual layout.",
     src: "",
   },
   {
     kind: "image",
     title: "Image translation",
-    label: "Visual text replacement",
-    description: "Demonstrates detecting text inside an image, translating it, and placing the result back into the design.",
+    label: "In-image text",
+    description: "Detects text embedded within images, translates it, and replaces it with matching typography.",
     src: "",
   },
   {
     kind: "video",
-    title: "LingoFusion Music generation",
-    label: "Prompt to music",
-    description: "Demonstrates LingoFusion Music turning a written creative direction into a complete, production-ready music sample.",
+    title: "Music generation",
+    label: "Text-to-audio",
+    description: "Generates full audio compositions and stems from written creative direction.",
     src: "",
   },
 ] as const;
@@ -190,12 +182,12 @@ export function PricingPage({
   const selectedPdf = pdfModels.find((model) => model.model === selectedPdfModel) ?? pdfModels[0];
 
   const textPricingDescription = textPricingMode === "fast"
-    ? "Fast mode is priced at 1.5× Default for supported LingoFusion models."
+    ? "Fast mode is priced at 1.5× Default for supported models."
     : textPricingMode === "ultrafast"
     ? "Ultrafast mode uses non-thinking processing for Pro and Ultra at 4× Default."
     : textPricingMode === "instant"
     ? "Real-time streaming processing with immediate results."
-    : "Lower-cost asynchronous processing for bulk jobs up to 24h turnaround.";
+    : "Batch API offers 50% discount for asynchronous requests with 24-hour turnaround.";
 
   const pricingLabels: PricingLabels = {
     model: t("tableModel"),
@@ -262,98 +254,75 @@ export function PricingPage({
   }, [selectedPdf, pdfCount]);
 
   return (
-    <>
-      {/* Hero Section */}
-      <section className="site-reveal section-enter max-w-4xl">
-        <div className="inline-flex items-center gap-2 rounded-full border border-neutral-200/80 bg-neutral-100/80 px-3 py-1 text-xs font-semibold text-neutral-800 shadow-xs dark:border-white/10 dark:bg-white/[0.06] dark:text-neutral-200">
-          <BadgeDollarSign className="h-3.5 w-3.5 text-blue-500" />
-          {t("lingoFusionApi")}
-        </div>
-
-        <h1 className="mt-4 text-4xl font-bold tracking-tight text-neutral-950 dark:text-neutral-50 sm:text-6xl">
-          {t("pricing")}
+    <div className="mx-auto max-w-6xl pb-24">
+      {/* OpenAI Clean Hero */}
+      <section className="border-b border-neutral-200 pb-12 dark:border-neutral-800">
+        <h1 className="text-4xl font-normal tracking-tight text-neutral-900 dark:text-neutral-50 sm:text-5xl lg:text-6xl">
+          Pricing
         </h1>
-        <p className="mt-4 text-base leading-7 text-neutral-600 dark:text-neutral-300 sm:text-lg sm:leading-8">
-          {t("pricingHero")}
+        <p className="mt-4 max-w-3xl text-lg text-neutral-600 dark:text-neutral-400">
+          Pay as you go for token usage across text, speech, audio, and multimodal translation models. Volume discounts and committed spend terms are available for enterprise customers.
         </p>
 
-        {/* Currency and CTA controls */}
-        <div className="mt-6 flex flex-wrap items-center gap-4">
-          <label className="flex items-center gap-2 text-xs font-medium text-neutral-600 dark:text-neutral-400">
+        {/* Currency & Quick Anchors */}
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-neutral-500">Jump to:</span>
+            {[
+              ["#text-models", "Language models"],
+              ["#tts-models", "Text to speech"],
+              ["#transcription-models", "Transcription"],
+              ["#dubbing-models", "Dubbing"],
+              ["#image-translation", "Images"],
+              ["#billing-notes", "Billing rules"],
+            ].map(([href, label]) => (
+              <a
+                key={href}
+                href={href}
+                className="rounded px-2 py-1 text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              >
+                {label}
+              </a>
+            ))}
+          </div>
+
+          <label className="flex items-center gap-2 text-xs text-neutral-500">
             <span>Currency:</span>
             <select
               value={currency}
-              onChange={(event) => {
-                const nextCurrency = event.target.value as CurrencyCode;
-                setCurrency(nextCurrency);
-                window.localStorage.setItem("lingofusion-pricing-currency", nextCurrency);
+              onChange={(e) => {
+                const next = e.target.value as CurrencyCode;
+                setCurrency(next);
+                window.localStorage.setItem("lingofusion-pricing-currency", next);
               }}
-              className="clean-select h-9 rounded-lg border border-neutral-300/80 bg-white px-2.5 text-xs font-medium text-neutral-900 outline-none transition focus:border-neutral-900 dark:border-white/15 dark:bg-white/5 dark:text-neutral-100"
-              aria-label="Pricing display currency"
+              className="rounded-md border border-neutral-200 bg-transparent px-2 py-1 text-xs font-medium text-neutral-900 outline-none dark:border-neutral-800 dark:text-neutral-100"
             >
               {currencies.map((item) => (
                 <option key={item.code} value={item.code}>
-                  {item.flag} {item.code}
+                  {item.code} ({item.flag})
                 </option>
               ))}
             </select>
           </label>
-
-          {ratesUnavailable && (
-            <span className="text-xs text-neutral-500" role="status">
-              Live exchange rates temporarily cached in USD.
-            </span>
-          )}
-        </div>
-
-        <div className="mt-7 flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={onDashboard}
-            className="pressable inline-flex min-h-11 items-center justify-center rounded-xl bg-neutral-950 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
-          >
-            {t("openDashboard")}
-          </button>
-          <a
-            href="#text-models"
-            className="pressable inline-flex min-h-11 items-center justify-center rounded-xl border border-neutral-200/90 bg-white px-5 py-2.5 text-sm font-semibold text-neutral-800 shadow-xs transition hover:bg-neutral-50 dark:border-white/10 dark:bg-neutral-900 dark:text-white dark:hover:bg-neutral-800"
-          >
-            {t("comparePricing")}
-          </a>
-          <a
-            href="#product-demos"
-            className="pressable inline-flex min-h-11 items-center justify-center rounded-xl border border-neutral-200/90 bg-white px-5 py-2.5 text-sm font-semibold text-neutral-800 shadow-xs transition hover:bg-neutral-50 dark:border-white/10 dark:bg-neutral-900 dark:text-white dark:hover:bg-neutral-800"
-          >
-            View Product Demos
-          </a>
         </div>
       </section>
 
       {/* Main Content Stacks */}
       <div className="mt-12 space-y-12">
-        <MediaShowcase />
-
-        {/* Text Models */}
-        <div id="text-models" className="site-reveal section-enter [--section-index:1]">
-          <TextModelGallery
-            models={visibleTextModels}
-            pricingMode={textPricingMode}
-            displayPrice={displayCurrency}
-            onOpenModel={onOpenModel}
-          />
-
+        {/* Text Models Section */}
+        <div id="text-models">
           <SectionCalculator
-            title={t("textCalculator")}
-            estimateLabel={t("estimate")}
-            estimate={selectedTextModel.local ? "Free - runs locally" : textEstimate === null ? "TBD" : displayCurrency(textEstimate, true)}
+            title="Language model cost estimate"
+            estimateLabel="Estimate"
+            estimate={selectedTextModel.local ? "Free" : textEstimate === null ? "TBD" : displayCurrency(textEstimate, true)}
           >
-            <SelectField label={t("model")} value={selectedTextModel.model} onChange={setSelectedModel}>
-              {calculatorTextModels.map((model) => (
-                <option key={model.model}>{model.model}</option>
+            <SelectField label="Model" value={selectedTextModel.model} onChange={setSelectedModel}>
+              {calculatorTextModels.map((m) => (
+                <option key={m.model} value={m.model}>{m.model}</option>
               ))}
             </SelectField>
             <NumberField
-              label={t("inputTokens")}
+              label="Input tokens"
               min={0}
               max={Infinity}
               step={1000}
@@ -361,7 +330,7 @@ export function PricingPage({
               onChange={setInputTokens}
             />
             <NumberField
-              label={t("outputTokens")}
+              label="Output tokens"
               min={0}
               max={Infinity}
               step={1000}
@@ -372,8 +341,8 @@ export function PricingPage({
 
           <PricingCard
             key={`text-${textPricingMode}-${currencyPresentationKey}`}
-            title={t("textModels")}
-            unit={t("pricesPer1MTokens")}
+            title="Language models"
+            unit="Prices per 1M tokens"
             kind="text"
             rows={displayedCloudTextModels}
             labels={pricingLabels}
@@ -381,7 +350,7 @@ export function PricingPage({
               <div
                 role="group"
                 aria-label="Text model pricing mode"
-                className="inline-flex rounded-xl border border-neutral-200/80 bg-neutral-100/60 p-1 dark:border-white/10 dark:bg-white/[0.05]"
+                className="flex items-center gap-1 rounded-lg border border-neutral-200 p-0.5 dark:border-neutral-800"
               >
                 {(["instant", "batch", "fast", "ultrafast"] as const).map((mode) => {
                   const selected = textPricingMode === mode;
@@ -395,13 +364,13 @@ export function PricingPage({
                         if (mode === "fast") setSelectedModel("LingoFusion");
                         window.localStorage.setItem("lingofusion-text-pricing-mode", mode);
                       }}
-                      className={`pressable rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                      className={`rounded px-2.5 py-1 text-xs font-medium capitalize transition ${
                         selected
-                          ? "bg-white text-neutral-950 shadow-xs dark:bg-neutral-800 dark:text-white"
+                          ? "bg-neutral-900 text-white dark:bg-white dark:text-neutral-900"
                           : "text-neutral-600 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white"
                       }`}
                     >
-                      {mode === "instant" ? "Default" : mode === "batch" ? "Batch" : mode === "fast" ? "Fast" : "Ultrafast"}
+                      {mode === "instant" ? "Default" : mode}
                     </button>
                   );
                 })}
@@ -411,21 +380,22 @@ export function PricingPage({
           />
         </div>
 
-        {/* Web Search Pricing */}
-        <section className="site-reveal border-t border-neutral-200/80 pt-8 dark:border-white/[0.08]">
-          <div className="mb-4">
-            <h2 className="text-xl font-bold tracking-tight text-neutral-950 dark:text-neutral-50">Web Search Grounding</h2>
-            <p className="mt-1 text-xs text-neutral-500">Per-request rates for verified live citation indexing.</p>
-          </div>
-          <div className="overflow-hidden rounded-2xl border border-neutral-200/90 bg-white shadow-xs dark:border-white/[0.08] dark:bg-neutral-900/60">
-            <table className="mobile-record-table w-full text-left text-xs">
-              <thead className="border-b border-neutral-200/80 bg-neutral-50/70 uppercase tracking-wider text-neutral-500 dark:border-white/[0.08] dark:bg-white/[0.02]">
-                <tr><th className="px-5 py-3 font-semibold">Model</th><th className="px-5 py-3 font-semibold">Price per call</th></tr>
+        {/* Web Search Grounding */}
+        <section className="border-t border-neutral-200 pt-10 dark:border-neutral-800">
+          <h2 className="text-xl font-normal text-neutral-900 dark:text-neutral-50">Web search grounding</h2>
+          <p className="mt-1 text-xs text-neutral-500">Per-call pricing for live search engine grounding.</p>
+          <div className="mt-4 overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800">
+            <table className="w-full text-left text-xs">
+              <thead className="border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/50">
+                <tr>
+                  <th className="px-5 py-3 font-medium text-neutral-600 dark:text-neutral-400">Model</th>
+                  <th className="px-5 py-3 font-medium text-neutral-600 dark:text-neutral-400">Price per call</th>
+                </tr>
               </thead>
-              <tbody className="divide-y divide-neutral-200/80 dark:divide-white/[0.08]">
+              <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
                 {webSearchPricing.map(({ model, priceUsd }) => (
-                  <tr key={model} className="hover:bg-neutral-50/60 dark:hover:bg-white/[0.02]">
-                    <td className="px-5 py-3.5 font-semibold text-neutral-950 dark:text-neutral-50">{model}</td>
+                  <tr key={model} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/30">
+                    <td className="px-5 py-3.5 font-semibold text-neutral-900 dark:text-neutral-50">{model}</td>
                     <td className="px-5 py-3.5 font-mono text-neutral-700 dark:text-neutral-300">${priceUsd.toString()}</td>
                   </tr>
                 ))}
@@ -435,19 +405,19 @@ export function PricingPage({
         </section>
 
         {/* TTS Models */}
-        <div id="tts-models" className="site-reveal section-enter [--section-index:2]">
+        <div id="tts-models">
           <SectionCalculator
-            title={t("ttsCalculator")}
-            estimateLabel={t("estimate")}
+            title="Text to speech calculator"
+            estimateLabel="Estimate"
             estimate={ttsEstimate === null ? "TBD" : displayCurrency(ttsEstimate, true)}
           >
-            <SelectField label={t("model")} value={selectedTtsModel} onChange={setSelectedTtsModel}>
-              {ttsWordModels.map((model) => (
-                <option key={model.model}>{model.model}</option>
+            <SelectField label="Model" value={selectedTtsModel} onChange={setSelectedTtsModel}>
+              {ttsWordModels.map((m) => (
+                <option key={m.model} value={m.model}>{m.model}</option>
               ))}
             </SelectField>
             <NumberField
-              label={t("words")}
+              label="Words"
               min={0}
               max={Infinity}
               step={100}
@@ -458,13 +428,13 @@ export function PricingPage({
 
           {liveTranslateModel && (
             <SectionCalculator
-              title={t("liveTranslateCalculator")}
-              estimateLabel={t("estimate")}
+              title="Live translate calculator"
+              estimateLabel="Estimate"
               estimate={liveTranslateEstimate === null ? "TBD" : displayCurrency(liveTranslateEstimate, true)}
             >
-              <ReadOnlyField label={t("model")} value={liveTranslateModel.model} />
+              <ReadOnlyField label="Model" value={liveTranslateModel.model} />
               <NumberField
-                label={t("minutes")}
+                label="Minutes"
                 min={0}
                 max={Infinity}
                 step={0.01}
@@ -478,7 +448,7 @@ export function PricingPage({
 
           <PricingCard
             key={`tts-${currencyPresentationKey}`}
-            title={t("ttsModels")}
+            title="Text to speech models"
             unit={t("pricesPerWordAndMinute")}
             kind="simple"
             rows={displayedTtsModels}
@@ -487,23 +457,23 @@ export function PricingPage({
         </div>
 
         {/* Transcription Models */}
-        <div id="transcription-models" className="site-reveal section-enter [--section-index:3]">
+        <div id="transcription-models">
           <SectionCalculator
-            title={t("transcriptionCalculator")}
-            estimateLabel={t("estimate")}
+            title="Speech transcription calculator"
+            estimateLabel="Estimate"
             estimate={transcriptionEstimate === null ? "TBD" : displayCurrency(transcriptionEstimate, true)}
           >
             <SelectField
-              label={t("model")}
+              label="Model"
               value={selectedTranscriptionModel}
               onChange={setSelectedTranscriptionModel}
             >
-              {transcriptionModels.map((model) => (
-                <option key={model.model}>{model.model}</option>
+              {transcriptionModels.map((m) => (
+                <option key={m.model} value={m.model}>{m.model}</option>
               ))}
             </SelectField>
             <NumberField
-              label={t("minutes")}
+              label="Minutes"
               min={0}
               max={Infinity}
               step={0.01}
@@ -516,7 +486,7 @@ export function PricingPage({
 
           <PricingCard
             key={`transcription-${currencyPresentationKey}`}
-            title={t("transcriptionModels")}
+            title="Transcription models"
             unit={t("pricesPerMinute")}
             kind="simple"
             rows={displayedTranscriptionModels}
@@ -525,19 +495,19 @@ export function PricingPage({
         </div>
 
         {/* Dubbing Models */}
-        <div id="dubbing-models" className="site-reveal section-enter [--section-index:4]">
+        <div id="dubbing-models">
           <SectionCalculator
-            title={t("dubbingCalculator")}
-            estimateLabel={t("estimate")}
+            title="Dubbing calculator"
+            estimateLabel="Estimate"
             estimate={dubbingEstimate === null ? "TBD" : displayCurrency(dubbingEstimate, true)}
           >
-            <SelectField label={t("model")} value={selectedDubbingModel} onChange={setSelectedDubbingModel}>
-              {dubbingModels.map((model) => (
-                <option key={model.model}>{model.model}</option>
+            <SelectField label="Model" value={selectedDubbingModel} onChange={setSelectedDubbingModel}>
+              {dubbingModels.map((m) => (
+                <option key={m.model} value={m.model}>{m.model}</option>
               ))}
             </SelectField>
             <NumberField
-              label={t("minutes")}
+              label="Minutes"
               min={0}
               max={Infinity}
               step={0.01}
@@ -550,7 +520,7 @@ export function PricingPage({
 
           <PricingCard
             key={`dubbing-${currencyPresentationKey}`}
-            title={t("dubbingModels")}
+            title="Dubbing models"
             unit={t("pricesPerMinute")}
             kind="simple"
             rows={displayedDubbingModels}
@@ -559,19 +529,19 @@ export function PricingPage({
         </div>
 
         {/* Image Translation */}
-        <div id="image-translation" className="site-reveal section-enter [--section-index:5]">
+        <div id="image-translation">
           <SectionCalculator
-            title={t("imageCalculator")}
-            estimateLabel={t("estimate")}
+            title="Image translation calculator"
+            estimateLabel="Estimate"
             estimate={displayCurrency(imageEstimate, true)}
           >
-            <SelectField label={t("tableImageSize")} value={selectedImageSize} onChange={setSelectedImageSize}>
-              {imageModels.map((model) => (
-                <option key={model.size}>{model.size}</option>
+            <SelectField label="Image size" value={selectedImageSize} onChange={setSelectedImageSize}>
+              {imageModels.map((m) => (
+                <option key={m.size} value={m.size}>{m.size}</option>
               ))}
             </SelectField>
             <NumberField
-              label={t("inputTokens")}
+              label="Input tokens"
               min={0}
               max={Infinity}
               step={1000}
@@ -579,7 +549,7 @@ export function PricingPage({
               onChange={setImageInputTokens}
             />
             <NumberField
-              label={t("outputTokens")}
+              label="Output tokens"
               min={0}
               max={Infinity}
               step={1000}
@@ -590,7 +560,7 @@ export function PricingPage({
 
           <PricingCard
             key={`images-${currencyPresentationKey}`}
-            title={t("imageTranslation")}
+            title="Image translation"
             unit={t("pricesPer1MTokens")}
             kind="image"
             rows={displayedImageModels}
@@ -599,15 +569,15 @@ export function PricingPage({
         </div>
 
         {/* PDF Extraction */}
-        <div id="pdf-extraction-and-editing" className="site-reveal section-enter [--section-index:6]">
+        <div id="pdf-extraction-and-editing">
           <SectionCalculator
-            title={t("pdfCalculator")}
-            estimateLabel={t("estimate")}
+            title="PDF extraction calculator"
+            estimateLabel="Estimate"
             estimate={pdfEstimate === null ? "TBD" : displayCurrency(pdfEstimate, true)}
           >
-            <SelectField label={t("workflow")} value={selectedPdfModel} onChange={setSelectedPdfModel}>
-              {pdfModels.map((model) => (
-                <option key={model.model}>{model.model}</option>
+            <SelectField label="Workflow" value={selectedPdfModel} onChange={setSelectedPdfModel}>
+              {pdfModels.map((m) => (
+                <option key={m.model} value={m.model}>{m.model}</option>
               ))}
             </SelectField>
             <NumberField
@@ -622,7 +592,7 @@ export function PricingPage({
 
           <PricingCard
             key={`pdf-${currencyPresentationKey}`}
-            title={t("pdfExtractionEditing")}
+            title="PDF extraction and editing"
             unit={t("pdfWorkflows")}
             kind="simple"
             rows={displayedPdfModels}
@@ -631,15 +601,15 @@ export function PricingPage({
         </div>
 
         {/* Music Models */}
-        <div id="music-models" className="site-reveal section-enter [--section-index:7]">
+        <div id="music-models">
           <SectionCalculator
-            title={t("musicCalculator")}
-            estimateLabel={t("estimate")}
+            title="Music generation calculator"
+            estimateLabel="Estimate"
             estimate={musicEstimate === null ? "TBD" : displayCurrency(musicEstimate, true)}
           >
-            <SelectField label={t("model")} value={selectedMusicModel} onChange={setSelectedMusicModel}>
-              {musicModels.map((model) => (
-                <option key={model.model}>{model.model}</option>
+            <SelectField label="Model" value={selectedMusicModel} onChange={setSelectedMusicModel}>
+              {musicModels.map((m) => (
+                <option key={m.model} value={m.model}>{m.model}</option>
               ))}
             </SelectField>
             <NumberField
@@ -654,168 +624,59 @@ export function PricingPage({
 
           <PricingCard
             key={`music-${currencyPresentationKey}`}
-            title={t("musicModels")}
+            title="Music generation"
             unit="Price per generation"
             kind="simple"
             rows={displayedMusicModels}
             labels={pricingLabels}
           />
         </div>
+
+        {/* Demos Showcase */}
+        <MediaShowcase />
       </div>
 
       {/* Billing Notes */}
-      <section id="billing-notes" className="site-reveal section-enter mt-16 border-t border-neutral-200/80 pt-10 dark:border-white/[0.08] [--section-index:8]">
-        <h2 className="text-xl font-bold tracking-tight text-neutral-950 dark:text-neutral-50">{t("billingNotes")}</h2>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+      <section id="billing-notes" className="mt-16 border-t border-neutral-200 pt-10 dark:border-neutral-800">
+        <h2 className="text-xl font-normal text-neutral-900 dark:text-neutral-50">{t("billingNotes")}</h2>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
           {billingNotes.map((note) => {
             const Icon = note.icon;
             return (
               <div
                 key={note.key}
-                className="surface-lift flex items-start gap-3 rounded-xl border border-neutral-200/80 bg-white p-4 text-xs leading-5 text-neutral-600 shadow-xs dark:border-white/[0.08] dark:bg-neutral-900/60 dark:text-neutral-400"
+                className="flex items-start gap-3 rounded-lg border border-neutral-200 p-4 text-xs leading-5 text-neutral-600 dark:border-neutral-800 dark:text-neutral-400"
               >
-                <Icon className="mt-0.5 h-4 w-4 shrink-0 text-neutral-500" />
+                <Icon className="mt-0.5 h-4 w-4 shrink-0 text-neutral-400" />
                 <span>{t(note.key)}</span>
               </div>
             );
           })}
         </div>
       </section>
-    </>
-  );
-}
-
-function TextModelGallery({
-  models,
-  pricingMode,
-  displayPrice,
-  onOpenModel,
-}: {
-  models: TextModel[];
-  pricingMode: TextPricingMode;
-  displayPrice: (usdAmount: number) => string;
-  onOpenModel: (model: string) => void;
-}) {
-  const openSourceModels = models.filter((model) => model.local);
-  const cloudModels = models.filter((model) => !model.local);
-
-  return (
-    <section className="mb-10" aria-labelledby="pricing-model-gallery-heading">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
-        <div>
-          <h2 id="pricing-model-gallery-heading" className="text-2xl font-bold tracking-tight text-neutral-950 dark:text-neutral-50">
-            Model Highlights
-          </h2>
-          <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
-            Quick overview of flagship models and self-hosted local engines.
-          </p>
-        </div>
-        <span className="text-xs font-semibold text-neutral-500">
-          Mode: <span className="capitalize">{pricingMode}</span>
-        </span>
-      </div>
-
-      <div className="mt-6">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-500">
-          Native Local (Free)
-        </h3>
-        <div className="mt-3 grid gap-4 md:grid-cols-2">
-          {openSourceModels.map((model) => {
-            const presentation = textModelPresentations[model.model];
-            return (
-              <div
-                key={model.model}
-                onClick={() => onOpenModel(model.model)}
-                className="surface-lift group flex cursor-pointer items-start gap-4 rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-xs transition hover:border-neutral-400 dark:border-white/[0.08] dark:bg-neutral-900/60 dark:hover:border-white/20"
-              >
-                <ModelIcon presentation={presentation} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-neutral-950 group-hover:text-blue-600 dark:text-white dark:group-hover:text-blue-400">
-                      {model.model}
-                    </span>
-                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
-                      Free Local
-                    </span>
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-xs text-neutral-600 dark:text-neutral-400">
-                    {presentation?.capability ?? modelDetails[model.model]}
-                  </p>
-                  <p className="mt-2 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
-                    Runs on device · Zero cloud quota
-                  </p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="mt-8 border-t border-neutral-200/80 pt-6 dark:border-white/[0.08]">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-neutral-500">
-          Cloud API Models
-        </h3>
-        <div className="mt-3 grid gap-4 md:grid-cols-2">
-          {cloudModels.map((model) => {
-            const presentation = textModelPresentations[model.model];
-            return (
-              <div
-                key={model.model}
-                onClick={() => onOpenModel(model.model)}
-                className="surface-lift group flex cursor-pointer items-start gap-4 rounded-2xl border border-neutral-200/80 bg-white p-4 shadow-xs transition hover:border-neutral-400 dark:border-white/[0.08] dark:bg-neutral-900/60 dark:hover:border-white/20"
-              >
-                <ModelIcon presentation={presentation} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-neutral-950 group-hover:text-blue-600 dark:text-white dark:group-hover:text-blue-400">
-                      {model.model}
-                    </span>
-                    {model.recommended && (
-                      <span className="rounded-full bg-neutral-950 px-2 py-0.5 text-[10px] font-semibold text-white dark:bg-white dark:text-neutral-950">
-                        Recommended
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-xs text-neutral-600 dark:text-neutral-400">
-                    {presentation?.capability ?? modelDetails[model.model]}
-                  </p>
-                  <div className="mt-2 flex gap-3 text-[11px] text-neutral-500">
-                    <span>In: <strong className="text-neutral-900 dark:text-neutral-200">{displayPrice(model.inputUsd)}</strong></span>
-                    <span>Out: <strong className="text-neutral-900 dark:text-neutral-200">{displayPrice(model.outputUsd)}</strong></span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </section>
+    </div>
   );
 }
 
 function MediaShowcase() {
   return (
-    <section id="product-demos" className="site-reveal scroll-mt-24 border-y border-neutral-200/80 py-10 dark:border-white/[0.08]" aria-labelledby="media-showcase-heading">
-      <div className="max-w-3xl">
-        <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Multimodal Capabilities</p>
-        <h2 id="media-showcase-heading" className="mt-1.5 text-2xl font-bold tracking-tight text-neutral-950 dark:text-neutral-50 sm:text-3xl">
-          Experience LingoFusion in Action
-        </h2>
-        <p className="mt-2 text-xs leading-5 text-neutral-600 dark:text-neutral-400">
-          High-fidelity benchmarks across document localization, audio dubbing, speech synthesis, and vision translation.
-        </p>
-      </div>
+    <section id="product-demos" className="scroll-mt-24 border-t border-neutral-200 pt-12 dark:border-neutral-800">
+      <h2 className="text-xl font-normal text-neutral-900 dark:text-neutral-50">
+        Multimodal product demos
+      </h2>
+      <p className="mt-1 text-xs text-neutral-500">
+        Review real-time benchmarks across speech, audio, image, and document localization.
+      </p>
 
-      <div className="mt-6 grid gap-5 md:grid-cols-2">
+      <div className="mt-6 grid gap-6 md:grid-cols-2">
         {showcaseItems.map((item, index) => {
           const PlaceholderIcon = item.kind === "video" ? Play : ImageIcon;
           return (
-            <figure
+            <div
               key={item.title}
-              className="media-showcase-card group overflow-hidden rounded-2xl border border-neutral-200/90 bg-white shadow-xs dark:border-white/[0.08] dark:bg-neutral-900/60"
-              style={{ "--media-index": index } as CSSProperties}
+              className="overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950"
             >
-              <div className="media-showcase-frame relative aspect-video overflow-hidden border-b border-neutral-200/80 bg-neutral-100/70 dark:border-white/[0.08] dark:bg-black/30">
+              <div className="relative aspect-video overflow-hidden border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900">
                 {item.src ? (
                   item.kind === "video" ? (
                     <video className="h-full w-full object-cover" controls preload="metadata" src={item.src} />
@@ -823,38 +684,27 @@ function MediaShowcase() {
                     <img className="h-full w-full object-cover" src={item.src} alt={item.title} />
                   )
                 ) : (
-                  <div
-                    role="img"
-                    aria-label={`${item.title} placeholder`}
-                    className="media-placeholder grid h-full w-full place-items-center"
-                  >
-                    <span className="media-placeholder-number">
-                      Demo {String(index + 1).padStart(2, "0")}
-                    </span>
-                    <div className="text-center">
-                      <span className="media-placeholder-icon mx-auto grid h-10 w-10 place-items-center text-neutral-600 dark:text-neutral-300">
-                        <PlaceholderIcon className="h-7 w-7 stroke-[1.5]" />
-                      </span>
-                      <p className="mt-2 text-sm font-semibold text-neutral-950 dark:text-neutral-100">
+                  <div className="grid h-full w-full place-items-center text-center">
+                    <div>
+                      <PlaceholderIcon className="mx-auto h-6 w-6 text-neutral-400" />
+                      <p className="mt-2 text-xs font-semibold text-neutral-900 dark:text-white">
                         {item.title}
                       </p>
-                      <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-neutral-500">
-                        16:9 • Interactive preview
-                      </p>
+                      <p className="text-[10px] text-neutral-400">Interactive demo</p>
                     </div>
                   </div>
                 )}
               </div>
-              <figcaption className="p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-bold text-neutral-950 dark:text-neutral-50">{item.title}</h3>
-                  <span className="shrink-0 rounded-full border border-neutral-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-500 dark:border-white/10 dark:text-neutral-400">
+              <div className="p-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-semibold text-neutral-900 dark:text-neutral-100">{item.title}</h3>
+                  <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400">
                     {item.label}
                   </span>
                 </div>
-                <p className="mt-1.5 text-xs leading-5 text-neutral-600 dark:text-neutral-400">{item.description}</p>
-              </figcaption>
-            </figure>
+                <p className="mt-1 text-xs text-neutral-500">{item.description}</p>
+              </div>
+            </div>
           );
         })}
       </div>

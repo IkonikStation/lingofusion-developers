@@ -252,41 +252,39 @@ export default function App() {
         onToggleMobile={() => setMobileOpen((value) => !value)}
       />
 
-      {isSubscriptionPage ? (
-        <main className="min-w-0 flex-1 overflow-hidden">
-          <SubscriptionPage
-            onApiPrices={() => navigate("API Prices")}
-            onSelectPlan={(planId, billingInterval) =>
-              navigate("Checkout", { plan: planId, billing: billingInterval })
-            }
-            onBuildTeam={(billingInterval) => navigate("Teams", { billing: billingInterval })}
-            onContactSales={(seatCount, seatPlanId, billingInterval) =>
-              navigate("Contact Sales", { seats: seatCount, plan: seatPlanId, billing: billingInterval })
-            }
-            proVariantKey={proVariantKey}
-            onProVariantChange={selectProVariant}
-          />
-        </main>
-      ) : (
-        <div className="flex">
-          <Sidebar
-            activePage={activePage}
-            collapsed={sidebarCollapsed}
-            mobileOpen={mobileOpen}
-            language={language}
-            t={t}
-            tc={tc}
-            onNavigate={navigate}
-            onLanguageChange={setLanguage}
-            onDashboard={() => {
-              setMobileOpen(false);
-              setDashboardOpen(true);
-            }}
-            onToggleCollapse={() => setSidebarCollapsed((value) => !value)}
-            onCloseMobile={() => setMobileOpen(false)}
-          />
+      <div className="flex min-h-[calc(100vh-3.5rem)]">
+        <Sidebar
+          activePage={activePage}
+          collapsed={sidebarCollapsed}
+          mobileOpen={mobileOpen}
+          language={language}
+          t={t}
+          tc={tc}
+          onNavigate={navigate}
+          onLanguageChange={setLanguage}
+          onDashboard={() => {
+            setMobileOpen(false);
+            setDashboardOpen(true);
+          }}
+          onToggleCollapse={() => setSidebarCollapsed((value) => !value)}
+          onCloseMobile={() => setMobileOpen(false)}
+        />
 
-          <main className="min-w-0 flex-1 overflow-hidden px-4 py-6 sm:px-8 sm:py-10 lg:px-12">
+        <main className="min-w-0 flex-1 overflow-hidden px-4 py-6 sm:px-8 sm:py-10 lg:px-12">
+          {isSubscriptionPage ? (
+            <SubscriptionPage
+              onApiPrices={() => navigate("API Prices")}
+              onSelectPlan={(planId, billingInterval) =>
+                navigate("Checkout", { plan: planId, billing: billingInterval })
+              }
+              onBuildTeam={(billingInterval) => navigate("Teams", { billing: billingInterval })}
+              onContactSales={(seatCount, seatPlanId, billingInterval) =>
+                navigate("Contact Sales", { seats: seatCount, plan: seatPlanId, billing: billingInterval })
+              }
+              proVariantKey={proVariantKey}
+              onProVariantChange={selectProVariant}
+            />
+          ) : (
             <div
               className={`mx-auto grid max-w-7xl gap-10 ${
                 activePage === "Pricing" ? "xl:grid-cols-[minmax(0,1fr)_15rem]" : ""
@@ -354,9 +352,9 @@ export default function App() {
                 </aside>
               )}
             </div>
-          </main>
-        </div>
-      )}
+          )}
+        </main>
+      </div>
 
       {dashboardOpen && (
         <DashboardModal tc={tc} onClose={() => setDashboardOpen(false)} onNotify={notify} />
