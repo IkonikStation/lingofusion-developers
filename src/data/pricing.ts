@@ -123,7 +123,7 @@ export const textModelPresentations: Record<string, TextModelPresentation> = {
   },
   "LingoFusion Pro": {
     image: "/assets/models/lingofusion-pro.png",
-    imageScale: 1.72,
+    imageScale: 1,
     capability: "Advanced translation with stronger context, tone, and terminology handling.",
     bestFor: "Professional localization and complex content requiring stronger reasoning.",
     features: ["Advanced context handling", "Terminology consistency", "Tone preservation", "Long-form translation"],
@@ -137,7 +137,7 @@ export const textModelPresentations: Record<string, TextModelPresentation> = {
   },
   "LingoFusion Ultra": {
     image: "/assets/models/lingofusion-ultra.png",
-    imageScale: 1.72,
+    imageScale: 1,
     capability: "Highest-accuracy multilingual reasoning and long-form translation for demanding work.",
     bestFor: "The hardest multilingual work, specialist terminology, and document-scale review.",
     features: ["Maximum translation accuracy", "Specialist terminology", "Document consistency review", "Deep multilingual reasoning"],
