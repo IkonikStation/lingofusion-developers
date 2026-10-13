@@ -20,7 +20,7 @@
 .models-art { aspect-ratio: 1.55; overflow: hidden; background: #edf3f1; border-radius: 6px; display: grid; place-items: center; }
 .models-art-1 { background: #edf0f8; }
 .models-art-2 { background: #f4edf0; }
-.models-art img { width: 100%; height: 100%; object-fit: contain; transition: transform 250ms ease; }
+.models-art img { width: 60%; height: 88%; object-fit: contain; transition: transform 250ms ease; }
 .models-featured:hover img { transform: scale(1.035); }
 .models-featured-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 22px; }
 .models-featured h3 { font-size: 20px; font-weight: 500; }
