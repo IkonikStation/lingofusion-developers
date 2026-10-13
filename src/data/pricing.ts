@@ -115,14 +115,14 @@ export const textModelPresentations: Record<string, TextModelPresentation> = {
     features: ["Multilingual translation", "Summarization", "Entity extraction", "Structured outputs"],
   },
   LingoFusion: {
-    image: "/assets/models/lingofusion-v3.png",
+    image: "/assets/models/lingofusion-v4.png",
     imageScale: 1.15,
     capability: "The recommended default for dependable everyday translation and text generation.",
     bestFor: "Most everyday translation, localization, and multilingual generation workloads.",
     features: ["High-quality translation", "Context preservation", "Text generation", "Streaming responses"],
   },
   "LingoFusion Pro": {
-    image: "/assets/models/lingofusion-pro-v3.png",
+    image: "/assets/models/lingofusion-pro-v4.png",
     imageScale: 1.15,
     capability: "Advanced translation with stronger context, tone, and terminology handling.",
     bestFor: "Professional localization and complex content requiring stronger reasoning.",
@@ -136,7 +136,7 @@ export const textModelPresentations: Record<string, TextModelPresentation> = {
     features: ["Explanation generation", "Educational localization", "Step-by-step rewrites", "Contextual annotations"],
   },
   "LingoFusion Ultra": {
-    image: "/assets/models/lingofusion-ultra-v3.png",
+    image: "/assets/models/lingofusion-ultra-v4.png",
     imageScale: 1.15,
     capability: "Highest-accuracy multilingual reasoning and long-form translation for demanding work.",
     bestFor: "The hardest multilingual work, specialist terminology, and document-scale review.",
