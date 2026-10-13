@@ -157,7 +157,7 @@ export function ModelIcon({
       <img
         src={`${import.meta.env.BASE_URL}${(presentation?.image ?? "/assets/models/lingofusion.png").replace(/^\/+/, "")}`}
         alt=""
-        className={`h-full w-full ${size === "detail" || presentation?.imageFit === "contain" ? "object-contain" : "object-cover"}`}
+        className={`h-full w-full ${size !== "detail" && presentation?.imageFit === "contain" ? "object-contain" : "object-cover"}`}
         style={{ transform: `scale(${imageScale})` }}
       />
     </span>
