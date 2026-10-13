@@ -25,6 +25,7 @@ import {
 } from "./lib/utils";
 
 // Pages
+import { Footer } from "./components/Footer";
 import { CheckoutPage } from "./pages/CheckoutPage";
 import { ContactSalesPage } from "./pages/ContactSalesPage";
 import { DocsPage } from "./pages/DocsPage";
@@ -353,6 +354,8 @@ export default function App() {
               )}
             </div>
           )}
+
+          <Footer onNavigate={navigate} />
         </main>
       </div>
 
