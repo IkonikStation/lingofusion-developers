@@ -146,24 +146,19 @@ export function ModelIcon({
   presentation?: TextModelPresentation;
   size?: "catalog" | "detail";
 }) {
-  const sizeClass = size === "detail" ? "h-16 w-16 rounded-xl" : "h-10 w-10 rounded-lg";
-  const imageScale = presentation?.imageScale ?? 1.32;
+  const sizeClass = size === "detail" ? "h-16 w-16" : "h-10 w-10";
+  const imageScale = presentation?.imageScale ?? 1.24;
 
   return (
     <span
-      className={`${sizeClass} relative shrink-0 overflow-hidden bg-neutral-100 shadow-2xs dark:bg-neutral-900`}
-      style={{ isolation: "isolate" }}
+      className={`${sizeClass} relative shrink-0 flex items-center justify-center select-none`}
       aria-hidden="true"
     >
       <img
         src={`${import.meta.env.BASE_URL}${(presentation?.image ?? "/assets/models/lingofusion-v4.png").replace(/^\/+/, "")}`}
         alt=""
-        className="h-full w-full object-cover"
-        style={{ transform: `scale(${imageScale})`, willChange: "transform" }}
-      />
-      <span
-        className="pointer-events-none absolute inset-0 rounded-[inherit] border border-black/10 dark:border-white/15"
-        aria-hidden="true"
+        className="h-full w-full object-contain pointer-events-none drop-shadow-xs"
+        style={{ transform: `scale(${imageScale})` }}
       />
     </span>
   );
