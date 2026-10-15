@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowRight, Search, X } from "lucide-react";
 import { useState } from "react";
-import { SelectField } from "../components/shared/FormFields";
+import { ModelIcon, SelectField } from "../components/shared/FormFields";
 import { nativeLocalModels } from "../data/nativeLocal";
 import { textModelPresentations, textModelsByPricingMode, webSearchPricing } from "../data/pricing";
 import type { TextModel, TextPricingMode } from "../data/pricing";
@@ -89,13 +89,22 @@ export function ModelsPage({ onOpenModel }: { onOpenModel: (model: string) => vo
         </div>
         <div className="models-catalog">
           <div className="models-catalog-labels" aria-hidden="true"><span>Model</span><span>Context</span><span>Input / 1M</span><span>Output / 1M</span><span /></div>
-          {filtered.map((model) => modelLink(model, "models-catalog-row", <>
-            <div><h3>{model.model}{model.local && <span className="models-local-label">Local</span>}</h3><p>{textModelPresentations[model.model]?.capability}</p></div>
-            <span className="models-spec"><small>Context</small>{localSpecs(model)?.context ?? "1M tokens"}</span>
-            <span className="models-spec"><small>Input / 1M</small>{model.local ? "Free" : `$${model.inputUsd.toFixed(2)}`}</span>
-            <span className="models-spec"><small>Output / 1M</small>{model.local ? "Free" : `$${model.outputUsd.toFixed(2)}`}</span>
-            <ArrowRight className="models-row-arrow" size={18} />
-          </>))}
+          {filtered.map((model) => {
+            const presentation = textModelPresentations[model.model];
+            return modelLink(model, "models-catalog-row", <>
+              <div className="flex items-center gap-3.5 min-w-0">
+                <ModelIcon presentation={presentation} size="catalog" />
+                <div className="min-w-0">
+                  <h3>{model.model}{model.local && <span className="models-local-label">Local</span>}</h3>
+                  <p>{presentation?.capability}</p>
+                </div>
+              </div>
+              <span className="models-spec"><small>Context</small>{localSpecs(model)?.context ?? "1M tokens"}</span>
+              <span className="models-spec"><small>Input / 1M</small>{model.local ? "Free" : `$${model.inputUsd.toFixed(2)}`}</span>
+              <span className="models-spec"><small>Output / 1M</small>{model.local ? "Free" : `$${model.outputUsd.toFixed(2)}`}</span>
+              <ArrowRight className="models-row-arrow" size={18} />
+            </>);
+          })}
           {!filtered.length && <div className="models-empty"><h3>No models found</h3><p>Try another name or category.</p><button type="button" className="models-text-link" onClick={() => { setSearchQuery(""); setActiveTab("all"); }}>Reset filters <X size={15} /></button></div>}
         </div>
         <p className="mt-4 text-xs text-neutral-500">Standard API rates in USD. Local models run on your own hardware with no per-token API charge.</p>

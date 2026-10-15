@@ -147,22 +147,23 @@ export function ModelIcon({
   size?: "catalog" | "detail";
 }) {
   const sizeClass = size === "detail" ? "h-16 w-16 rounded-xl" : "h-10 w-10 rounded-lg";
-  const imageScale = presentation?.imageScale ?? 1;
-  const resolvedImageScale = size === "detail" && imageScale > 1 ? imageScale - 0.04 : imageScale;
-  const imageTransform = size === "detail" && imageScale > 1
-    ? `translateY(1.5px) scale(${resolvedImageScale})`
-    : `scale(${resolvedImageScale})`;
+  const imageScale = presentation?.imageScale ?? 1.32;
 
   return (
     <span
-      className={`${sizeClass} relative shrink-0 overflow-hidden border border-neutral-200 bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-900`}
+      className={`${sizeClass} relative shrink-0 overflow-hidden bg-neutral-100 shadow-2xs dark:bg-neutral-900`}
+      style={{ isolation: "isolate" }}
       aria-hidden="true"
     >
       <img
-        src={`${import.meta.env.BASE_URL}${(presentation?.image ?? "/assets/models/lingofusion.png").replace(/^\/+/, "")}`}
+        src={`${import.meta.env.BASE_URL}${(presentation?.image ?? "/assets/models/lingofusion-v4.png").replace(/^\/+/, "")}`}
         alt=""
-        className={`h-full w-full ${size !== "detail" && presentation?.imageFit === "contain" ? "object-contain" : "object-cover"}`}
-        style={{ transform: imageTransform }}
+        className="h-full w-full object-cover"
+        style={{ transform: `scale(${imageScale})`, willChange: "transform" }}
+      />
+      <span
+        className="pointer-events-none absolute inset-0 rounded-[inherit] border border-black/10 dark:border-white/15"
+        aria-hidden="true"
       />
     </span>
   );
