@@ -1,6 +1,7 @@
 import {
   Activity,
   AlertCircle,
+  ArrowRightLeft,
   Check,
   ClipboardCopy,
   Code2,
@@ -9,7 +10,6 @@ import {
   Play,
   Plus,
   RefreshCw,
-  Send,
   Sliders,
   Sparkles,
   Square,
@@ -19,6 +19,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ModelIcon } from "../components/shared/FormFields";
 import {
   browserApi,
   calculateGrossDeposit,
@@ -31,17 +32,21 @@ import type {
   ModelPricingRecord,
   UsageLedgerRecord,
 } from "../data/browserApi";
+import { playgroundLanguages } from "../data/playgroundLanguages";
+import { textModelPresentations } from "../data/pricing";
 import { pageQuery } from "../lib/utils";
 
-type ChatTurn = {
+type TranslationRun = {
   id: string;
-  role: "user" | "assistant";
-  content: string;
-  model?: string;
+  model: string;
   provider?: string;
-  promptTokens?: number;
-  completionTokens?: number;
-  costUsd?: number;
+  fromLanguage: string;
+  toLanguage: string;
+  inputText: string;
+  outputText: string;
+  promptTokens: number;
+  completionTokens: number;
+  costUsd: number;
   streaming?: boolean;
   aborted?: boolean;
   createdAt: string;
@@ -55,6 +60,15 @@ type ApiKeyItem = {
   status: string;
   createdAt: string;
 };
+
+const ALLOWED_LINGOFUSION_MODELS = [
+  "LingoFusion Nano",
+  "LingoFusion Lite",
+  "LingoFusion",
+  "LingoFusion Pro",
+  "LingoFusion Explain",
+  "LingoFusion Ultra",
+];
 
 async function callApi<T>(path: string, options?: RequestInit): Promise<T> {
   if (shouldUseBrowserApi()) {
@@ -102,20 +116,24 @@ export function PlaygroundPage({
 }) {
   const requestedModel = pageQuery().get("model");
   const [models, setModels] = useState<ModelPricingRecord[]>(defaultBrowserModelPricing);
-  const [selectedModelId, setSelectedModelId] = useState<string>(
-    requestedModel || "gpt-4o",
-  );
-  const [systemPrompt, setSystemPrompt] = useState<string>(
-    "You are a helpful, accurate AI assistant.",
-  );
-  const [userInput, setUserInput] = useState<string>(
-    "Explain how sub-cent token billing and Stripe fee gross-up work in 2 concise sentences.",
-  );
-  const [temperature, setTemperature] = useState<number>(0.7);
+  const [selectedModelId, setSelectedModelId] = useState<string>(() => {
+    if (requestedModel && ALLOWED_LINGOFUSION_MODELS.includes(requestedModel)) {
+      return requestedModel;
+    }
+    return "LingoFusion";
+  });
+
+  const [fromLanguage, setFromLanguage] = useState<string>("English");
+  const [toLanguage, setToLanguage] = useState<string>("French");
+  const [userInput, setUserInput] = useState<string>("Hello, how are you?");
+  const [translatedOutput, setTranslatedOutput] = useState<string>("");
+  const [latestRun, setLatestRun] = useState<TranslationRun | null>(null);
+  const [history, setHistory] = useState<TranslationRun[]>([]);
+
+  const [temperature, setTemperature] = useState<number>(0.3);
   const [maxTokens, setMaxTokens] = useState<number>(512);
   const [streamToggle, setStreamToggle] = useState<boolean>(true);
 
-  const [messages, setMessages] = useState<ChatTurn[]>([]);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -126,7 +144,7 @@ export function PlaygroundPage({
   const [depositLedger, setDepositLedger] = useState<DepositLedgerRecord[]>([]);
   const [apiKeys, setApiKeys] = useState<ApiKeyItem[]>([]);
 
-  // Stripe Deposit Modal / Panel state
+  // Stripe Deposit state
   const [depositAmount, setDepositAmount] = useState<number>(10);
   const [depositBusy, setDepositBusy] = useState<boolean>(false);
   const [lastCheckoutSession, setLastCheckoutSession] = useState<{
@@ -140,11 +158,10 @@ export function PlaygroundPage({
   const [depositStatusMessage, setDepositStatusMessage] = useState<string | null>(null);
 
   // API Key Quick Generator state
-  const [newKeyName, setNewKeyName] = useState<string>("Production Proxy Key");
+  const [newKeyName, setNewKeyName] = useState<string>("LingoFusion API Key");
   const [generatedSecret, setGeneratedSecret] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Sync external balanceUsd prop
   useEffect(() => {
     if (typeof balanceUsd === "number" && Number.isFinite(balanceUsd)) {
       setLiveBalance(balanceUsd);
@@ -161,21 +178,25 @@ export function PlaygroundPage({
     try {
       const modelsResp = await callApi<{ object: string; data: ModelPricingRecord[] }>("/v1/models");
       if (Array.isArray(modelsResp.data) && modelsResp.data.length > 0) {
-        setModels(modelsResp.data);
+        const filteredModels = modelsResp.data.filter((m) =>
+          ALLOWED_LINGOFUSION_MODELS.includes(m.model_id),
+        );
+        const list = filteredModels.length > 0 ? filteredModels : defaultBrowserModelPricing;
+        setModels(list);
         if (
           requestedModel &&
-          modelsResp.data.some((m) => m.model_id.toLowerCase() === requestedModel.toLowerCase())
+          list.some((m) => m.model_id.toLowerCase() === requestedModel.toLowerCase())
         ) {
-          const match = modelsResp.data.find(
+          const match = list.find(
             (m) => m.model_id.toLowerCase() === requestedModel.toLowerCase(),
           );
           if (match) setSelectedModelId(match.model_id);
-        } else if (!modelsResp.data.some((m) => m.model_id === selectedModelId)) {
-          setSelectedModelId(modelsResp.data[0].model_id);
+        } else if (!list.some((m) => m.model_id === selectedModelId)) {
+          setSelectedModelId(list[0].model_id);
         }
       }
     } catch {
-      // Keep default models
+      // Keep default LingoFusion Nano to Ultra models
     }
 
     try {
@@ -204,59 +225,52 @@ export function PlaygroundPage({
     () =>
       models.find((m) => m.model_id === selectedModelId) ??
       models[0] ??
-      defaultBrowserModelPricing[0],
+      defaultBrowserModelPricing[2],
     [models, selectedModelId],
   );
+
+  const presentation = textModelPresentations[activeModel.model_id];
 
   const depositBreakdown = useMemo(
     () => calculateGrossDeposit(Math.max(0, Number(depositAmount) || 0)),
     [depositAmount],
   );
 
-  const handleRunChat = async () => {
+  const handleRunTranslation = async () => {
     if (!userInput.trim() || isRunning) return;
     setErrorBanner(null);
     setIsRunning(true);
+    setTranslatedOutput("");
 
-    const userTurnId = `user-${Date.now()}`;
-    const assistantTurnId = `asst-${Date.now()}`;
+    const runId = `run-${Date.now()}`;
     const currentInput = userInput.trim();
-
-    const conversationMessages: Array<{ role: string; content: string }> = [];
-    if (systemPrompt.trim()) {
-      conversationMessages.push({ role: "system", content: systemPrompt.trim() });
-    }
-    for (const m of messages) {
-      conversationMessages.push({ role: m.role, content: m.content });
-    }
-    conversationMessages.push({ role: "user", content: currentInput });
-
-    const userTurn: ChatTurn = {
-      id: userTurnId,
-      role: "user",
-      content: currentInput,
-      createdAt: new Date().toISOString(),
-    };
-
-    const placeholderAssistant: ChatTurn = {
-      id: assistantTurnId,
-      role: "assistant",
-      content: "",
-      model: activeModel.model_id,
-      provider: activeModel.provider,
-      streaming: streamToggle,
-      createdAt: new Date().toISOString(),
-    };
-
-    setMessages((prev) => [...prev, userTurn, placeholderAssistant]);
 
     const payload = {
       model: activeModel.model_id,
-      messages: conversationMessages,
+      from_language: fromLanguage,
+      to_language: toLanguage,
+      input: currentInput,
+      messages: [{ role: "user", content: currentInput }],
       temperature,
       max_tokens: maxTokens,
       stream: streamToggle,
     };
+
+    const initialRun: TranslationRun = {
+      id: runId,
+      model: activeModel.model_id,
+      provider: activeModel.provider,
+      fromLanguage,
+      toLanguage,
+      inputText: currentInput,
+      outputText: "",
+      promptTokens: Math.max(1, Math.ceil(currentInput.length / 4)),
+      completionTokens: 0,
+      costUsd: 0,
+      streaming: streamToggle,
+      createdAt: new Date().toISOString(),
+    };
+    setLatestRun(initialRun);
 
     if (shouldUseBrowserApi() || !streamToggle) {
       try {
@@ -278,8 +292,8 @@ export function PlaygroundPage({
         });
 
         const fullContent = response.choices?.[0]?.message?.content || "";
-        const pTokens = response.usage?.prompt_tokens ?? 0;
-        const cTokens = response.usage?.completion_tokens ?? 0;
+        const pTokens = response.usage?.prompt_tokens ?? 1;
+        const cTokens = response.usage?.completion_tokens ?? 1;
         const costUsd = response.usage?.cost_usd ?? 0;
 
         if (streamToggle && fullContent) {
@@ -294,38 +308,30 @@ export function PlaygroundPage({
                 partialCompletionTokens * (activeModel.output_per_million / 1_000_000)
               ).toFixed(6),
             );
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantTurnId
-                  ? {
-                      ...m,
-                      content: acc,
-                      promptTokens: pTokens,
-                      completionTokens: partialCompletionTokens,
-                      costUsd: partialCost,
-                      streaming: i < pieces.length - 1,
-                    }
-                  : m,
-              ),
-            );
+            setTranslatedOutput(acc);
+            setLatestRun({
+              ...initialRun,
+              outputText: acc,
+              promptTokens: pTokens,
+              completionTokens: partialCompletionTokens,
+              costUsd: partialCost,
+              streaming: i < pieces.length - 1,
+            });
             await new Promise((r) => setTimeout(r, 15));
           }
         }
 
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantTurnId
-              ? {
-                  ...m,
-                  content: fullContent,
-                  promptTokens: pTokens,
-                  completionTokens: cTokens,
-                  costUsd,
-                  streaming: false,
-                }
-              : m,
-          ),
-        );
+        const completedRun: TranslationRun = {
+          ...initialRun,
+          outputText: fullContent,
+          promptTokens: pTokens,
+          completionTokens: cTokens,
+          costUsd,
+          streaming: false,
+        };
+        setTranslatedOutput(fullContent);
+        setLatestRun(completedRun);
+        setHistory((prev) => [completedRun, ...prev.slice(0, 9)]);
 
         if (typeof response.usage?.balance_usd === "number") {
           updateBalance(response.usage.balance_usd);
@@ -334,7 +340,7 @@ export function PlaygroundPage({
       } catch (err) {
         const message = err instanceof Error ? err.message : "Request failed";
         setErrorBanner(message);
-        setMessages((prev) => prev.filter((m) => m.id !== assistantTurnId));
+        setLatestRun(null);
       } finally {
         setIsRunning(false);
       }
@@ -369,7 +375,7 @@ export function PlaygroundPage({
       const decoder = new TextDecoder();
       let buffer = "";
       let accumulatedText = "";
-      let promptTokens = Math.max(1, Math.ceil((systemPrompt.length + currentInput.length) / 4));
+      let promptTokens = Math.max(1, Math.ceil(currentInput.length / 4));
       let completionTokens = 0;
       let finalCostUsd: number | undefined;
 
@@ -397,19 +403,15 @@ export function PlaygroundPage({
                     completionTokens * (activeModel.output_per_million / 1_000_000)
                   ).toFixed(6),
                 );
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantTurnId
-                      ? {
-                          ...m,
-                          content: accumulatedText,
-                          promptTokens,
-                          completionTokens,
-                          costUsd: liveCost,
-                        }
-                      : m,
-                  ),
-                );
+                setTranslatedOutput(accumulatedText);
+                setLatestRun({
+                  ...initialRun,
+                  outputText: accumulatedText,
+                  promptTokens,
+                  completionTokens,
+                  costUsd: liveCost,
+                  streaming: true,
+                });
               }
               if (parsed.usage) {
                 if (typeof parsed.usage.prompt_tokens === "number") {
@@ -442,39 +444,28 @@ export function PlaygroundPage({
           ).toFixed(6),
         );
 
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === assistantTurnId
-            ? {
-                ...m,
-                content: accumulatedText,
-                promptTokens,
-                completionTokens,
-                costUsd: computedCost,
-                streaming: false,
-              }
-            : m,
-        ),
-      );
+      const completedRun: TranslationRun = {
+        ...initialRun,
+        outputText: accumulatedText,
+        promptTokens,
+        completionTokens,
+        costUsd: computedCost,
+        streaming: false,
+      };
+      setTranslatedOutput(accumulatedText);
+      setLatestRun(completedRun);
+      setHistory((prev) => [completedRun, ...prev.slice(0, 9)]);
       await loadModelsAndState();
     } catch (err) {
       if ((err as Error)?.name === "AbortError") {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === assistantTurnId
-              ? {
-                  ...m,
-                  streaming: false,
-                  aborted: true,
-                }
-              : m,
-          ),
+        setLatestRun((prev) =>
+          prev ? { ...prev, streaming: false, aborted: true } : null,
         );
         await loadModelsAndState();
       } else {
         const message = err instanceof Error ? err.message : "Stream failed";
         setErrorBanner(message);
-        setMessages((prev) => prev.filter((m) => m.id !== assistantTurnId));
+        setLatestRun(null);
       }
     } finally {
       abortControllerRef.current = null;
@@ -484,6 +475,15 @@ export function PlaygroundPage({
 
   const handleStopStream = () => {
     abortControllerRef.current?.abort();
+  };
+
+  const swapLanguages = () => {
+    setFromLanguage(toLanguage);
+    setToLanguage(fromLanguage);
+    if (translatedOutput) {
+      setUserInput(translatedOutput);
+      setTranslatedOutput(userInput);
+    }
   };
 
   const handleCreateStripeDeposit = async () => {
@@ -601,8 +601,9 @@ export function PlaygroundPage({
   -H "Authorization: Bearer ${generatedSecret || "sk_live_YOUR_API_KEY"}" \\
   -d '{
     "model": "${activeModel.model_id}",
+    "from_language": "${fromLanguage}",
+    "to_language": "${toLanguage}",
     "messages": [
-      {"role": "system", "content": ${JSON.stringify(systemPrompt)}},
       {"role": "user", "content": ${JSON.stringify(userInput)}}
     ],
     "temperature": ${temperature},
@@ -612,23 +613,22 @@ export function PlaygroundPage({
 
   return (
     <section className="mx-auto max-w-7xl py-4 sm:py-8">
-      {/* Top Header Bar with Live Balance Indicator */}
+      {/* Top Playground Header Bar */}
       <div className="flex flex-col gap-4 rounded-2xl border border-neutral-200/90 bg-neutral-50/70 p-5 shadow-xs backdrop-blur-sm dark:border-white/10 dark:bg-neutral-900/60 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-neutral-200/80 bg-white px-3 py-1 text-xs font-semibold text-neutral-800 shadow-2xs dark:border-white/10 dark:bg-white/[0.06] dark:text-neutral-200">
-            <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-            Prepaid LLM Proxy & Interactive Playground
+        <div className="flex items-center gap-4">
+          <ModelIcon presentation={presentation} size="catalog" />
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-neutral-200/80 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-neutral-800 shadow-2xs dark:border-white/10 dark:bg-white/[0.06] dark:text-neutral-200">
+              <Sparkles className="h-3 w-3 text-amber-500" />
+              LingoFusion Playground
+            </div>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-950 dark:text-white sm:text-3xl">
+              {activeModel.model_id}
+            </h1>
+            <p className="mt-0.5 text-sm text-neutral-600 dark:text-neutral-400">
+              {presentation?.capability ?? "Select a LingoFusion model, enter source text, and generate translated output."}
+            </p>
           </div>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-neutral-950 dark:text-white sm:text-3xl">
-            Model Playground & Sub-Cent Metering
-          </h1>
-          <p className="mt-1 text-sm text-neutral-600 dark:text-neutral-400">
-            Test models via session-authenticated playground or call{" "}
-            <code className="rounded bg-neutral-200/70 px-1.5 py-0.5 font-mono text-xs dark:bg-white/10">
-              POST /v1/chat/completions
-            </code>{" "}
-            with OpenAI SDK-compatible API keys.
-          </p>
         </div>
 
         {/* Live Balance Indicator Card in Playground Header */}
@@ -642,7 +642,7 @@ export function PlaygroundPage({
             </div>
             <div>
               <span className="block text-[11px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
-                Live Prepaid Balance
+                Live Balance
               </span>
               <span
                 data-testid="live-balance-value"
@@ -659,7 +659,7 @@ export function PlaygroundPage({
             className="pressable inline-flex h-11 items-center gap-2 rounded-xl border border-neutral-300 bg-white px-4 text-xs font-semibold text-neutral-900 shadow-2xs transition hover:bg-neutral-50 dark:border-white/15 dark:bg-neutral-800 dark:text-white dark:hover:bg-neutral-700"
           >
             <Terminal className="h-4 w-4" />
-            Full API Dashboard
+            API Dashboard
           </button>
         </div>
       </div>
@@ -684,24 +684,28 @@ export function PlaygroundPage({
       )}
 
       {/* Main 2-Column Playground Layout */}
-      <div className="mt-6 grid gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
-        {/* Left Column: Controls, Model Selector, Parameters, Stripe Deposit */}
+      <div className="mt-6 grid gap-6 lg:grid-cols-[21rem_minmax(0,1fr)]">
+        {/* Left Column: Model Selector (LingoFusion Nano to Ultra), Parameters, & Stripe Deposit */}
         <div className="space-y-5">
           {/* Model & Parameters Card */}
           <div className="rounded-2xl border border-neutral-200/90 bg-white p-5 shadow-xs dark:border-white/10 dark:bg-neutral-900/70">
             <div className="flex items-center justify-between">
               <h2 className="flex items-center gap-2 text-sm font-semibold text-neutral-950 dark:text-white">
                 <Sliders className="h-4 w-4 text-neutral-500" />
-                Model & Parameters
+                Model & Settings
               </h2>
-              <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-mono text-[10px] font-medium text-neutral-600 dark:bg-white/10 dark:text-neutral-300">
-                GET /v1/models
-              </span>
+              <button
+                type="button"
+                onClick={() => onNavigate("Models")}
+                className="text-xs font-medium text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
+              >
+                All Models →
+              </button>
             </div>
 
-            {/* Model Selector Dropdown */}
+            {/* Model Selector Dropdown (Strictly LingoFusion Nano to Ultra) */}
             <label className="mt-4 block text-xs font-medium text-neutral-700 dark:text-neutral-300">
-              Active Model
+              Model
               <select
                 aria-label="Select Model"
                 data-testid="playground-model-select"
@@ -711,7 +715,7 @@ export function PlaygroundPage({
               >
                 {models.map((m) => (
                   <option key={m.model_id} value={m.model_id}>
-                    {m.model_id} ({m.provider}) — ${m.input_per_million.toFixed(2)} in / $
+                    {m.model_id} — ${m.input_per_million.toFixed(2)} in / $
                     {m.output_per_million.toFixed(2)} out per 1M
                   </option>
                 ))}
@@ -723,20 +727,14 @@ export function PlaygroundPage({
               <div>
                 <span className="text-neutral-500 dark:text-neutral-400">Input / 1M tokens</span>
                 <p className="mt-0.5 font-mono text-sm font-semibold text-neutral-950 dark:text-white">
-                  ${activeModel.input_per_million.toFixed(4)}
+                  ${activeModel.input_per_million.toFixed(2)}
                 </p>
               </div>
               <div>
                 <span className="text-neutral-500 dark:text-neutral-400">Output / 1M tokens</span>
                 <p className="mt-0.5 font-mono text-sm font-semibold text-neutral-950 dark:text-white">
-                  ${activeModel.output_per_million.toFixed(4)}
+                  ${activeModel.output_per_million.toFixed(2)}
                 </p>
-              </div>
-              <div className="col-span-2 border-t border-neutral-200/70 pt-2 text-[11px] text-neutral-500 dark:border-white/10 dark:text-neutral-400">
-                Upstream:{" "}
-                <code className="font-mono text-neutral-800 dark:text-neutral-200">
-                  {activeModel.provider}/{activeModel.upstream_model_name}
-                </code>
               </div>
             </div>
 
@@ -797,10 +795,10 @@ export function PlaygroundPage({
             <div className="mt-4 flex items-center justify-between rounded-xl border border-neutral-200/80 bg-neutral-50/70 px-3.5 py-2.5 dark:border-white/10 dark:bg-white/[0.03]">
               <div>
                 <span className="block text-xs font-semibold text-neutral-900 dark:text-white">
-                  Stream Response (SSE)
+                  Stream Output
                 </span>
                 <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
-                  Injects <code>include_usage: true</code>
+                  Real-time token streaming
                 </span>
               </div>
               <button
@@ -829,21 +827,19 @@ export function PlaygroundPage({
             <div className="flex items-center justify-between">
               <h2 className="flex items-center gap-2 text-sm font-semibold text-neutral-950 dark:text-white">
                 <CreditCard className="h-4 w-4 text-neutral-500" />
-                Stripe Deposit (Fee Gross-Up)
+                Deposit Credits (Stripe)
               </h2>
               <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300">
                 Min $5.00
               </span>
             </div>
             <p className="mt-1.5 text-xs leading-5 text-neutral-600 dark:text-neutral-400">
-              Stripe fees (2.9% + $0.30) are automatically grossed up via{" "}
-              <code className="font-mono text-[11px]">(Net + 0.30) / (1 - 0.029)</code> so your
-              account nets 100% of your target deposit.
+              Stripe fees (2.9% + $0.30) are automatically grossed up so your balance receives the exact net deposit.
             </p>
 
             <div className="mt-3">
               <label className="block text-xs font-medium text-neutral-700 dark:text-neutral-300">
-                Target Net Deposit (USD)
+                Net Deposit Amount (USD)
                 <div className="mt-1.5 flex gap-2">
                   <input
                     type="number"
@@ -889,7 +885,7 @@ export function PlaygroundPage({
                 </span>
               </div>
               <div className="flex justify-between border-t border-neutral-200/80 pt-1.5 font-semibold text-neutral-950 dark:border-white/10 dark:text-white">
-                <span>Gross Stripe Charge:</span>
+                <span>Gross Charge:</span>
                 <span className="font-mono" data-testid="gross-charge-preview">
                   ${depositBreakdown.grossChargedUsd.toFixed(2)} ({depositBreakdown.grossAmountCents}{" "}
                   ¢)
@@ -908,7 +904,7 @@ export function PlaygroundPage({
                 <CreditCard className="h-3.5 w-3.5" />
                 {depositBusy
                   ? "Processing..."
-                  : `Checkout $${depositBreakdown.grossChargedUsd.toFixed(2)} via Stripe`}
+                  : `Deposit $${depositBreakdown.netDepositedUsd.toFixed(2)} (Charged $${depositBreakdown.grossChargedUsd.toFixed(2)})`}
               </button>
 
               <button
@@ -919,7 +915,7 @@ export function PlaygroundPage({
                 className="pressable inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50/80 px-3 text-xs font-semibold text-emerald-900 transition hover:bg-emerald-100 disabled:opacity-50 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
               >
                 <Zap className="h-3.5 w-3.5" />
-                Instant Complete Webhook (+${depositBreakdown.netDepositedUsd.toFixed(2)})
+                Instant Credit +${depositBreakdown.netDepositedUsd.toFixed(2)}
               </button>
             </div>
 
@@ -930,15 +926,14 @@ export function PlaygroundPage({
             )}
           </div>
 
-          {/* Direct Proxy API Keys Card */}
+          {/* API Keys Card */}
           <div className="rounded-2xl border border-neutral-200/90 bg-white p-5 shadow-xs dark:border-white/10 dark:bg-neutral-900/70">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-neutral-950 dark:text-white">
               <KeyRound className="h-4 w-4 text-neutral-500" />
-              OpenAI Proxy API Keys
+              API Keys
             </h2>
             <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
-              Keys are SHA-256 hashed in <code>api_keys</code> and authenticate{" "}
-              <code>POST /v1/chat/completions</code>.
+              Create a key to call <code>/v1/chat/completions</code> directly.
             </p>
 
             <div className="mt-3 flex gap-2">
@@ -963,7 +958,7 @@ export function PlaygroundPage({
             {generatedSecret && (
               <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-100">
                 <div className="flex items-center justify-between font-semibold">
-                  <span>New Secret Key (copy now):</span>
+                  <span>Secret Key (shown once):</span>
                   <button
                     type="button"
                     onClick={() => copyToClipboard(generatedSecret, "secret")}
@@ -987,8 +982,8 @@ export function PlaygroundPage({
             )}
 
             {apiKeys.length > 0 && (
-              <div className="mt-3 max-h-36 space-y-1.5 overflow-y-auto">
-                {apiKeys.slice(0, 5).map((k) => (
+              <div className="mt-3 max-h-32 space-y-1.5 overflow-y-auto">
+                {apiKeys.slice(0, 4).map((k) => (
                   <div
                     key={k.id}
                     className="flex items-center justify-between rounded-lg border border-neutral-200/70 bg-neutral-50/70 px-2.5 py-1.5 text-xs dark:border-white/10 dark:bg-white/[0.02]"
@@ -1011,179 +1006,235 @@ export function PlaygroundPage({
           </div>
         </div>
 
-        {/* Right Column: Interactive Prompts, Chat Transcript with Real-Time Token/Cost Badges, & Ledger */}
-        <div className=" flex flex-col gap-5">
-          {/* System Prompt & User Message Composer */}
+        {/* Right Column: Clean Input -> Translated Output Box (No System Prompt) */}
+        <div className="flex flex-col gap-5">
           <div className="rounded-2xl border border-neutral-200/90 bg-white p-5 shadow-xs dark:border-white/10 dark:bg-neutral-900/70">
-            <div className="grid gap-4">
-              <div>
-                <label
-                  htmlFor="playground-system-prompt"
-                  className="block text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400"
-                >
-                  System Prompt
+            {/* Language Pair Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200/80 pb-4 dark:border-white/10">
+              <div className="flex flex-1 flex-wrap items-center gap-2 sm:gap-3">
+                <label className="flex items-center gap-2 text-xs font-medium text-neutral-600 dark:text-neutral-400">
+                  <span>From</span>
+                  <select
+                    aria-label="Source language"
+                    value={fromLanguage}
+                    onChange={(e) => setFromLanguage(e.target.value)}
+                    className="h-9 rounded-lg border border-neutral-300 bg-white px-3 text-xs font-semibold text-neutral-950 outline-none dark:border-white/15 dark:bg-neutral-950 dark:text-white"
+                  >
+                    {playgroundLanguages.map((lang) => (
+                      <option key={lang.code} value={lang.name}>
+                        {lang.name}
+                      </option>
+                    ))}
+                  </select>
                 </label>
-                <textarea
-                  id="playground-system-prompt"
-                  data-testid="playground-system-prompt"
-                  rows={2}
-                  value={systemPrompt}
-                  onChange={(e) => setSystemPrompt(e.target.value)}
-                  placeholder="Enter system instructions..."
-                  className="mt-1.5 w-full rounded-xl border border-neutral-300 bg-neutral-50/60 px-3.5 py-2.5 text-sm text-neutral-950 outline-none transition focus:border-neutral-900 focus:bg-white dark:border-white/15 dark:bg-neutral-950 dark:text-white"
-                />
+
+                <button
+                  type="button"
+                  onClick={swapLanguages}
+                  title="Swap languages"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-neutral-200 bg-neutral-50 text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-950 dark:border-white/10 dark:bg-white/5 dark:text-neutral-300 dark:hover:bg-white/10"
+                >
+                  <ArrowRightLeft className="h-3.5 w-3.5" />
+                </button>
+
+                <label className="flex items-center gap-2 text-xs font-medium text-neutral-600 dark:text-neutral-400">
+                  <span>To</span>
+                  <select
+                    aria-label="Target language"
+                    value={toLanguage}
+                    onChange={(e) => setToLanguage(e.target.value)}
+                    className="h-9 rounded-lg border border-neutral-300 bg-white px-3 text-xs font-semibold text-neutral-950 outline-none dark:border-white/15 dark:bg-neutral-950 dark:text-white"
+                  >
+                    {playgroundLanguages.map((lang) => (
+                      <option key={lang.code} value={lang.name}>
+                        {lang.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
 
-              <div>
-                <label
-                  htmlFor="playground-user-input"
-                  className="block text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400"
-                >
-                  User Message
-                </label>
+              <div className="flex items-center gap-2">
+                {isRunning && streamToggle ? (
+                  <button
+                    type="button"
+                    onClick={handleStopStream}
+                    data-testid="playground-stop-btn"
+                    className="pressable inline-flex h-10 items-center gap-2 rounded-xl bg-red-600 px-5 text-xs font-semibold text-white shadow-xs hover:bg-red-700"
+                  >
+                    <Square className="h-3.5 w-3.5 fill-current" />
+                    Stop
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={isRunning || !userInput.trim()}
+                    onClick={handleRunTranslation}
+                    data-testid="playground-run-btn"
+                    className="pressable inline-flex h-10 items-center gap-2 rounded-xl bg-neutral-950 px-5 text-xs font-semibold text-white shadow-xs transition hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+                  >
+                    <Play className="h-3.5 w-3.5 fill-current" />
+                    {isRunning ? "Translating..." : "Translate"}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Side-by-Side Input Text and Translated Output Text */}
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              {/* Input Box */}
+              <div className="flex flex-col">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <label
+                    htmlFor="playground-user-input"
+                    className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400"
+                  >
+                    Input Text ({fromLanguage})
+                  </label>
+                  {userInput && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUserInput("");
+                        setTranslatedOutput("");
+                        setLatestRun(null);
+                      }}
+                      className="inline-flex items-center gap-1 text-[11px] text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      Clear
+                    </button>
+                  )}
+                </div>
                 <textarea
                   id="playground-user-input"
                   data-testid="playground-user-input"
-                  rows={3}
+                  rows={8}
                   value={userInput}
                   onChange={(e) => setUserInput(e.target.value)}
                   onKeyDown={(e) => {
                     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
                       e.preventDefault();
-                      handleRunChat();
+                      handleRunTranslation();
                     }
                   }}
-                  placeholder="Ask a question or test prompt completion..."
-                  className="mt-1.5 w-full rounded-xl border border-neutral-300 bg-white px-3.5 py-2.5 text-sm text-neutral-950 outline-none transition focus:border-neutral-900 dark:border-white/15 dark:bg-neutral-950 dark:text-white"
+                  placeholder="Type or paste text to translate..."
+                  className="w-full flex-1 rounded-xl border border-neutral-300 bg-white p-3.5 text-sm leading-6 text-neutral-950 outline-none transition focus:border-neutral-900 dark:border-white/15 dark:bg-neutral-950 dark:text-white"
                 />
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
-                  <span>
-                    Model: <strong className="text-neutral-900 dark:text-white">{activeModel.model_id}</strong>
+              {/* Translated Output Box */}
+              <div className="flex flex-col">
+                <div className="mb-1.5 flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+                    Translated Output ({toLanguage} • {activeModel.model_id})
                   </span>
-                  <span>•</span>
-                  <span>
-                    Mode: <strong className="text-neutral-900 dark:text-white">{streamToggle ? "SSE Stream" : "JSON"}</strong>
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {messages.length > 0 && (
+                  {translatedOutput && (
                     <button
                       type="button"
-                      onClick={() => setMessages([])}
-                      className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-neutral-200 px-3.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100 dark:border-white/10 dark:text-neutral-400 dark:hover:bg-white/5"
+                      onClick={() => copyToClipboard(translatedOutput, "output")}
+                      className="inline-flex items-center gap-1 text-[11px] text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Clear
+                      {copiedId === "output" ? (
+                        <Check className="h-3 w-3 text-emerald-600" />
+                      ) : (
+                        <ClipboardCopy className="h-3 w-3" />
+                      )}
+                      {copiedId === "output" ? "Copied" : "Copy"}
                     </button>
                   )}
+                </div>
+                <div
+                  data-testid="playground-output-box"
+                  className="flex min-h-[12.5rem] flex-1 flex-col justify-between rounded-xl border border-neutral-200/90 bg-neutral-50/70 p-3.5 text-sm leading-6 text-neutral-950 dark:border-white/10 dark:bg-white/[0.03] dark:text-neutral-100"
+                >
+                  <div className="whitespace-pre-wrap">
+                    {translatedOutput ? (
+                      <>
+                        {translatedOutput}
+                        {latestRun?.streaming && " ▋"}
+                      </>
+                    ) : (
+                      <span className="text-neutral-400 dark:text-neutral-500">
+                        {isRunning
+                          ? "Generating translation..."
+                          : `Translated output from ${activeModel.model_id} will appear here.`}
+                      </span>
+                    )}
+                  </div>
 
-                  {isRunning && streamToggle ? (
-                    <button
-                      type="button"
-                      onClick={handleStopStream}
-                      data-testid="playground-stop-btn"
-                      className="pressable inline-flex h-10 items-center gap-2 rounded-xl bg-red-600 px-5 text-xs font-semibold text-white shadow-xs hover:bg-red-700"
-                    >
-                      <Square className="h-3.5 w-3.5 fill-current" />
-                      Stop & Bill Partial
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={isRunning || !userInput.trim()}
-                      onClick={handleRunChat}
-                      data-testid="playground-run-btn"
-                      className="pressable inline-flex h-10 items-center gap-2 rounded-xl bg-neutral-950 px-5 text-xs font-semibold text-white shadow-xs transition hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
-                    >
-                      <Send className="h-3.5 w-3.5" />
-                      {isRunning ? "Running..." : "Run Completion"}
-                    </button>
+                  {/* Real-time token usage and cost breakdown badge shown below output */}
+                  {latestRun && (
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-neutral-200/80 pt-3 dark:border-white/10">
+                      <span
+                        data-testid="response-usage-badge"
+                        className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-mono text-xs font-semibold text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
+                      >
+                        <Activity className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                        Tokens: {latestRun.promptTokens} in / {latestRun.completionTokens} out • Cost: $
+                        {formatCostBadge(latestRun.costUsd)}
+                      </span>
+                      <span className="font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
+                        {latestRun.model} (${latestRun.costUsd.toFixed(6)} USD)
+                      </span>
+                    </div>
                   )}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Interactive Responses Feed with Token & Cost Badges */}
-          <div className="rounded-2xl border border-neutral-200/90 bg-white p-5 shadow-xs dark:border-white/10 dark:bg-neutral-900/70">
-            <div className="flex items-center justify-between border-b border-neutral-200/80 pb-3 dark:border-white/10">
-              <h2 className="text-sm font-semibold text-neutral-950 dark:text-white">
-                Playground Conversation & Token Metering
-              </h2>
-              <span className="text-xs text-neutral-500">
-                Endpoint: <code>POST /api/playground/chat</code>
-              </span>
-            </div>
-
-            {messages.length === 0 ? (
-              <div className="py-12 text-center">
-                <Play className="mx-auto h-8 w-8 text-neutral-300 dark:text-neutral-600" />
-                <p className="mt-2 text-sm font-medium text-neutral-700 dark:text-neutral-300">
-                  No completions run yet
-                </p>
-                <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-                  Click &ldquo;Run Completion&rdquo; above to stream a response and inspect real-time token usage &amp; sub-cent cost deduction.
-                </p>
+          {/* Recent Translations List */}
+          {history.length > 0 && (
+            <div className="rounded-2xl border border-neutral-200/90 bg-white p-5 shadow-xs dark:border-white/10 dark:bg-neutral-900/70">
+              <div className="flex items-center justify-between pb-3">
+                <h3 className="text-sm font-semibold text-neutral-950 dark:text-white">
+                  Recent Playground Runs
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setHistory([])}
+                  className="text-xs text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
+                >
+                  Clear history
+                </button>
               </div>
-            ) : (
-              <div className="mt-4 space-y-4" data-testid="playground-messages-list">
-                {messages.map((turn) => (
+              <div className="space-y-3">
+                {history.map((item) => (
                   <div
-                    key={turn.id}
-                    className={`rounded-xl border p-4 ${
-                      turn.role === "user"
-                        ? "border-neutral-200/70 bg-neutral-50/70 dark:border-white/10 dark:bg-white/[0.02]"
-                        : "border-neutral-300/90 bg-white shadow-2xs dark:border-white/15 dark:bg-neutral-950"
-                    }`}
+                    key={item.id}
+                    className="rounded-xl border border-neutral-200/80 bg-neutral-50/50 p-3.5 text-xs dark:border-white/10 dark:bg-white/[0.02]"
                   >
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                        {turn.role === "user" ? "User" : `Assistant (${turn.model})`}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-semibold text-neutral-900 dark:text-white">
+                        {item.model} ({item.fromLanguage} → {item.toLanguage})
                       </span>
-                      {turn.aborted && (
-                        <span className="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">
-                          Aborted early (billed partial tokens)
-                        </span>
-                      )}
+                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 font-mono text-[11px] font-semibold text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+                        Tokens: {item.promptTokens} in / {item.completionTokens} out • Cost: $
+                        {formatCostBadge(item.costUsd)}
+                      </span>
                     </div>
-
-                    <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-neutral-900 dark:text-neutral-100">
-                      {turn.content || (turn.streaming ? "▋" : "")}
-                    </div>
-
-                    {/* Real-time token usage and cost breakdown badge shown below each assistant response */}
-                    {turn.role === "assistant" && (
-                      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-neutral-200/70 pt-3 dark:border-white/10">
-                        <span
-                          data-testid="response-usage-badge"
-                          className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-mono text-xs font-semibold text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
-                        >
-                          <Activity className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                          Tokens: {turn.promptTokens ?? 0} in / {turn.completionTokens ?? 0} out • Cost: $
-                          {formatCostBadge(turn.costUsd ?? 0)}
-                        </span>
-                        <span className="font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
-                          Exact: ${(turn.costUsd ?? 0).toFixed(6)} USD
-                        </span>
-                      </div>
-                    )}
+                    <p className="mt-1.5 text-neutral-600 dark:text-neutral-400">
+                      <strong className="text-neutral-800 dark:text-neutral-200">Input:</strong>{" "}
+                      {item.inputText}
+                    </p>
+                    <p className="mt-1 text-neutral-900 dark:text-neutral-100">
+                      <strong className="text-neutral-800 dark:text-neutral-200">Output:</strong>{" "}
+                      {item.outputText}
+                    </p>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
-          {/* OpenAI SDK / cURL Direct Proxy Quickstart */}
+          {/* Direct API Call Quickstart */}
           <div className="rounded-2xl border border-neutral-200/90 bg-white p-5 shadow-xs dark:border-white/10 dark:bg-neutral-900/70">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Code2 className="h-4 w-4 text-neutral-500" />
                 <h3 className="text-sm font-semibold text-neutral-950 dark:text-white">
-                  Direct OpenAI-Compatible Proxy Request (<code>/v1/chat/completions</code>)
+                  Direct API Call (<code>POST /v1/chat/completions</code>)
                 </h3>
               </div>
               <button
@@ -1225,8 +1276,8 @@ export function PlaygroundPage({
                   No token deductions recorded yet.
                 </p>
               ) : (
-                <div className="mt-3 max-h-52 space-y-2 overflow-y-auto">
-                  {usageLedger.slice(0, 10).map((u) => (
+                <div className="mt-3 max-h-48 space-y-2 overflow-y-auto">
+                  {usageLedger.slice(0, 8).map((u) => (
                     <div
                       key={u.id}
                       className="flex items-center justify-between rounded-lg border border-neutral-200/70 bg-neutral-50/60 px-3 py-2 text-xs dark:border-white/10 dark:bg-white/[0.02]"
@@ -1264,8 +1315,8 @@ export function PlaygroundPage({
                   No Stripe deposits settled yet.
                 </p>
               ) : (
-                <div className="mt-3 max-h-52 space-y-2 overflow-y-auto">
-                  {depositLedger.slice(0, 10).map((d) => (
+                <div className="mt-3 max-h-48 space-y-2 overflow-y-auto">
+                  {depositLedger.slice(0, 8).map((d) => (
                     <div
                       key={d.id}
                       className="flex items-center justify-between rounded-lg border border-neutral-200/70 bg-neutral-50/60 px-3 py-2 text-xs dark:border-white/10 dark:bg-white/[0.02]"

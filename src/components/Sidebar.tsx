@@ -108,7 +108,7 @@ export function Sidebar({
     <div className="flex h-full flex-col justify-between">
       {/* Top Section: Project selector + Search + Nav list */}
       <div className="flex flex-col overflow-hidden">
-        {/* Project Selector Header (matching OpenAI screenshot) */}
+        {/* Project Selector Header */}
         <div className="flex items-center justify-between border-b border-neutral-200/80 px-3 py-3 dark:border-neutral-800/80">
           {!collapsed ? (
             <div className="relative">
@@ -160,7 +160,7 @@ export function Sidebar({
           </button>
         </div>
 
-        {/* Search input (matching OpenAI screenshot) */}
+        {/* Search input */}
         {!collapsed && (
           <div className="px-3 pt-3">
             <div className="relative">
@@ -220,7 +220,7 @@ export function Sidebar({
         </nav>
       </div>
 
-      {/* Bottom Section: Raffi / Organization Account (matching OpenAI screenshot) */}
+      {/* Bottom Section: Raffi / Organization Account */}
       <div className="border-t border-neutral-200/80 p-3 dark:border-neutral-800/80">
         <button
           type="button"

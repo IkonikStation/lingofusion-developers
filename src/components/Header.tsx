@@ -106,7 +106,7 @@ export function Header({
             </span>
           </button>
 
-          {/* Center/Left Nav links (OpenAI style) */}
+          {/* Center/Left Nav links */}
           <nav className="ml-4 hidden items-center gap-1 md:flex">
             {navItems.map((item) => {
               const active = isCurrent(item.page);
@@ -212,7 +212,7 @@ export function Header({
             {theme === "light" ? <Moon className="h-3.5 w-3.5" /> : <Sun className="h-3.5 w-3.5" />}
           </button>
 
-          {/* Dashboard Button (OpenAI black/white pill) */}
+          {/* Dashboard Button */}
           <button
             type="button"
             onClick={onDashboard}

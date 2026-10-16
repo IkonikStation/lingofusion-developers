@@ -255,7 +255,7 @@ export function PricingPage({
 
   return (
     <div className="mx-auto max-w-6xl pb-24">
-      {/* OpenAI Clean Hero */}
+      {/* Clean Hero */}
       <section className="border-b border-neutral-200 pb-12 dark:border-neutral-800">
         <h1 className="text-4xl font-normal tracking-tight text-neutral-900 dark:text-neutral-50 sm:text-5xl lg:text-6xl">
           Pricing

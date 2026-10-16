@@ -141,15 +141,12 @@ type BrowserState = {
 const storageKey = "lingofusion-browser-api-v1";
 
 export const defaultBrowserModelPricing: ModelPricingRecord[] = [
-  { id: "gpt-4o", model_id: "gpt-4o", object: "model", provider: "openai", upstream_model_name: "gpt-4o", input_per_million: 2.5, output_per_million: 10.0, is_active: true },
-  { id: "claude-sonnet-4", model_id: "claude-sonnet-4", object: "model", provider: "anthropic", upstream_model_name: "claude-sonnet-4-20250514", input_per_million: 3.0, output_per_million: 15.0, is_active: true },
-  { id: "llama-3.3-70b", model_id: "llama-3.3-70b", object: "model", provider: "together", upstream_model_name: "meta-llama/Llama-3.3-70B-Instruct-Turbo", input_per_million: 0.88, output_per_million: 0.88, is_active: true },
-  { id: "LingoFusion", model_id: "LingoFusion", object: "model", provider: "deepseek", upstream_model_name: "deepseek-v4-flash", input_per_million: 1.0, output_per_million: 5.0, is_active: true },
-  { id: "LingoFusion Pro", model_id: "LingoFusion Pro", object: "model", provider: "deepseek", upstream_model_name: "deepseek-v4-pro", input_per_million: 3.5, output_per_million: 18.0, is_active: true },
-  { id: "LingoFusion Ultra", model_id: "LingoFusion Ultra", object: "model", provider: "deepseek", upstream_model_name: "deepseek-v4-pro", input_per_million: 20.0, output_per_million: 120.0, is_active: true },
-  { id: "LingoFusion Lite", model_id: "LingoFusion Lite", object: "model", provider: "openai", upstream_model_name: "gpt-5-mini", input_per_million: 0.5, output_per_million: 2.0, is_active: true },
-  { id: "LingoFusion Nano", model_id: "LingoFusion Nano", object: "model", provider: "openai", upstream_model_name: "gpt-5-nano", input_per_million: 0.05, output_per_million: 0.5, is_active: true },
-  { id: "LingoFusion Explain", model_id: "LingoFusion Explain", object: "model", provider: "deepseek", upstream_model_name: "deepseek-v4-flash", input_per_million: 3.0, output_per_million: 2.0, is_active: true },
+  { id: "LingoFusion Nano", model_id: "LingoFusion Nano", object: "model", provider: "lingofusion", upstream_model_name: "lingofusion-nano", input_per_million: 0.05, output_per_million: 0.5, is_active: true },
+  { id: "LingoFusion Lite", model_id: "LingoFusion Lite", object: "model", provider: "lingofusion", upstream_model_name: "lingofusion-lite", input_per_million: 0.5, output_per_million: 2.0, is_active: true },
+  { id: "LingoFusion", model_id: "LingoFusion", object: "model", provider: "lingofusion", upstream_model_name: "lingofusion-v4", input_per_million: 1.0, output_per_million: 5.0, is_active: true },
+  { id: "LingoFusion Pro", model_id: "LingoFusion Pro", object: "model", provider: "lingofusion", upstream_model_name: "lingofusion-pro-v4", input_per_million: 3.5, output_per_million: 18.0, is_active: true },
+  { id: "LingoFusion Explain", model_id: "LingoFusion Explain", object: "model", provider: "lingofusion", upstream_model_name: "lingofusion-explain-v4", input_per_million: 3.0, output_per_million: 2.0, is_active: true },
+  { id: "LingoFusion Ultra", model_id: "LingoFusion Ultra", object: "model", provider: "lingofusion", upstream_model_name: "lingofusion-ultra-v4", input_per_million: 20.0, output_per_million: 120.0, is_active: true },
 ];
 
 export function calculateGrossDeposit(depositAmountUsd: number) {
@@ -245,7 +242,7 @@ function loadState() {
     const stored = window.localStorage.getItem(storageKey);
     if (!stored) return createInitialState();
     const parsed = JSON.parse(stored) as BrowserState;
-    if (!parsed.dashboard.modelPricing) parsed.dashboard.modelPricing = defaultBrowserModelPricing;
+    parsed.dashboard.modelPricing = defaultBrowserModelPricing;
     if (!parsed.dashboard.usageLedger) parsed.dashboard.usageLedger = [];
     if (!parsed.dashboard.depositLedger) parsed.dashboard.depositLedger = [];
     if (!parsed.dashboard.user) {
@@ -329,18 +326,57 @@ function tokenEstimate(text: unknown) {
   return Math.max(1, Math.ceil(String(text ?? "").length / 4));
 }
 
-function translatePhrase(input: string, fromLanguage: string, toLanguage: string) {
-  const key = `${fromLanguage.toLowerCase()}:${toLanguage.toLowerCase()}:${input.trim().toLowerCase()}`;
+function translatePhrase(input: string, fromLanguage: string, toLanguage: string, modelId = "LingoFusion") {
+  const normalizedInput = input.trim().toLowerCase().replace(/\s+/g, " ");
+  const key = `${fromLanguage.toLowerCase()}:${toLanguage.toLowerCase()}:${normalizedInput}`;
   const phrases: Record<string, string> = {
     "english:french:hello": "Bonjour",
     "english:french:hello, how are you?": "Bonjour, comment allez-vous ?",
+    "english:french:how are you?": "Comment allez-vous ?",
+    "english:french:good morning": "Bonjour",
     "english:french:thank you": "Merci",
+    "english:french:thank you very much": "Merci beaucoup",
+    "english:french:welcome": "Bienvenue",
+    "english:french:yes": "Oui",
+    "english:french:no": "Non",
+    "english:french:goodbye": "Au revoir",
+    "english:french:i love this": "J’adore ça.",
     "english:spanish:hello": "Hola",
+    "english:spanish:hello, how are you?": "Hola, ¿cómo estás?",
+    "english:spanish:how are you?": "¿Cómo estás?",
+    "english:spanish:good morning": "Buenos días",
     "english:spanish:thank you": "Gracias",
+    "english:spanish:yes": "Sí",
+    "english:spanish:no": "No",
+    "english:spanish:goodbye": "Adiós",
     "english:german:hello": "Hallo",
+    "english:german:hello, how are you?": "Hallo, wie geht es dir?",
+    "english:german:how are you?": "Wie geht es dir?",
+    "english:german:good morning": "Guten Morgen",
     "english:german:thank you": "Danke",
+    "english:german:yes": "Ja",
+    "english:german:no": "Nein",
+    "english:german:goodbye": "Auf Wiedersehen",
   };
-  return phrases[key] ?? input.trim();
+
+  if (phrases[key]) {
+    if (modelId === "LingoFusion Explain") {
+      return `${phrases[key]}\n\n— Literal & Contextual Note (${fromLanguage} → ${toLanguage}): Natural idiomatic rendering produced by ${modelId}.`;
+    }
+    return phrases[key];
+  }
+
+  const targetLower = toLanguage.toLowerCase();
+  const dictionaryMap: Record<string, string> = {
+    french: `Traduction (${modelId}) : « ${input.trim()} »`,
+    spanish: `Traducción (${modelId}): "${input.trim()}"`,
+    german: `Übersetzung (${modelId}): „${input.trim()}“`,
+    italian: `Traduzione (${modelId}): "${input.trim()}"`,
+    portuguese: `Tradução (${modelId}): "${input.trim()}"`,
+    japanese: `翻訳 (${modelId}): 「${input.trim()}」`,
+    chinese: `翻译 (${modelId})：“${input.trim()}”`,
+  };
+  return dictionaryMap[targetLower] ?? `[${toLanguage} — ${modelId}] ${input.trim()}`;
 }
 
 function applyCharge(state: BrowserState, cost: number) {
@@ -390,21 +426,22 @@ function runChatCompletionBrowser(state: BrowserState, options?: RequestInit, so
   }
 
   const body = requestBody(options);
-  const modelId = String(body.model || "gpt-4o");
-  const modelPricing = (state.dashboard.modelPricing ?? defaultBrowserModelPricing).find(
+  const modelId = String(body.model || "LingoFusion");
+  const modelPricing = defaultBrowserModelPricing.find(
     (m) => m.model_id.toLowerCase() === modelId.toLowerCase()
-  ) ?? defaultBrowserModelPricing[0];
+  ) ?? defaultBrowserModelPricing[2];
 
   const messages = Array.isArray(body.messages) ? body.messages as Array<{ role: string; content: string }> : [];
-  const promptText = messages.map((m) => m.content || "").join(" ");
-  const promptTokens = tokenEstimate(promptText) + messages.length * 4;
-  const lastUser = messages.filter((m) => m.role === "user").pop()?.content || "Hello!";
-  const replyText = `[${modelPricing.model_id} • ${modelPricing.provider}] Response to "${lastUser.slice(0, 100)}":\n\nProcessed via prepaid LLM proxy. Input rate: $${modelPricing.input_per_million}/1M tokens, Output rate: $${modelPricing.output_per_million}/1M tokens.`;
-  const completionTokens = Math.max(1, (replyText.match(/\S+\s*/g) || [replyText]).length);
+  const lastUser = String(messages.filter((m) => m.role === "user").pop()?.content || body.input || "Hello, how are you?").trim();
+  const fromLanguage = String(body.from_language || "English");
+  const toLanguage = String(body.to_language || "French");
+  const promptTokens = tokenEstimate(lastUser);
+  const replyText = translatePhrase(lastUser, fromLanguage, toLanguage, modelPricing.model_id);
+  const completionTokens = Math.max(1, tokenEstimate(replyText));
   const costUsd = calculateTokenCost(promptTokens, completionTokens, modelPricing.input_per_million, modelPricing.output_per_million);
 
   applyCharge(state, costUsd);
-  const requestId = `chatcmpl-${randomId(" browser")}`;
+  const requestId = `chatcmpl-${randomId("browser")}`;
   const now = new Date().toISOString();
 
   state.dashboard.usageLedger?.unshift({

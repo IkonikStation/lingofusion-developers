@@ -56,15 +56,15 @@ async function runTests() {
       body: JSON.stringify({ confirm: "RESET_LOCAL_TEST_DATA" }),
     });
 
-    // Verify GET /v1/models
+    // Verify GET /v1/models only returns LingoFusion Nano through Ultra
     const modelsRes = await fetch(`${BASE_URL}/v1/models`);
     assert.equal(modelsRes.status, 200);
     const modelsPayload = await modelsRes.json();
     assert.equal(modelsPayload.object, "list");
-    assert.ok(Array.isArray(modelsPayload.data) && modelsPayload.data.length >= 3);
-    const gpt4o = modelsPayload.data.find((m) => m.model_id === "gpt-4o");
-    assert.ok(gpt4o, "gpt-4o must be in model_pricing");
-    console.log(`✓ GET /v1/models returned ${modelsPayload.data.length} active models with per-1M pricing`);
+    assert.equal(modelsPayload.data.length, 6, "Must have exactly the 6 LingoFusion Nano to Ultra models");
+    const lfModel = modelsPayload.data.find((m) => m.model_id === "LingoFusion");
+    assert.ok(lfModel, "LingoFusion must be in model_pricing");
+    console.log(`✓ GET /v1/models returned ${modelsPayload.data.length} LingoFusion models with per-1M pricing`);
 
     // Create an API key
     const createKeyRes = await fetch(`${BASE_URL}/api/keys`, {
@@ -86,7 +86,7 @@ async function runTests() {
         authorization: `Bearer ${apiKeySecret}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o",
+        model: "LingoFusion",
         messages: [{ role: "user", content: "Hello" }],
       }),
     });
@@ -160,7 +160,7 @@ async function runTests() {
         authorization: `Bearer ${apiKeySecret}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o",
+        model: "LingoFusion",
         messages: [{ role: "user", content: "Hello!" }],
         stream: false,
       }),
@@ -188,8 +188,8 @@ async function runTests() {
         authorization: `Bearer ${apiKeySecret}`,
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4",
-        messages: [{ role: "user", content: "Stream test" }],
+        model: "LingoFusion Pro",
+        messages: [{ role: "user", content: "Hello, how are you?" }],
         stream: true,
       }),
     });
@@ -213,8 +213,8 @@ async function runTests() {
         authorization: `Bearer ${apiKeySecret}`,
       },
       body: JSON.stringify({
-        model: "gpt-4o",
-        messages: [{ role: "user", content: "Write a detailed paragraph about distributed systems" }],
+        model: "LingoFusion Ultra",
+        messages: [{ role: "user", content: "Translate this detailed sentence into French accurately" }],
         stream: true,
         stream_delay_ms: 40,
       }),
@@ -244,22 +244,23 @@ async function runTests() {
       `✓ Aborted stream handled: captured ${afterAbortDash.usageLedger[0].completion_tokens} partial completion tokens and deducted $${afterAbortDash.usageLedger[0].cost_usd.toFixed(6)}`,
     );
 
-    // Test Playground Session Endpoint (/api/playground/chat)
+    // Test Playground Session Endpoint (/api/playground/chat) without system prompt
     const pgRes = await fetch(`${BASE_URL}/api/playground/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        model: "llama-3.3-70b",
+        model: "LingoFusion Lite",
+        from_language: "English",
+        to_language: "French",
         messages: [
-          { role: "system", content: "Be concise." },
-          { role: "user", content: "Hello playground!" },
+          { role: "user", content: "Hello, how are you?" },
         ],
         stream: false,
       }),
     });
     assert.equal(pgRes.status, 200);
     const pgData = await pgRes.json();
-    assert.equal(pgData.model, "llama-3.3-70b");
+    assert.equal(pgData.model, "LingoFusion Lite");
 
     const finalDash = await (await fetch(`${BASE_URL}/api/dashboard`)).json();
     assert.equal(finalDash.usageLedger[0].source, "playground");
