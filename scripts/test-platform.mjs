@@ -33,14 +33,20 @@ async function runTests() {
   const nanoRoute = resolveBackendModelRouting("LingoFusion Nano");
   assert.equal(nanoRoute.displayModel, "GPT-5 nano");
   assert.equal(nanoRoute.upstreamModel, "gpt-5-nano");
+  assert.equal(nanoRoute.reasoning, "none");
+  assert.equal(nanoRoute.reasoningEffort, "minimal");
 
   const liteRoute = resolveBackendModelRouting("LingoFusion Lite");
   assert.equal(liteRoute.displayModel, "GPT-5.6 Luna");
   assert.equal(liteRoute.upstreamModel, "gpt-5.6-luna");
+  assert.equal(liteRoute.reasoning, "none");
+  assert.equal(liteRoute.reasoningEffort, "none");
 
   const lfRoute = resolveBackendModelRouting("LingoFusion");
   assert.equal(lfRoute.displayModel, "GPT-6 Luna");
   assert.equal(lfRoute.upstreamModel, "gpt-6-luna");
+  assert.equal(lfRoute.reasoning, "none");
+  assert.equal(lfRoute.reasoningEffort, "none");
 
   const proDefaultRoute = resolveBackendModelRouting("LingoFusion Pro", { reasoning_enabled: false });
   assert.equal(proDefaultRoute.displayModel, "GPT-6 Sol");

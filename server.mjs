@@ -299,8 +299,8 @@ export function resolveBackendModelRouting(modelName, options = {}) {
     return {
       upstreamModel: "gpt-5-nano",
       displayModel: "GPT-5 nano",
-      reasoning: undefined,
-      reasoningEffort: undefined,
+      reasoning: "none",
+      reasoningEffort: "minimal",
       webSearch: false,
       webSearchCallFeeUsd: 0,
     };
@@ -309,8 +309,8 @@ export function resolveBackendModelRouting(modelName, options = {}) {
     return {
       upstreamModel: "gpt-5.6-luna",
       displayModel: "GPT-5.6 Luna",
-      reasoning: undefined,
-      reasoningEffort: undefined,
+      reasoning: "none",
+      reasoningEffort: "none",
       webSearch: false,
       webSearchCallFeeUsd: 0,
     };
@@ -319,8 +319,8 @@ export function resolveBackendModelRouting(modelName, options = {}) {
     return {
       upstreamModel: "gpt-6-luna",
       displayModel: "GPT-6 Luna",
-      reasoning: undefined,
-      reasoningEffort: undefined,
+      reasoning: "none",
+      reasoningEffort: "none",
       webSearch: false,
       webSearchCallFeeUsd: 0,
     };
