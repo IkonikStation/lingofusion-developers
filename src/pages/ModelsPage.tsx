@@ -130,6 +130,65 @@ export function ModelsPage({ onOpenModel }: { onOpenModel: (model: string) => vo
         </div>
       </section>
 
+      <section className="models-section" aria-labelledby="proxy-pricing-heading">
+        <div className="models-section-heading">
+          <div>
+            <h2 id="proxy-pricing-heading">Prepaid LLM Proxy Catalog (/v1/chat/completions)</h2>
+            <p className="mt-1 text-sm text-neutral-500">
+              Call any active model via our OpenAI SDK-compatible proxy with sub-cent NUMERIC(18, 6) token billing and Stripe fee gross-up deposits.
+            </p>
+          </div>
+          <button type="button" className="models-text-link" onClick={() => onOpenModel("Playground")}>
+            Test in Playground <ArrowRight size={15} />
+          </button>
+        </div>
+        <div className="models-catalog mt-4">
+          <div className="models-catalog-labels" aria-hidden="true">
+            <span>Model ID</span>
+            <span>Provider / Upstream</span>
+            <span>Input / 1M</span>
+            <span>Output / 1M</span>
+            <span />
+          </div>
+          {[
+            { id: "gpt-4o", provider: "openai", upstream: "gpt-4o", input: 2.50, output: 10.00 },
+            { id: "claude-sonnet-4", provider: "anthropic", upstream: "claude-sonnet-4-20250514", input: 3.00, output: 15.00 },
+            { id: "llama-3.3-70b", provider: "together", upstream: "meta-llama/Llama-3.3-70B-Instruct-Turbo", input: 0.88, output: 0.88 },
+            { id: "LingoFusion", provider: "deepseek", upstream: "deepseek-v4-flash", input: 1.00, output: 5.00 },
+            { id: "LingoFusion Pro", provider: "deepseek", upstream: "deepseek-v4-pro", input: 3.50, output: 18.00 },
+            { id: "LingoFusion Ultra", provider: "deepseek", upstream: "deepseek-v4-pro", input: 20.00, output: 120.00 },
+          ].map((item) => (
+            <a
+              key={item.id}
+              href={withBasePath(`/playground?model=${encodeURIComponent(item.id)}`)}
+              onClick={(event) => {
+                if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+                event.preventDefault();
+                window.history.pushState({}, "", `${withBasePath("/playground")}?model=${encodeURIComponent(item.id)}`);
+                onOpenModel("Playground");
+              }}
+              className="models-catalog-row"
+            >
+              <div className="min-w-0">
+                <h3 className="font-mono text-sm font-semibold">{item.id}</h3>
+                <p className="text-xs text-neutral-500">OpenAI-compatible /v1/chat/completions</p>
+              </div>
+              <span className="models-spec font-mono text-xs">
+                <small>Provider</small>
+                {item.provider} ({item.upstream})
+              </span>
+              <span className="models-spec font-mono">
+                <small>Input / 1M</small>${item.input.toFixed(2)}
+              </span>
+              <span className="models-spec font-mono">
+                <small>Output / 1M</small>${item.output.toFixed(2)}
+              </span>
+              <ArrowRight className="models-row-arrow" size={18} />
+            </a>
+          ))}
+        </div>
+      </section>
+
       <section className="models-section" aria-labelledby="search-pricing-heading">
         <div className="models-section-heading"><h2 id="search-pricing-heading">Web search</h2><span className="text-sm text-neutral-500">USD per call</span></div>
         <dl className="models-search-pricing">{webSearchPricing.map(({ model, priceUsd }) => <div key={model}><dt>{model}</dt><dd>${priceUsd}</dd></div>)}</dl>

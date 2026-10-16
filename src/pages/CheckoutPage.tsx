@@ -1,11 +1,168 @@
-import { ArrowLeft, CheckCircle2, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CreditCard, ShieldCheck, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { browserApi, calculateGrossDeposit, getApiBaseUrl, shouldUseBrowserApi } from "../data/browserApi";
 import { humanizePlanId, pageQuery } from "../lib/utils";
 
-export function CheckoutPage({ onNavigate }: { onNavigate: (page: string) => void }) {
+export function CheckoutPage({
+  onNavigate,
+  onBalanceChange,
+}: {
+  onNavigate: (page: string) => void;
+  onBalanceChange?: (newBalance: number) => void;
+}) {
   const query = pageQuery();
+  const stripeSessionId = query.get("stripe_session_id");
+  const netUsdParam = query.get("net_usd");
+  const grossCentsParam = query.get("gross_cents");
+  const userIdParam = query.get("user_id") || "00000000-0000-4000-8000-000000000001";
+
   const planId = query.get("plan") ?? "pro-350k";
   const billing = query.get("billing") === "yearly" ? "yearly" : "monthly";
   const seats = Math.max(1, Number(query.get("seats")) || 1);
+
+  const [busy, setBusy] = useState(false);
+  const [settled, setSettled] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (stripeSessionId && netUsdParam) {
+    const netUsd = Number(netUsdParam) || 5;
+    const calc = calculateGrossDeposit(netUsd);
+    const grossCents = Number(grossCentsParam) || calc.grossAmountCents;
+    const grossUsd = Number((grossCents / 100).toFixed(2));
+    const feeUsd = Number((grossUsd - netUsd).toFixed(2));
+
+    const completeStripeCheckout = async () => {
+      setBusy(true);
+      setError(null);
+      try {
+        const webhookPayload = {
+          id: `evt_${Date.now()}`,
+          type: "checkout.session.completed",
+          data: {
+            object: {
+              id: stripeSessionId,
+              amount_total: grossCents,
+              payment_status: "paid",
+              metadata: {
+                userId: userIdParam,
+                netDepositUsd: netUsd.toString(),
+              },
+            },
+          },
+        };
+
+        let result: { balance_usd?: number };
+        if (shouldUseBrowserApi()) {
+          result = await browserApi("/api/webhooks/stripe", {
+            method: "POST",
+            body: JSON.stringify(webhookPayload),
+          });
+        } else {
+          const res = await fetch(`${getApiBaseUrl()}/api/webhooks/stripe`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(webhookPayload),
+          });
+          result = await res.json();
+          if (!res.ok) throw new Error("Failed to settle Stripe webhook");
+        }
+
+        if (typeof result.balance_usd === "number") {
+          onBalanceChange?.(result.balance_usd);
+        }
+        setSettled(true);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Payment failed");
+      } finally {
+        setBusy(false);
+      }
+    };
+
+    return (
+      <section className="mx-auto max-w-3xl py-6 sm:py-12">
+        <button
+          type="button"
+          onClick={() => onNavigate("Playground")}
+          className="pressable inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-neutral-500 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to Playground
+        </button>
+
+        <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+          <CreditCard className="h-3.5 w-3.5" />
+          Stripe Checkout — Prepaid LLM Credits
+        </div>
+
+        <h1 className="mt-4 text-3xl font-semibold tracking-tight text-neutral-950 dark:text-white sm:text-4xl">
+          Complete your ${netUsd.toFixed(2)} net credit deposit.
+        </h1>
+        <p className="mt-3 max-w-2xl text-base leading-7 text-neutral-600 dark:text-neutral-400">
+          Stripe fees (2.9% + $0.30) are automatically grossed up so your prepaid balance receives the exact{" "}
+          <strong>${netUsd.toFixed(2)}</strong> net deposit.
+        </p>
+
+        {error && (
+          <div className="mt-4 rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+            {error}
+          </div>
+        )}
+
+        <div className="mt-8 overflow-hidden rounded-2xl border border-neutral-200/90 bg-white shadow-sm dark:border-white/[0.08] dark:bg-neutral-900/60">
+          <div className="border-b border-neutral-200/80 bg-neutral-50/60 px-6 py-4 dark:border-white/[0.08] dark:bg-white/[0.02]">
+            <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">
+              Stripe Session: <code className="font-mono text-xs">{stripeSessionId}</code>
+            </h2>
+          </div>
+          <dl className="divide-y divide-neutral-200/80 dark:divide-white/[0.08]">
+            <div className="flex items-center justify-between p-5">
+              <dt className="text-sm text-neutral-500 dark:text-neutral-400">Net Credit Deposited</dt>
+              <dd className="font-mono text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                +${netUsd.toFixed(2)} USD
+              </dd>
+            </div>
+            <div className="flex items-center justify-between p-5">
+              <dt className="text-sm text-neutral-500 dark:text-neutral-400">
+                Stripe Processing Fee (2.9% + $0.30)
+              </dt>
+              <dd className="font-mono text-sm font-semibold text-neutral-950 dark:text-white">
+                ${feeUsd.toFixed(2)} USD
+              </dd>
+            </div>
+            <div className="flex items-center justify-between p-5">
+              <dt className="text-sm font-semibold text-neutral-900 dark:text-white">
+                Total Gross Charged (Unit Amount)
+              </dt>
+              <dd className="font-mono text-base font-bold text-neutral-950 dark:text-white">
+                ${grossUsd.toFixed(2)} USD ({grossCents} cents)
+              </dd>
+            </div>
+          </dl>
+        </div>
+
+        <div className="mt-8 flex flex-wrap gap-3">
+          {!settled ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={completeStripeCheckout}
+              className="pressable inline-flex min-h-11 items-center justify-center rounded-xl bg-neutral-950 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+            >
+              {busy ? "Settling Webhook..." : `Pay $${grossUsd.toFixed(2)} & Credit $${netUsd.toFixed(2)}`}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onNavigate("Playground")}
+              className="pressable inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              Deposit Settled! Return to Playground
+            </button>
+          )}
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="mx-auto max-w-3xl py-6 sm:py-12">

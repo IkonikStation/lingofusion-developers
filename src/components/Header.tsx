@@ -1,4 +1,4 @@
-import { ExternalLink, Menu, Moon, Search, Sun, X } from "lucide-react";
+import { ExternalLink, Menu, Moon, PlusCircle, Search, Sun, Wallet, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { LanguageCode, TranslationKey } from "../data/i18n";
 import { languages } from "../data/i18n";
@@ -10,6 +10,7 @@ type HeaderProps = {
   language: LanguageCode;
   mobileOpen: boolean;
   searchItems: string[];
+  balanceUsd?: number;
   t: (key: TranslationKey) => string;
   tc: (text: string) => string;
   onNavigate: (page: string) => void;
@@ -35,6 +36,7 @@ export function Header({
   language,
   mobileOpen,
   searchItems,
+  balanceUsd = 0,
   t,
   tc,
   onNavigate,
@@ -126,10 +128,26 @@ export function Header({
           </nav>
         </div>
 
-        {/* Right: Search, Language, Theme, Dashboard */}
+        {/* Right: Live Balance, Search, Language, Theme, Dashboard */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Live Balance Indicator */}
+          <button
+            type="button"
+            onClick={() => navigate("Playground")}
+            title="Live Prepaid Balance (Click to open Playground & Deposit)"
+            data-testid="header-live-balance"
+            className="inline-flex h-8 items-center gap-1.5 rounded-full border border-emerald-200/90 bg-emerald-50/90 px-3 text-xs font-semibold text-emerald-900 transition hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200 dark:hover:bg-emerald-500/20"
+          >
+            <Wallet className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span className="hidden text-[11px] font-medium text-emerald-700/80 xl:inline dark:text-emerald-300/80">Balance:</span>
+            <span className="font-mono tracking-tight" data-testid="header-balance-amount">
+              ${Number(balanceUsd).toFixed(6)}
+            </span>
+            <PlusCircle className="h-3 w-3 text-emerald-600/80 dark:text-emerald-400/80" />
+          </button>
+
           {/* Minimal Search bar */}
-          <div className="relative hidden w-52 sm:block lg:w-60">
+          <div className="relative hidden w-44 sm:block lg:w-52">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400" />
             <input
               value={query}

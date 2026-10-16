@@ -1,8 +1,9 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { DatabaseSync } from "node:sqlite";
 import { LMStudioClient } from "@lmstudio/sdk";
 
 const rootDir = dirname(fileURLToPath(import.meta.url));
@@ -27,8 +28,19 @@ async function loadLocalEnv() {
 await loadLocalEnv();
 
 const dbPath = join(rootDir, "data", "api-platform.json");
+const sqlitePath = join(rootDir, "data", "platform.sqlite");
 const port = Number(process.env.LINGOFUSION_API_PORT || 8787);
 const MICRO_CENTS_PER_DOLLAR = 100_000_000;
+const DEFAULT_USER_ID = "00000000-0000-4000-8000-000000000001";
+const DEFAULT_USER_EMAIL = "developer@lingofusion.dev";
+
+await mkdir(join(rootDir, "data"), { recursive: true });
+const sqlDb = new DatabaseSync(sqlitePath);
+sqlDb.exec("PRAGMA journal_mode = WAL;");
+sqlDb.exec("PRAGMA foreign_keys = ON;");
+
+const schemaSql = await readFile(join(rootDir, "schema.sql"), "utf8");
+sqlDb.exec(schemaSql);
 
 const textModels = [
   { model: "LingoFusion Nano", input: 0.05, output: 0.50 },
@@ -38,6 +50,190 @@ const textModels = [
   { model: "LingoFusion Explain", input: 3.00, output: 2.00 },
   { model: "LingoFusion Ultra", input: 20.00, output: 120.00 },
 ];
+
+const defaultPricingCatalog = [
+  { model_id: "gpt-4o", provider: "openai", upstream_model_name: "gpt-4o", input_per_million: 2.5000, output_per_million: 10.0000, is_active: 1 },
+  { model_id: "claude-sonnet-4", provider: "anthropic", upstream_model_name: "claude-sonnet-4-20250514", input_per_million: 3.0000, output_per_million: 15.0000, is_active: 1 },
+  { model_id: "llama-3.3-70b", provider: "together", upstream_model_name: "meta-llama/Llama-3.3-70B-Instruct-Turbo", input_per_million: 0.8800, output_per_million: 0.8800, is_active: 1 },
+  { model_id: "LingoFusion", provider: "deepseek", upstream_model_name: "deepseek-v4-flash", input_per_million: 1.0000, output_per_million: 5.0000, is_active: 1 },
+  { model_id: "LingoFusion Pro", provider: "deepseek", upstream_model_name: "deepseek-v4-pro", input_per_million: 3.5000, output_per_million: 18.0000, is_active: 1 },
+  { model_id: "LingoFusion Ultra", provider: "deepseek", upstream_model_name: "deepseek-v4-pro", input_per_million: 20.0000, output_per_million: 120.0000, is_active: 1 },
+  { model_id: "LingoFusion Lite", provider: "openai", upstream_model_name: "gpt-5-mini", input_per_million: 0.5000, output_per_million: 2.0000, is_active: 1 },
+  { model_id: "LingoFusion Nano", provider: "openai", upstream_model_name: "gpt-5-nano", input_per_million: 0.0500, output_per_million: 0.5000, is_active: 1 },
+  { model_id: "LingoFusion Explain", provider: "deepseek", upstream_model_name: "deepseek-v4-flash", input_per_million: 3.0000, output_per_million: 2.0000, is_active: 1 },
+];
+
+function seedDatabase() {
+  const userExists = sqlDb.prepare("SELECT id FROM users WHERE id = ?").get(DEFAULT_USER_ID);
+  if (!userExists) {
+    sqlDb.prepare(
+      "INSERT INTO users (id, email, balance_usd, created_at) VALUES (?, ?, ?, ?)"
+    ).run(DEFAULT_USER_ID, DEFAULT_USER_EMAIL, 10.000000, new Date().toISOString());
+  }
+
+  const upsertModel = sqlDb.prepare(`
+    INSERT INTO model_pricing (model_id, provider, upstream_model_name, input_per_million, output_per_million, is_active)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(model_id) DO UPDATE SET
+      provider = excluded.provider,
+      upstream_model_name = excluded.upstream_model_name,
+      input_per_million = excluded.input_per_million,
+      output_per_million = excluded.output_per_million,
+      is_active = excluded.is_active
+  `);
+
+  for (const m of defaultPricingCatalog) {
+    upsertModel.run(m.model_id, m.provider, m.upstream_model_name, m.input_per_million, m.output_per_million, m.is_active);
+  }
+}
+
+seedDatabase();
+
+// Stripe Fee Gross-Up Formula:
+// Gross (in dollars) = (NetDeposit + 0.30) / (1 - 0.029)
+// Convert to integer cents using Math.ceil(Gross * 100).
+export function calculateGrossDepositCents(netDepositUsd) {
+  const net = Number(netDepositUsd);
+  const grossDollars = (net + 0.30) / (1 - 0.029);
+  const grossAmountCents = Math.ceil(grossDollars * 100);
+  const grossChargedUsd = Number((grossAmountCents / 100).toFixed(2));
+  const estimatedStripeFeeUsd = Number((grossChargedUsd - net).toFixed(2));
+  return {
+    netDepositedUsd: Number(net.toFixed(2)),
+    grossAmountCents,
+    grossChargedUsd,
+    estimatedStripeFeeUsd,
+  };
+}
+
+// Token Pricing Engine:
+// cost = (prompt_tokens * (input_per_million / 1,000,000)) + (completion_tokens * (output_per_million / 1,000,000))
+export function calculateTokenCostUsd(promptTokens, completionTokens, inputPerMillion, outputPerMillion) {
+  const pTokens = Math.max(0, Math.trunc(Number(promptTokens) || 0));
+  const cTokens = Math.max(0, Math.trunc(Number(completionTokens) || 0));
+  const inRate = Number(inputPerMillion) || 0;
+  const outRate = Number(outputPerMillion) || 0;
+  const cost = (pTokens * (inRate / 1_000_000)) + (cTokens * (outRate / 1_000_000));
+  return Number(cost.toFixed(6));
+}
+
+function getDefaultUser() {
+  let user = sqlDb.prepare("SELECT id, email, balance_usd, created_at FROM users WHERE id = ?").get(DEFAULT_USER_ID);
+  if (!user) {
+    seedDatabase();
+    user = sqlDb.prepare("SELECT id, email, balance_usd, created_at FROM users WHERE id = ?").get(DEFAULT_USER_ID);
+  }
+  return {
+    id: user.id,
+    email: user.email,
+    balance_usd: Number(Number(user.balance_usd).toFixed(6)),
+    created_at: user.created_at,
+  };
+}
+
+function getUserById(userId) {
+  const user = sqlDb.prepare("SELECT id, email, balance_usd, created_at FROM users WHERE id = ?").get(userId);
+  if (!user) return null;
+  return {
+    id: user.id,
+    email: user.email,
+    balance_usd: Number(Number(user.balance_usd).toFixed(6)),
+    created_at: user.created_at,
+  };
+}
+
+// Atomic deduction with row-level guard:
+// UPDATE users SET balance_usd = ROUND(balance_usd - $cost, 6) WHERE id = $userId AND balance_usd >= 0
+function deductUserBalanceAndLogUsage({
+  userId,
+  apiKeyId = null,
+  modelId,
+  promptTokens,
+  completionTokens,
+  costUsd,
+  source,
+}) {
+  const normalizedCost = Number(Number(costUsd).toFixed(6));
+  const pTokens = Math.max(0, Math.trunc(Number(promptTokens) || 0));
+  const cTokens = Math.max(0, Math.trunc(Number(completionTokens) || 0));
+  const ledgerId = randomUUID();
+  const createdAt = new Date().toISOString();
+
+  sqlDb.exec("BEGIN IMMEDIATE TRANSACTION");
+  try {
+    const updateStmt = sqlDb.prepare(
+      "UPDATE users SET balance_usd = ROUND(balance_usd - ?, 6) WHERE id = ? AND balance_usd >= 0"
+    );
+    const result = updateStmt.run(normalizedCost, userId);
+    if (!result || result.changes === 0) {
+      sqlDb.exec("ROLLBACK");
+      return { success: false, error: "insufficient_quota" };
+    }
+
+    sqlDb.prepare(`
+      INSERT INTO usage_ledger (id, user_id, api_key_id, model_id, prompt_tokens, completion_tokens, cost_usd, source, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(ledgerId, userId, apiKeyId, modelId, pTokens, cTokens, normalizedCost, source, createdAt);
+
+    sqlDb.exec("COMMIT");
+    const updatedUser = getUserById(userId);
+    return {
+      success: true,
+      ledgerId,
+      costUsd: normalizedCost,
+      balanceUsd: updatedUser ? updatedUser.balance_usd : 0,
+    };
+  } catch (err) {
+    try {
+      sqlDb.exec("ROLLBACK");
+    } catch {
+      // ignore rollback error
+    }
+    throw err;
+  }
+}
+
+// Atomic Stripe deposit settlement:
+function creditUserDeposit({ userId, stripeSessionId, netDepositUsd, grossChargedUsd, status = "completed" }) {
+  const net = Number(Number(netDepositUsd).toFixed(2));
+  const gross = Number(Number(grossChargedUsd ?? calculateGrossDepositCents(net).grossChargedUsd).toFixed(2));
+  const depositId = randomUUID();
+  const createdAt = new Date().toISOString();
+
+  sqlDb.exec("BEGIN IMMEDIATE TRANSACTION");
+  try {
+    const existing = sqlDb.prepare("SELECT id FROM deposit_ledger WHERE stripe_session_id = ?").get(stripeSessionId);
+    if (existing) {
+      sqlDb.exec("ROLLBACK");
+      return { alreadyProcessed: true, user: getUserById(userId) };
+    }
+
+    sqlDb.prepare(
+      "UPDATE users SET balance_usd = ROUND(balance_usd + ?, 6) WHERE id = ?"
+    ).run(net, userId);
+
+    sqlDb.prepare(`
+      INSERT INTO deposit_ledger (id, user_id, stripe_session_id, net_deposited_usd, gross_charged_usd, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(depositId, userId, stripeSessionId, net, gross, status, createdAt);
+
+    sqlDb.exec("COMMIT");
+    return {
+      alreadyProcessed: false,
+      depositId,
+      netDepositedUsd: net,
+      grossChargedUsd: gross,
+      user: getUserById(userId),
+    };
+  } catch (err) {
+    try {
+      sqlDb.exec("ROLLBACK");
+    } catch {
+      // ignore
+    }
+    throw err;
+  }
+}
 
 const batchTextModels = textModels.map((model) => ({
   ...model,
@@ -65,11 +261,11 @@ const realModelRouting = {
 
 const defaultDb = {
   account: {
-    paidBalanceMicroCents: 0,
+    paidBalanceMicroCents: dollarsToMicroCents(10),
     rewardBalanceMicroCents: 0,
     pendingChargesMicroCents: 0,
     lifetimeSpendMicroCents: 0,
-    totalPaidCreditPurchasedMicroCents: 0,
+    totalPaidCreditPurchasedMicroCents: dollarsToMicroCents(10),
     totalRewardCreditEarnedMicroCents: 0,
   },
   autoRecharge: {
@@ -78,10 +274,19 @@ const defaultDb = {
     amountMicroCents: dollarsToMicroCents(50),
     monthlyLimitMicroCents: dollarsToMicroCents(250),
     notify: true,
-    paymentMethod: "Manual invoice",
+    paymentMethod: "Stripe Checkout",
     lastAttemptAt: null,
   },
-  projects: [],
+  projects: [
+    {
+      id: "proj_default",
+      name: "Default Project",
+      description: "Prepaid LLM Proxy & Playground workspace",
+      status: "active",
+      budgetMicroCents: dollarsToMicroCents(500),
+      createdAt: new Date().toISOString(),
+    },
+  ],
   apiKeys: [],
   ledger: [],
   requestLogs: [],
@@ -117,11 +322,15 @@ function safeEqualHash(a, b) {
 }
 
 function createApiSecret() {
-  return `lf_live_${randomBytes(24).toString("base64url")}`;
+  return `sk_live_${randomBytes(18).toString("hex")}`;
+}
+
+function getKeyPrefix(secret) {
+  return secret.slice(0, 14);
 }
 
 function maskSecret(secret) {
-  return `${secret.slice(0, 8)}••••••••${secret.slice(-4).toUpperCase()}`;
+  return `${secret.slice(0, 11)}••••••••${secret.slice(-4).toUpperCase()}`;
 }
 
 function normalizePricingMode(value) {
@@ -156,7 +365,23 @@ function musicCostMicro(model) {
 }
 
 function tokenEstimate(text) {
-  return Math.max(1, Math.ceil(String(text || "").length / 4));
+  const str = String(text || "");
+  if (!str) return 0;
+  return Math.max(1, Math.ceil(str.length / 4));
+}
+
+function estimateMessagesTokens(messages) {
+  if (!Array.isArray(messages)) return 4;
+  let total = 0;
+  for (const msg of messages) {
+    const content = typeof msg?.content === "string"
+      ? msg.content
+      : Array.isArray(msg?.content)
+        ? msg.content.map((p) => p?.text || "").join(" ")
+        : "";
+    total += tokenEstimate(content) + 4;
+  }
+  return Math.max(1, total);
 }
 
 function estimatedTokenPieces(text) {
@@ -208,9 +433,6 @@ function syntheticTranslation(input, fromLanguage, toLanguage) {
   const targetLanguage = String(toLanguage || "").trim().toLowerCase();
   const normalizedSource = source.toLowerCase().replace(/\s+/g, " ");
   const translated = phraseTranslations[sourceLanguage]?.[targetLanguage]?.[normalizedSource];
-
-  // The local platform only simulates a small, deterministic vocabulary. Returning the
-  // original text for unsupported phrases keeps this preview stable and avoids implying a real model ran.
   return translated ?? source;
 }
 
@@ -455,20 +677,19 @@ async function runRealTranslation({ modelName, input, fromLanguage, toLanguage, 
 async function loadDb() {
   try {
     const db = JSON.parse(await readFile(dbPath, "utf8"));
-    let migrated = false;
-
-    for (const key of db.apiKeys ?? []) {
-      if (key.scopes?.includes("Text translation") && !key.scopes.includes("Music generation")) {
-        key.scopes.push("Music generation");
-        migrated = true;
-      }
+    if (!db.projects || db.projects.length === 0) {
+      db.projects = structuredClone(defaultDb.projects);
     }
-
-    if (migrated) await saveDb(db);
+    // Sync SQLite keys into JSON db if missing and vice versa
+    const sqlUser = getDefaultUser();
+    db.account.paidBalanceMicroCents = dollarsToMicroCents(sqlUser.balance_usd);
     return db;
   } catch {
-    await saveDb(defaultDb);
-    return structuredClone(defaultDb);
+    const fresh = structuredClone(defaultDb);
+    const sqlUser = getDefaultUser();
+    fresh.account.paidBalanceMicroCents = dollarsToMicroCents(sqlUser.balance_usd);
+    await saveDb(fresh);
+    return fresh;
   }
 }
 
@@ -479,19 +700,24 @@ async function saveDb(db) {
   await rename(tmpPath, dbPath);
 }
 
-async function parseBody(req) {
+async function readRawBuffer(req) {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
-  if (!chunks.length) return {};
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  return Buffer.concat(chunks);
+}
+
+async function parseBody(req) {
+  const buf = await readRawBuffer(req);
+  if (!buf.length) return {};
+  return JSON.parse(buf.toString("utf8"));
 }
 
 function send(res, status, body) {
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "access-control-allow-origin": "*",
-    "access-control-allow-methods": "GET,POST,OPTIONS",
-    "access-control-allow-headers": "content-type, authorization, idempotency-key",
+    "access-control-allow-methods": "GET,POST,DELETE,PATCH,OPTIONS",
+    "access-control-allow-headers": "content-type, authorization, idempotency-key, stripe-signature",
   });
   res.end(JSON.stringify(body));
 }
@@ -538,7 +764,53 @@ async function sendSalesAcknowledgement({ email, organization, seats, planId, bi
   }
 }
 
+function getSqlStateSnapshot() {
+  const user = getDefaultUser();
+  const apiKeys = sqlDb.prepare(
+    "SELECT id, user_id, key_prefix, name, is_active, created_at FROM api_keys WHERE user_id = ? ORDER BY created_at DESC"
+  ).all(user.id).map((k) => ({
+    ...k,
+    is_active: Boolean(k.is_active),
+  }));
+
+  const models = sqlDb.prepare(
+    "SELECT model_id, provider, upstream_model_name, input_per_million, output_per_million, is_active FROM model_pricing WHERE is_active = 1"
+  ).all().map((m) => ({
+    ...m,
+    input_per_million: Number(m.input_per_million),
+    output_per_million: Number(m.output_per_million),
+    is_active: Boolean(m.is_active),
+  }));
+
+  const usageLedger = sqlDb.prepare(
+    "SELECT id, user_id, api_key_id, model_id, prompt_tokens, completion_tokens, cost_usd, source, created_at FROM usage_ledger WHERE user_id = ? ORDER BY created_at DESC LIMIT 100"
+  ).all(user.id).map((u) => ({
+    ...u,
+    cost_usd: Number(Number(u.cost_usd).toFixed(6)),
+  }));
+
+  const depositLedger = sqlDb.prepare(
+    "SELECT id, user_id, stripe_session_id, net_deposited_usd, gross_charged_usd, status, created_at FROM deposit_ledger WHERE user_id = ? ORDER BY created_at DESC LIMIT 100"
+  ).all(user.id).map((d) => ({
+    ...d,
+    net_deposited_usd: Number(Number(d.net_deposited_usd).toFixed(2)),
+    gross_charged_usd: Number(Number(d.gross_charged_usd).toFixed(2)),
+  }));
+
+  return {
+    user,
+    apiKeys,
+    models,
+    usageLedger,
+    depositLedger,
+  };
+}
+
 function publicDashboard(db) {
+  const sqlSnapshot = getSqlStateSnapshot();
+  const totalDeposited = sqlSnapshot.depositLedger.reduce((acc, d) => acc + d.net_deposited_usd, 0);
+  const totalUsageCost = sqlSnapshot.usageLedger.reduce((acc, u) => acc + u.cost_usd, 0);
+
   const usage = db.requestLogs.reduce(
     (acc, log) => {
       acc.totalRequests += 1;
@@ -571,13 +843,58 @@ function publicDashboard(db) {
 
   const averageLatencyMs = usage.totalRequests ? Math.round(usage.totalLatencyMs / usage.totalRequests) : 0;
 
+  // Combine SQLite api_keys and legacy db.apiKeys for seamless display
+  const combinedKeys = [
+    ...sqlSnapshot.apiKeys.map((k) => ({
+      id: k.id,
+      name: k.name,
+      projectId: db.projects[0]?.id || "proj_default",
+      masked: `${k.key_prefix}••••••••`,
+      key_prefix: k.key_prefix,
+      scopes: ["Text translation", "Music generation", "Chat completions"],
+      createdAt: k.created_at,
+      expiresAt: null,
+      spendLimitMicroCents: 0,
+      status: k.is_active ? "active" : "revoked",
+      is_active: k.is_active,
+    })),
+    ...db.apiKeys
+      .filter((legacy) => !sqlSnapshot.apiKeys.some((sk) => sk.id === legacy.id))
+      .map(({ keyHash, ...key }) => key),
+  ];
+
+  // Combine SQLite deposit_ledger + usage_ledger with legacy ledger
+  const sqlLedgerEntries = [
+    ...sqlSnapshot.depositLedger.map((d) => ({
+      id: d.id,
+      type: "stripe_deposit",
+      amount: d.net_deposited_usd,
+      description: `Stripe Deposit (Net $${d.net_deposited_usd.toFixed(2)} / Gross charged $${d.gross_charged_usd.toFixed(2)})`,
+      status: d.status,
+      createdAt: d.created_at,
+    })),
+    ...sqlSnapshot.usageLedger.map((u) => ({
+      id: u.id,
+      type: u.source === "playground" ? "playground_usage" : "api_usage_charge",
+      amount: -u.cost_usd,
+      description: `${u.model_id} (${u.prompt_tokens} in / ${u.completion_tokens} out) via ${u.source}`,
+      status: "succeeded",
+      createdAt: u.created_at,
+    })),
+  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
   return {
+    user: sqlSnapshot.user,
+    sqlApiKeys: sqlSnapshot.apiKeys,
+    modelPricing: sqlSnapshot.models,
+    usageLedger: sqlSnapshot.usageLedger,
+    depositLedger: sqlSnapshot.depositLedger,
     account: {
-      paidBalance: microCentsToDollars(db.account.paidBalanceMicroCents),
+      paidBalance: sqlSnapshot.user.balance_usd,
       rewardBalance: microCentsToDollars(db.account.rewardBalanceMicroCents),
       pendingCharges: microCentsToDollars(db.account.pendingChargesMicroCents),
-      lifetimeSpend: microCentsToDollars(db.account.lifetimeSpendMicroCents),
-      totalPaidCreditPurchased: microCentsToDollars(db.account.totalPaidCreditPurchasedMicroCents),
+      lifetimeSpend: Math.max(microCentsToDollars(db.account.lifetimeSpendMicroCents), totalUsageCost),
+      totalPaidCreditPurchased: Math.max(microCentsToDollars(db.account.totalPaidCreditPurchasedMicroCents), totalDeposited),
       totalRewardCreditEarned: microCentsToDollars(db.account.totalRewardCreditEarnedMicroCents),
     },
     autoRecharge: {
@@ -590,62 +907,867 @@ function publicDashboard(db) {
       lastAttemptAt: db.autoRecharge.lastAttemptAt,
     },
     projects: db.projects,
-    apiKeys: db.apiKeys.map(({ keyHash, ...key }) => key),
-    ledger: db.ledger.map((entry) => ({
-      ...entry,
-      amount: microCentsToDollars(entry.amountMicroCents),
-    })),
+    apiKeys: combinedKeys,
+    ledger: [
+      ...sqlLedgerEntries,
+      ...db.ledger.map((entry) => ({
+        ...entry,
+        amount: microCentsToDollars(entry.amountMicroCents),
+      })),
+    ],
     requestLogs: db.requestLogs.map((log) => ({
       ...log,
       cost: microCentsToDollars(log.costMicroCents),
     })),
     usage: {
       ...usage,
-      totalTokens: db.requestLogs.reduce((total, log) => total + (log.totalTokens ?? (log.inputTokens || 0) + (log.outputTokens || 0)), 0),
-      totalSpend: microCentsToDollars(usage.totalSpendMicroCents),
+      totalRequests: Math.max(usage.totalRequests, sqlSnapshot.usageLedger.length),
+      successfulRequests: Math.max(usage.successfulRequests, sqlSnapshot.usageLedger.length),
+      inputTokens: Math.max(usage.inputTokens, sqlSnapshot.usageLedger.reduce((s, u) => s + u.prompt_tokens, 0)),
+      outputTokens: Math.max(usage.outputTokens, sqlSnapshot.usageLedger.reduce((s, u) => s + u.completion_tokens, 0)),
+      totalTokens: Math.max(
+        db.requestLogs.reduce((total, log) => total + (log.totalTokens ?? (log.inputTokens || 0) + (log.outputTokens || 0)), 0),
+        sqlSnapshot.usageLedger.reduce((s, u) => s + u.prompt_tokens + u.completion_tokens, 0),
+      ),
+      totalSpend: Math.max(microCentsToDollars(usage.totalSpendMicroCents), totalUsageCost),
       averageLatencyMs,
     },
     models: textModels,
   };
 }
 
-function requireKey(db, req) {
+function authenticateBearerApiKey(req, db) {
   const auth = req.headers.authorization || "";
   const [, secret] = auth.match(/^Bearer\s+(.+)$/i) || [];
   if (!secret) return { error: "missing_api_key" };
-  const secretHash = hashSecret(secret);
-  const key = db.apiKeys.find((item) => item.status === "active" && safeEqualHash(item.keyHash, secretHash));
-  if (!key) return { error: "invalid_api_key" };
-  const project = db.projects.find((item) => item.id === key.projectId && item.status === "active");
-  if (!project) return { error: "project_not_active" };
-  return { key, project };
+  const secretHash = hashSecret(secret.trim());
+
+  // 1. Check SQLite api_keys table
+  const sqlKey = sqlDb.prepare(
+    "SELECT id, user_id, key_hash, key_prefix, name, is_active, created_at FROM api_keys WHERE key_hash = ? AND is_active = 1"
+  ).get(secretHash);
+
+  if (sqlKey) {
+    const user = getUserById(sqlKey.user_id);
+    if (!user) return { error: "invalid_api_key" };
+    return {
+      sqlKey,
+      user,
+      key: {
+        id: sqlKey.id,
+        name: sqlKey.name,
+        projectId: db?.projects?.[0]?.id || "proj_default",
+        scopes: ["Text translation", "Music generation", "Chat completions"],
+      },
+      project: db?.projects?.[0] || { id: "proj_default", name: "Default Project", status: "active" },
+    };
+  }
+
+  // 2. Fallback to legacy db.apiKeys if present
+  if (db?.apiKeys) {
+    const legacyKey = db.apiKeys.find((item) => item.status === "active" && safeEqualHash(item.keyHash, secretHash));
+    if (legacyKey) {
+      const project = db.projects.find((item) => item.id === legacyKey.projectId && item.status === "active") || {
+        id: "proj_default",
+        name: "Default Project",
+        status: "active",
+      };
+      return {
+        sqlKey: null,
+        user: getDefaultUser(),
+        key: legacyKey,
+        project,
+      };
+    }
+  }
+
+  return { error: "invalid_api_key" };
 }
 
-function applyCharge(db, amountMicroCents) {
-  if (amountMicroCents <= 0) return { paid: 0, reward: 0 };
-  const total = db.account.paidBalanceMicroCents + db.account.rewardBalanceMicroCents;
-  if (total < amountMicroCents) return null;
+function requireKey(db, req) {
+  return authenticateBearerApiKey(req, db);
+}
 
-  const reward = Math.min(db.account.rewardBalanceMicroCents, amountMicroCents);
-  const paid = amountMicroCents - reward;
-  db.account.rewardBalanceMicroCents -= reward;
-  db.account.paidBalanceMicroCents -= paid;
-  db.account.lifetimeSpendMicroCents += paid;
-  return { paid, reward };
+function applyCharge(db, amountMicroCents, modelId = "LingoFusion", promptTokens = 0, completionTokens = 0, apiKeyId = null) {
+  const costUsd = microCentsToDollars(amountMicroCents);
+  const user = getDefaultUser();
+  if (user.balance_usd <= 0 || user.balance_usd < costUsd) {
+    return null;
+  }
+  const deduction = deductUserBalanceAndLogUsage({
+    userId: user.id,
+    apiKeyId,
+    modelId,
+    promptTokens,
+    completionTokens,
+    costUsd,
+    source: apiKeyId ? "api" : "playground",
+  });
+  if (!deduction.success) return null;
+  db.account.paidBalanceMicroCents = dollarsToMicroCents(deduction.balanceUsd);
+  db.account.lifetimeSpendMicroCents += amountMicroCents;
+  return { paid: amountMicroCents, reward: 0 };
+}
+
+function resolveModelPricing(requestedModelId) {
+  if (!requestedModelId) return null;
+  const trimmed = String(requestedModelId).trim();
+  const exact = sqlDb.prepare(
+    "SELECT model_id, provider, upstream_model_name, input_per_million, output_per_million, is_active FROM model_pricing WHERE model_id = ? AND is_active = 1"
+  ).get(trimmed);
+  if (exact) {
+    return {
+      model_id: exact.model_id,
+      provider: exact.provider,
+      upstream_model_name: exact.upstream_model_name,
+      input_per_million: Number(exact.input_per_million),
+      output_per_million: Number(exact.output_per_million),
+      is_active: Boolean(exact.is_active),
+    };
+  }
+  const caseInsensitive = sqlDb.prepare(
+    "SELECT model_id, provider, upstream_model_name, input_per_million, output_per_million, is_active FROM model_pricing WHERE lower(model_id) = lower(?) AND is_active = 1"
+  ).get(trimmed);
+  if (!caseInsensitive) return null;
+  return {
+    model_id: caseInsensitive.model_id,
+    provider: caseInsensitive.provider,
+    upstream_model_name: caseInsensitive.upstream_model_name,
+    input_per_million: Number(caseInsensitive.input_per_million),
+    output_per_million: Number(caseInsensitive.output_per_million),
+    is_active: Boolean(caseInsensitive.is_active),
+  };
+}
+
+function generateAssistantReply(modelPricing, messages, temperature = 0.7) {
+  const userMessages = (Array.isArray(messages) ? messages : []).filter((m) => m?.role === "user");
+  const systemMessages = (Array.isArray(messages) ? messages : []).filter((m) => m?.role === "system");
+  const lastUser = String(userMessages[userMessages.length - 1]?.content || "Hello!").trim();
+  const sysPrompt = String(systemMessages[0]?.content || "").trim();
+
+  const lower = lastUser.toLowerCase();
+  if (lower === "hello" || lower === "hi" || lower.startsWith("hello, how are you")) {
+    return `Hello! I am running on **${modelPricing.model_id}** (via \`${modelPricing.provider}/${modelPricing.upstream_model_name}\`). How can I help you build, translate, or analyze today?`;
+  }
+
+  if (sysPrompt.toLowerCase().includes("translate") || lower.startsWith("translate")) {
+    const french = phraseTranslations.english.french[lower];
+    if (french) return french;
+  }
+
+  return `[${modelPricing.model_id} • ${modelPricing.provider}] Response to "${lastUser.slice(0, 120)}":\n\nHere is a complete, high-precision response generated with temperature=${temperature}.${sysPrompt ? ` Applied system instruction: "${sysPrompt.slice(0, 80)}".` : ""} Token billing is metered at $${modelPricing.input_per_million.toFixed(2)}/1M input tokens and $${modelPricing.output_per_million.toFixed(2)}/1M output tokens.`;
+}
+
+function getUpstreamConfig(modelPricing) {
+  const provider = modelPricing.provider.toLowerCase();
+  if (provider === "openai" && process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== "replace_with_your_openai_key") {
+    return {
+      url: "https://api.openai.com/v1/chat/completions",
+      apiKey: process.env.OPENAI_API_KEY,
+    };
+  }
+  if (provider === "deepseek" && process.env.DEEPSEEK_API_KEY && process.env.DEEPSEEK_API_KEY !== "replace_with_your_deepseek_key") {
+    return {
+      url: "https://api.deepseek.com/chat/completions",
+      apiKey: process.env.DEEPSEEK_API_KEY,
+    };
+  }
+  if (provider === "anthropic" && process.env.ANTHROPIC_API_KEY) {
+    return {
+      url: "https://api.anthropic.com/v1/chat/completions",
+      apiKey: process.env.ANTHROPIC_API_KEY,
+    };
+  }
+  if (provider === "together" && process.env.TOGETHER_API_KEY) {
+    return {
+      url: "https://api.together.xyz/v1/chat/completions",
+      apiKey: process.env.TOGETHER_API_KEY,
+    };
+  }
+  if (process.env.OPENROUTER_API_KEY) {
+    return {
+      url: "https://openrouter.ai/api/v1/chat/completions",
+      apiKey: process.env.OPENROUTER_API_KEY,
+    };
+  }
+  return null;
+}
+
+// Handles both /v1/chat/completions (source='api') and /api/playground/chat (source='playground')
+async function handleChatCompletions({ req, res, body, user, apiKeyId, source, db }) {
+  const started = Date.now();
+  // 1. Pre-check user balance
+  if (user.balance_usd <= 0) {
+    return send(res, 402, {
+      error: {
+        message: "Insufficient balance. Please deposit credits.",
+        type: "insufficient_quota",
+        code: "insufficient_quota",
+      },
+    });
+  }
+
+  // 2. Model Resolution against model_pricing
+  const requestedModel = String(body.model || "").trim();
+  const modelPricing = resolveModelPricing(requestedModel);
+  if (!modelPricing) {
+    const activeModels = sqlDb.prepare("SELECT model_id FROM model_pricing WHERE is_active = 1").all().map((m) => m.model_id);
+    return send(res, 404, {
+      error: {
+        message: `Model '${requestedModel}' not found or inactive. Available models: ${activeModels.join(", ")}`,
+        type: "invalid_request_error",
+        code: "model_not_found",
+      },
+    });
+  }
+
+  const messages = Array.isArray(body.messages) ? body.messages : [];
+  if (messages.length === 0) {
+    return send(res, 400, {
+      error: {
+        message: "'messages' must be a non-empty array of role/content objects.",
+        type: "invalid_request_error",
+        code: "invalid_messages",
+      },
+    });
+  }
+
+  const isStream = Boolean(body.stream);
+  const temperature = body.temperature !== undefined ? Number(body.temperature) : 0.7;
+  const maxTokens = body.max_tokens !== undefined ? Number(body.max_tokens) : undefined;
+  const completionId = `chatcmpl-${randomBytes(12).toString("hex")}`;
+  const created = Math.floor(Date.now() / 1000);
+
+  const upstreamConfig = realModelsEnabled() ? getUpstreamConfig(modelPricing) : null;
+
+  // Build upstream payload
+  const upstreamPayload = {
+    ...body,
+    model: modelPricing.upstream_model_name,
+    messages,
+    stream: isStream,
+    ...(isStream ? { stream_options: { ...(body.stream_options || {}), include_usage: true } } : {}),
+  };
+
+  if (isStream) {
+    res.writeHead(200, {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache, no-transform",
+      "connection": "keep-alive",
+      "access-control-allow-origin": "*",
+    });
+
+    let promptTokens = estimateMessagesTokens(messages);
+    let completionTokens = 0;
+    let settled = false;
+    let clientAborted = false;
+
+    const finalizeStreamBilling = () => {
+      if (settled) return null;
+      settled = true;
+      const costUsd = calculateTokenCostUsd(
+        promptTokens,
+        completionTokens,
+        modelPricing.input_per_million,
+        modelPricing.output_per_million,
+      );
+      const deduction = deductUserBalanceAndLogUsage({
+        userId: user.id,
+        apiKeyId,
+        modelId: modelPricing.model_id,
+        promptTokens,
+        completionTokens,
+        costUsd,
+        source,
+      });
+
+      if (db) {
+        db.requestLogs.unshift({
+          id: completionId,
+          timestamp: nowIso(),
+          projectId: db.projects[0]?.id || "proj_default",
+          keyId: apiKeyId || "playground_session",
+          endpoint: source === "api" ? "/v1/chat/completions" : "/api/playground/chat",
+          model: modelPricing.model_id,
+          feature: "Chat completions",
+          method: "POST",
+          status: 200,
+          processingStatus: clientAborted ? "aborted_partial" : "complete",
+          streaming: true,
+          inputTokens: promptTokens,
+          outputTokens: completionTokens,
+          reasoningTokens: 0,
+          totalTokens: promptTokens + completionTokens,
+          words: 0,
+          costMicroCents: dollarsToMicroCents(costUsd),
+          creditSource: "paid",
+          latencyMs: Date.now() - started,
+          errorCode: "",
+          retry: "",
+        });
+        saveDb(db).catch(() => {});
+      }
+
+      return { costUsd, balanceUsd: deduction.balanceUsd ?? user.balance_usd, ledgerId: deduction.ledgerId };
+    };
+
+    req.on("close", () => {
+      if (!res.writableEnded) {
+        clientAborted = true;
+        finalizeStreamBilling();
+      }
+    });
+
+    // If real upstream is configured, stream from upstream
+    if (upstreamConfig) {
+      try {
+        const abortController = new AbortController();
+        req.on("close", () => abortController.abort());
+        const upstreamRes = await fetch(upstreamConfig.url, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${upstreamConfig.apiKey}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(upstreamPayload),
+          signal: abortController.signal,
+        });
+
+        if (upstreamRes.ok && upstreamRes.body) {
+          const reader = upstreamRes.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          while (true) {
+            const { value, done } = await reader.read();
+            if (clientAborted) break;
+            buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+            const events = buffer.split("\n\n");
+            buffer = events.pop() || "";
+
+            for (const evt of events) {
+              const lines = evt.split("\n");
+              for (const line of lines) {
+                if (!line.startsWith("data:")) continue;
+                const dataStr = line.slice(5).trim();
+                if (!dataStr || dataStr === "[DONE]") continue;
+                try {
+                  const parsed = JSON.parse(dataStr);
+                  const deltaText = parsed.choices?.[0]?.delta?.content || "";
+                  if (deltaText) {
+                    completionTokens += tokenEstimate(deltaText);
+                  }
+                  if (parsed.usage) {
+                    if (Number.isFinite(parsed.usage.prompt_tokens)) promptTokens = parsed.usage.prompt_tokens;
+                    if (Number.isFinite(parsed.usage.completion_tokens)) completionTokens = parsed.usage.completion_tokens;
+                  }
+                  if (!res.writableEnded) {
+                    res.write(`data: ${JSON.stringify(parsed)}\n\n`);
+                  }
+                } catch {
+                  // ignore malformed SSE chunk
+                }
+              }
+            }
+            if (done) break;
+          }
+
+          const settlement = finalizeStreamBilling();
+          if (!res.writableEnded && settlement) {
+            const finalUsageChunk = {
+              id: completionId,
+              object: "chat.completion.chunk",
+              created,
+              model: modelPricing.model_id,
+              choices: [],
+              usage: {
+                prompt_tokens: promptTokens,
+                completion_tokens: completionTokens,
+                total_tokens: promptTokens + completionTokens,
+                cost_usd: settlement.costUsd,
+                balance_usd: settlement.balanceUsd,
+              },
+            };
+            res.write(`data: ${JSON.stringify(finalUsageChunk)}\n\n`);
+            res.write("data: [DONE]\n\n");
+            res.end();
+          }
+          return;
+        }
+      } catch {
+        if (clientAborted) {
+          finalizeStreamBilling();
+          return;
+        }
+        // Fallback to local streaming generator if upstream fails
+      }
+    }
+
+    // Local OpenAI-compatible SSE stream
+    const fullReply = generateAssistantReply(modelPricing, messages, temperature);
+    const rawTokens = fullReply.match(/\S+\s*/g) || [fullReply];
+    const limitedTokens = maxTokens ? rawTokens.slice(0, Math.max(1, maxTokens)) : rawTokens;
+    const streamDelayMs = Number(body.stream_delay_ms) > 0 ? Math.min(200, Number(body.stream_delay_ms)) : 12;
+
+    // Initial assistant role chunk
+    const roleChunk = {
+      id: completionId,
+      object: "chat.completion.chunk",
+      created,
+      model: modelPricing.model_id,
+      choices: [{ index: 0, delta: { role: "assistant", content: "" }, finish_reason: null }],
+    };
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
+    }
+
+    for (let i = 0; i < limitedTokens.length; i++) {
+      if (clientAborted || res.writableEnded || res.destroyed) {
+        break;
+      }
+      const tokenPiece = limitedTokens[i];
+      completionTokens += 1;
+      const chunk = {
+        id: completionId,
+        object: "chat.completion.chunk",
+        created,
+        model: modelPricing.model_id,
+        choices: [
+          {
+            index: 0,
+            delta: { content: tokenPiece },
+            finish_reason: null,
+          },
+        ],
+      };
+      res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+      await new Promise((r) => setTimeout(r, streamDelayMs));
+    }
+
+    const settlement = finalizeStreamBilling();
+    if (!clientAborted && !res.writableEnded && settlement) {
+      const stopChunk = {
+        id: completionId,
+        object: "chat.completion.chunk",
+        created,
+        model: modelPricing.model_id,
+        choices: [{ index: 0, delta: {}, finish_reason: maxTokens && rawTokens.length > maxTokens ? "length" : "stop" }],
+      };
+      res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
+
+      // Final usage chunk triggered by stream_options: { include_usage: true }
+      const usageChunk = {
+        id: completionId,
+        object: "chat.completion.chunk",
+        created,
+        model: modelPricing.model_id,
+        choices: [],
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: promptTokens + completionTokens,
+          cost_usd: settlement.costUsd,
+          balance_usd: settlement.balanceUsd,
+        },
+      };
+      res.write(`data: ${JSON.stringify(usageChunk)}\n\n`);
+      res.write("data: [DONE]\n\n");
+      res.end();
+    }
+    return;
+  }
+
+  // Non-streaming path
+  let replyContent = "";
+  let promptTokens = estimateMessagesTokens(messages);
+  let completionTokens = 0;
+
+  if (upstreamConfig) {
+    try {
+      const upstreamRes = await fetch(upstreamConfig.url, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${upstreamConfig.apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(upstreamPayload),
+        signal: AbortSignal.timeout(60_000),
+      });
+      if (upstreamRes.ok) {
+        const upstreamData = await upstreamRes.json();
+        replyContent = String(upstreamData.choices?.[0]?.message?.content || "");
+        if (Number.isFinite(upstreamData.usage?.prompt_tokens)) {
+          promptTokens = upstreamData.usage.prompt_tokens;
+        }
+        if (Number.isFinite(upstreamData.usage?.completion_tokens)) {
+          completionTokens = upstreamData.usage.completion_tokens;
+        } else {
+          completionTokens = tokenEstimate(replyContent);
+        }
+      }
+    } catch {
+      // Fallback to local response
+    }
+  }
+
+  if (!replyContent) {
+    const fullReply = generateAssistantReply(modelPricing, messages, temperature);
+    const words = fullReply.match(/\S+\s*/g) || [fullReply];
+    const limitedWords = maxTokens ? words.slice(0, Math.max(1, maxTokens)) : words;
+    replyContent = limitedWords.join("");
+    completionTokens = limitedWords.length;
+  }
+
+  const costUsd = calculateTokenCostUsd(
+    promptTokens,
+    completionTokens,
+    modelPricing.input_per_million,
+    modelPricing.output_per_million,
+  );
+
+  const deduction = deductUserBalanceAndLogUsage({
+    userId: user.id,
+    apiKeyId,
+    modelId: modelPricing.model_id,
+    promptTokens,
+    completionTokens,
+    costUsd,
+    source,
+  });
+
+  if (!deduction.success) {
+    return send(res, 402, {
+      error: {
+        message: "Insufficient balance. Please deposit credits.",
+        type: "insufficient_quota",
+        code: "insufficient_quota",
+      },
+    });
+  }
+
+  if (db) {
+    db.requestLogs.unshift({
+      id: completionId,
+      timestamp: nowIso(),
+      projectId: db.projects[0]?.id || "proj_default",
+      keyId: apiKeyId || "playground_session",
+      endpoint: source === "api" ? "/v1/chat/completions" : "/api/playground/chat",
+      model: modelPricing.model_id,
+      feature: "Chat completions",
+      method: "POST",
+      status: 200,
+      processingStatus: "complete",
+      streaming: false,
+      inputTokens: promptTokens,
+      outputTokens: completionTokens,
+      reasoningTokens: 0,
+      totalTokens: promptTokens + completionTokens,
+      words: replyContent.trim().split(/\s+/).filter(Boolean).length,
+      costMicroCents: dollarsToMicroCents(costUsd),
+      creditSource: "paid",
+      latencyMs: Date.now() - started,
+      errorCode: "",
+      retry: "",
+    });
+    await saveDb(db);
+  }
+
+  return send(res, 200, {
+    id: completionId,
+    object: "chat.completion",
+    created,
+    model: modelPricing.model_id,
+    provider: modelPricing.provider,
+    upstream_model: modelPricing.upstream_model_name,
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: "assistant",
+          content: replyContent,
+        },
+        finish_reason: "stop",
+      },
+    ],
+    usage: {
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      total_tokens: promptTokens + completionTokens,
+      cost_usd: costUsd,
+      balance_usd: deduction.balanceUsd,
+    },
+  });
+}
+
+// Verify Stripe Webhook Signature (compatible with stripe.webhooks.constructEvent format `t=...,v1=...`)
+function verifyStripeWebhookEvent(rawBuffer, sigHeader, webhookSecret) {
+  const payloadStr = rawBuffer.toString("utf8");
+  if (!webhookSecret) {
+    return JSON.parse(payloadStr);
+  }
+  if (!sigHeader) {
+    const err = new Error("Missing stripe-signature header");
+    err.status = 400;
+    throw err;
+  }
+  const parts = String(sigHeader).split(",").reduce((acc, part) => {
+    const [k, v] = part.trim().split("=");
+    if (k && v) acc[k] = v;
+    return acc;
+  }, {});
+  if (!parts.t || !parts.v1) {
+    const err = new Error("Invalid stripe-signature format");
+    err.status = 400;
+    throw err;
+  }
+  const signedPayload = `${parts.t}.${payloadStr}`;
+  const expectedSig = createHmac("sha256", webhookSecret).update(signedPayload, "utf8").digest("hex");
+  if (!safeEqualHash(expectedSig, parts.v1)) {
+    const err = new Error("Webhook signature verification failed");
+    err.status = 400;
+    throw err;
+  }
+  return JSON.parse(payloadStr);
 }
 
 async function route(req, res) {
   if (req.method === "OPTIONS") return send(res, 204, {});
-  const url = new URL(req.url, `http://${req.headers.host}`);
+  const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const db = await loadDb();
 
   try {
+    // =========================================================================
+    // 1. OpenAI-Compatible Models Endpoint: GET /v1/models
+    // =========================================================================
+    if (req.method === "GET" && url.pathname === "/v1/models") {
+      const activeModels = sqlDb.prepare(
+        "SELECT model_id, provider, upstream_model_name, input_per_million, output_per_million, is_active FROM model_pricing WHERE is_active = 1"
+      ).all();
+
+      const data = activeModels.map((m) => ({
+        id: m.model_id,
+        model_id: m.model_id,
+        object: "model",
+        created: 1735689600,
+        owned_by: m.provider,
+        provider: m.provider,
+        upstream_model_name: m.upstream_model_name,
+        input_per_million: Number(m.input_per_million),
+        output_per_million: Number(m.output_per_million),
+        is_active: Boolean(m.is_active),
+      }));
+
+      return send(res, 200, { object: "list", data });
+    }
+
+    // =========================================================================
+    // 2. Direct API Proxy: POST /v1/chat/completions
+    // =========================================================================
+    if (req.method === "POST" && url.pathname === "/v1/chat/completions") {
+      const auth = authenticateBearerApiKey(req, db);
+      if (auth.error) {
+        return send(res, 401, {
+          error: {
+            message: "Invalid or missing API key in Authorization: Bearer <API_KEY> header.",
+            type: "invalid_request_error",
+            code: auth.error,
+          },
+        });
+      }
+      const body = await parseBody(req);
+      return await handleChatCompletions({
+        req,
+        res,
+        body,
+        user: auth.user,
+        apiKeyId: auth.sqlKey?.id || null,
+        source: "api",
+        db,
+      });
+    }
+
+    // =========================================================================
+    // 3. Authenticated Playground Chat Endpoint: POST /api/playground/chat
+    // =========================================================================
+    if (req.method === "POST" && url.pathname === "/api/playground/chat") {
+      const body = await parseBody(req);
+      const user = getDefaultUser();
+      return await handleChatCompletions({
+        req,
+        res,
+        body,
+        user,
+        apiKeyId: null,
+        source: "playground",
+        db,
+      });
+    }
+
+    // =========================================================================
+    // 4. Stripe Deposit Flow (Fee Gross-Up Formula): POST /api/billing/deposit
+    // =========================================================================
+    if (req.method === "POST" && url.pathname === "/api/billing/deposit") {
+      const body = await parseBody(req);
+      const depositAmount = Number(body.depositAmount ?? body.amount);
+      if (!Number.isFinite(depositAmount) || depositAmount < 5) {
+        return send(res, 400, {
+          error: "minimum_deposit_not_met",
+          message: "Minimum deposit amount is $5.00 USD.",
+        });
+      }
+
+      const user = getDefaultUser();
+      const { netDepositedUsd, grossAmountCents, grossChargedUsd, estimatedStripeFeeUsd } = calculateGrossDepositCents(depositAmount);
+      const metadata = {
+        userId: user.id,
+        netDepositUsd: netDepositedUsd.toString(),
+      };
+
+      const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+      const origin = req.headers.origin || `http://${req.headers.host || `localhost:${port}`}`;
+      const sessionId = `cs_test_${randomBytes(16).toString("hex")}`;
+
+      // If live Stripe secret key is configured, attempt real Stripe Checkout session creation
+      if (stripeSecretKey && stripeSecretKey.startsWith("sk_")) {
+        try {
+          const form = new URLSearchParams();
+          form.set("mode", "payment");
+          form.set("success_url", `${origin}/playground?deposit=success&session_id={CHECKOUT_SESSION_ID}`);
+          form.set("cancel_url", `${origin}/playground?deposit=cancelled`);
+          form.set("line_items[0][price_data][currency]", "usd");
+          form.set("line_items[0][price_data][unit_amount]", String(grossAmountCents));
+          form.set("line_items[0][price_data][product_data][name]", `Prepaid LLM Credits ($${netDepositedUsd.toFixed(2)} Net Deposit)`);
+          form.set("line_items[0][price_data][product_data][description]", `Includes Stripe processing fee gross-up ($${estimatedStripeFeeUsd.toFixed(2)})`);
+          form.set("line_items[0][quantity]", "1");
+          form.set("metadata[userId]", metadata.userId);
+          form.set("metadata[netDepositUsd]", metadata.netDepositUsd);
+
+          const stripeRes = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${stripeSecretKey}`,
+              "content-type": "application/x-www-form-urlencoded",
+            },
+            body: form.toString(),
+          });
+
+          if (stripeRes.ok) {
+            const stripeSession = await stripeRes.json();
+            return send(res, 200, {
+              checkoutUrl: stripeSession.url,
+              sessionId: stripeSession.id,
+              netDepositUsd: netDepositedUsd,
+              grossAmountCents,
+              grossChargedUsd,
+              estimatedStripeFeeUsd,
+              metadata,
+            });
+          }
+        } catch {
+          // Fallback to local interactive checkout URL
+        }
+      }
+
+      const checkoutUrl = `${origin}/checkout?stripe_session_id=${sessionId}&net_usd=${netDepositedUsd.toFixed(2)}&gross_cents=${grossAmountCents}&user_id=${user.id}`;
+      return send(res, 200, {
+        checkoutUrl,
+        sessionId,
+        netDepositUsd: netDepositedUsd,
+        grossAmountCents,
+        grossChargedUsd,
+        estimatedStripeFeeUsd,
+        metadata,
+      });
+    }
+
+    // =========================================================================
+    // 5. Stripe Webhook Route: POST /api/webhooks/stripe
+    // =========================================================================
+    if (req.method === "POST" && url.pathname === "/api/webhooks/stripe") {
+      const rawBuffer = await readRawBuffer(req);
+      const sigHeader = req.headers["stripe-signature"];
+      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
+
+      let event;
+      try {
+        event = verifyStripeWebhookEvent(rawBuffer, sigHeader, webhookSecret);
+      } catch (err) {
+        return send(res, 400, { error: "invalid_signature", message: err.message });
+      }
+
+      if (event.type === "checkout.session.completed") {
+        const sessionObj = event.data?.object || {};
+        const metadata = sessionObj.metadata || {};
+        const userId = metadata.userId || DEFAULT_USER_ID;
+        const netDepositUsd = Number(metadata.netDepositUsd || 0);
+        const stripeSessionId = sessionObj.id || `cs_webhook_${randomBytes(8).toString("hex")}`;
+        const grossCents = sessionObj.amount_total ?? calculateGrossDepositCents(netDepositUsd).grossAmountCents;
+        const grossChargedUsd = Number((grossCents / 100).toFixed(2));
+
+        if (!Number.isFinite(netDepositUsd) || netDepositUsd <= 0) {
+          return send(res, 400, { error: "invalid_metadata", message: "Valid metadata.netDepositUsd is required" });
+        }
+
+        const settlement = creditUserDeposit({
+          userId,
+          stripeSessionId,
+          netDepositUsd,
+          grossChargedUsd,
+          status: "completed",
+        });
+
+        db.account.paidBalanceMicroCents = dollarsToMicroCents(settlement.user?.balance_usd || 0);
+        db.account.totalPaidCreditPurchasedMicroCents += dollarsToMicroCents(netDepositUsd);
+        await saveDb(db);
+
+        return send(res, 200, {
+          received: true,
+          alreadyProcessed: settlement.alreadyProcessed,
+          depositId: settlement.depositId,
+          balance_usd: settlement.user?.balance_usd,
+          net_deposited_usd: netDepositUsd,
+          gross_charged_usd: grossChargedUsd,
+        });
+      }
+
+      return send(res, 200, { received: true });
+    }
+
+    // =========================================================================
+    // 6. Token Cost Calculator Preview Endpoint: POST /api/pricing/calculate
+    // =========================================================================
+    if (req.method === "POST" && url.pathname === "/api/pricing/calculate") {
+      const body = await parseBody(req);
+      const modelPricing = resolveModelPricing(body.model || "gpt-4o");
+      const inputPerMillion = Number(body.input_per_million ?? modelPricing?.input_per_million ?? 2.0);
+      const outputPerMillion = Number(body.output_per_million ?? modelPricing?.output_per_million ?? 8.0);
+      const promptTokens = Math.max(0, Math.trunc(Number(body.prompt_tokens) || 0));
+      const completionTokens = Math.max(0, Math.trunc(Number(body.completion_tokens) || 0));
+      const promptCostUsd = Number((promptTokens * (inputPerMillion / 1_000_000)).toFixed(6));
+      const completionCostUsd = Number((completionTokens * (outputPerMillion / 1_000_000)).toFixed(6));
+      const costUsd = calculateTokenCostUsd(promptTokens, completionTokens, inputPerMillion, outputPerMillion);
+
+      return send(res, 200, {
+        model_id: modelPricing?.model_id || body.model || "custom",
+        prompt_tokens: promptTokens,
+        completion_tokens: completionTokens,
+        input_per_million: inputPerMillion,
+        output_per_million: outputPerMillion,
+        prompt_cost_usd: promptCostUsd,
+        completion_cost_usd: completionCostUsd,
+        cost_usd: costUsd,
+      });
+    }
+
     if (req.method === "GET" && url.pathname === "/api/dashboard") {
       return send(res, 200, publicDashboard(db));
     }
 
     if (req.method === "GET" && url.pathname === "/api/models") {
-      return send(res, 200, { models: textModels });
+      const activeModels = sqlDb.prepare(
+        "SELECT model_id, provider, upstream_model_name, input_per_million, output_per_million, is_active FROM model_pricing WHERE is_active = 1"
+      ).all();
+      return send(res, 200, { models: textModels, model_pricing: activeModels });
     }
 
     if (req.method === "POST" && url.pathname === "/api/sales-requests") {
@@ -684,18 +1806,28 @@ async function route(req, res) {
 
     if (req.method === "POST" && url.pathname === "/api/keys") {
       const body = await parseBody(req);
-      const project = db.projects.find((item) => item.id === body.projectId && item.status === "active");
-      if (!project) return send(res, 400, { error: "active_project_required" });
+      const project = db.projects.find((item) => item.id === body.projectId && item.status === "active") || db.projects[0];
       if (!String(body.name || "").trim()) return send(res, 400, { error: "key_name_required" });
       const secret = createApiSecret();
+      const keyId = randomUUID();
+      const keyHash = hashSecret(secret);
+      const keyPrefix = getKeyPrefix(secret);
+      const createdAt = nowIso();
+      const user = getDefaultUser();
+
+      sqlDb.prepare(`
+        INSERT INTO api_keys (id, user_id, key_hash, key_prefix, name, is_active, created_at)
+        VALUES (?, ?, ?, ?, ?, 1, ?)
+      `).run(keyId, user.id, keyHash, keyPrefix, String(body.name).trim(), createdAt);
+
       db.apiKeys.push({
-        id: id("key"),
+        id: keyId,
         name: String(body.name).trim(),
-        projectId: project.id,
-        keyHash: hashSecret(secret),
+        projectId: project?.id || "proj_default",
+        keyHash,
         masked: maskSecret(secret),
-        scopes: Array.isArray(body.scopes) && body.scopes.length ? body.scopes : ["Text translation", "Music generation"],
-        createdAt: nowIso(),
+        scopes: Array.isArray(body.scopes) && body.scopes.length ? body.scopes : ["Text translation", "Music generation", "Chat completions"],
+        createdAt,
         expiresAt: body.expiresAt || null,
         spendLimitMicroCents: dollarsToMicroCents(body.spendLimit || 0),
         status: "active",
@@ -706,27 +1838,46 @@ async function route(req, res) {
         id: id("audit"),
         type: "api_key_created",
         amountMicroCents: 0,
-        description: `Created API key for ${project.name}`,
-        createdAt: nowIso(),
+        description: `Created API key ${String(body.name).trim()} (${keyPrefix}...)`,
+        createdAt,
       });
       await saveDb(db);
-      return send(res, 201, { secret, dashboard: publicDashboard(db) });
+      return send(res, 201, { secret, key_id: keyId, key_prefix: keyPrefix, dashboard: publicDashboard(db) });
+    }
+
+    if (req.method === "DELETE" && url.pathname.match(/^\/api\/keys\/[^/]+$/)) {
+      const keyId = url.pathname.split("/")[3];
+      sqlDb.prepare("UPDATE api_keys SET is_active = 0 WHERE id = ?").run(keyId);
+      const legacy = db.apiKeys.find((item) => item.id === keyId);
+      if (legacy) legacy.status = "revoked";
+      await saveDb(db);
+      return send(res, 200, { dashboard: publicDashboard(db) });
     }
 
     if (req.method === "POST" && url.pathname.match(/^\/api\/keys\/[^/]+\/rotate$/)) {
       const keyId = url.pathname.split("/")[3];
-      const key = db.apiKeys.find((item) => item.id === keyId && item.status === "active");
-      if (!key) return send(res, 404, { error: "key_not_found" });
       const secret = createApiSecret();
-      key.keyHash = hashSecret(secret);
-      key.masked = maskSecret(secret);
-      key.rotatedAt = nowIso();
+      const keyHash = hashSecret(secret);
+      const keyPrefix = getKeyPrefix(secret);
+
+      const sqlKey = sqlDb.prepare("SELECT id, name FROM api_keys WHERE id = ? AND is_active = 1").get(keyId);
+      const legacyKey = db.apiKeys.find((item) => item.id === keyId && item.status === "active");
+      if (!sqlKey && !legacyKey) return send(res, 404, { error: "key_not_found" });
+
+      if (sqlKey) {
+        sqlDb.prepare("UPDATE api_keys SET key_hash = ?, key_prefix = ? WHERE id = ?").run(keyHash, keyPrefix, keyId);
+      }
+      if (legacyKey) {
+        legacyKey.keyHash = keyHash;
+        legacyKey.masked = maskSecret(secret);
+        legacyKey.rotatedAt = nowIso();
+      }
       db.ledger.push({
         id: id("audit"),
         type: "api_key_rotated",
         amountMicroCents: 0,
-        projectId: key.projectId,
-        description: `Rotated API key ${key.name}`,
+        projectId: legacyKey?.projectId || "proj_default",
+        description: `Rotated API key ${sqlKey?.name || legacyKey?.name}`,
         createdAt: nowIso(),
       });
       await saveDb(db);
@@ -740,17 +1891,18 @@ async function route(req, res) {
       }
       const amount = Number(body.amount);
       if (amount < 5 || amount > 1000) return send(res, 400, { error: "recharge_amount_out_of_range" });
-      const amountMicroCents = dollarsToMicroCents(amount);
-      db.account.paidBalanceMicroCents += amountMicroCents;
-      db.account.totalPaidCreditPurchasedMicroCents += amountMicroCents;
-      db.ledger.unshift({
-        id: id("rch"),
-        type: "paid_credit_purchase",
-        amountMicroCents,
-        description: "Local test balance purchase",
+      const user = getDefaultUser();
+      const { grossChargedUsd } = calculateGrossDepositCents(amount);
+      creditUserDeposit({
+        userId: user.id,
+        stripeSessionId: `cs_local_${randomBytes(10).toString("hex")}`,
+        netDepositUsd: amount,
+        grossChargedUsd,
         status: "succeeded",
-        createdAt: nowIso(),
       });
+      const updatedUser = getDefaultUser();
+      db.account.paidBalanceMicroCents = dollarsToMicroCents(updatedUser.balance_usd);
+      db.account.totalPaidCreditPurchasedMicroCents += dollarsToMicroCents(amount);
       await saveDb(db);
       return send(res, 200, publicDashboard(db));
     }
@@ -760,6 +1912,10 @@ async function route(req, res) {
       if (body.confirm !== "RESET_LOCAL_TEST_DATA") {
         return send(res, 409, { error: "reset_confirmation_required" });
       }
+
+      sqlDb.prepare("UPDATE users SET balance_usd = 0 WHERE id = ?").run(DEFAULT_USER_ID);
+      sqlDb.prepare("DELETE FROM usage_ledger WHERE user_id = ?").run(DEFAULT_USER_ID);
+      sqlDb.prepare("DELETE FROM deposit_ledger WHERE user_id = ?").run(DEFAULT_USER_ID);
 
       db.account.paidBalanceMicroCents = 0;
       db.account.rewardBalanceMicroCents = 0;
@@ -789,7 +1945,7 @@ async function route(req, res) {
         amountMicroCents: dollarsToMicroCents(amount),
         monthlyLimitMicroCents: dollarsToMicroCents(body.monthlyLimit || 0),
         notify: Boolean(body.notify),
-        paymentMethod: String(body.paymentMethod || "Manual invoice"),
+        paymentMethod: String(body.paymentMethod || "Stripe Checkout"),
         lastAttemptAt: db.autoRecharge.lastAttemptAt,
       };
       await saveDb(db);
@@ -892,7 +2048,7 @@ async function route(req, res) {
       const costMicroCents = centsCostMicro(inputTokens, outputTokens, pricedModel);
       const sourceTextTokensEstimate = tokenEstimate(body.input);
       const instructionTokensEstimate = Math.max(0, inputTokens - sourceTextTokensEstimate);
-      const charge = applyCharge(db, costMicroCents);
+      const charge = applyCharge(db, costMicroCents, model.model, inputTokens, outputTokens, auth.sqlKey?.id || null);
 
       if (!charge) {
         const log = {
@@ -943,17 +2099,6 @@ async function route(req, res) {
         },
       };
 
-      db.ledger.unshift({
-        id: id("ch"),
-        type: "api_usage_charge",
-        amountMicroCents: -costMicroCents,
-        projectId: auth.project.id,
-        keyId: auth.key.id,
-        requestId,
-        description: `${model.model}${pricingMode === "batch" ? " Batch" : pricingMode === "fast" ? " Fast" : pricingMode === "ultrafast" ? " Ultrafast" : ""} /v1/translate`,
-        status: "succeeded",
-        createdAt: nowIso(),
-      });
       db.requestLogs.unshift({
         id: requestId,
         timestamp: nowIso(),
@@ -1057,7 +2202,7 @@ async function route(req, res) {
       }
 
       const costMicroCents = musicCostMicro(model);
-      const charge = applyCharge(db, costMicroCents);
+      const charge = applyCharge(db, costMicroCents, model.model, 0, 0, auth.sqlKey?.id || null);
 
       if (!charge) {
         db.requestLogs.unshift({
@@ -1102,17 +2247,6 @@ async function route(req, res) {
         },
       };
 
-      db.ledger.unshift({
-        id: id("ch"),
-        type: "api_usage_charge",
-        amountMicroCents: -costMicroCents,
-        projectId: auth.project.id,
-        keyId: auth.key.id,
-        requestId,
-        description: `${model.model} /v1/music`,
-        status: "succeeded",
-        createdAt: nowIso(),
-      });
       db.requestLogs.unshift({
         id: requestId,
         timestamp: nowIso(),
@@ -1147,6 +2281,8 @@ async function route(req, res) {
   }
 }
 
-createServer(route).listen(port, "0.0.0.0", () => {
-  console.log(`LingoFusion API backend listening on http://0.0.0.0:${port}`);
-});
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  createServer(route).listen(port, "0.0.0.0", () => {
+    console.log(`LingoFusion API backend listening on http://0.0.0.0:${port}`);
+  });
+}

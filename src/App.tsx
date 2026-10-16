@@ -50,6 +50,8 @@ const searchItems = Array.from(
   ]),
 );
 
+import { browserApi, getApiBaseUrl, shouldUseBrowserApi } from "./data/browserApi";
+
 export default function App() {
   const [activePage, setActivePage] = useState(() => pageFromPath(window.location.pathname));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -57,6 +59,7 @@ export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [language, setLanguage] = useState<LanguageCode>("en");
   const [dashboardOpen, setDashboardOpen] = useState(false);
+  const [balanceUsd, setBalanceUsd] = useState<number>(10.0);
   const [proVariantKey, setProVariantKey] = useState<ProVariantKey>(() =>
     ["750k", "1m"].includes(window.localStorage.getItem("lingofusion-pro-variant") ?? "") ? "750k" : "350k",
   );
@@ -66,6 +69,27 @@ export default function App() {
   const tc = useMemo(() => createContentTranslator(language), [language]);
   const activeLanguage = getLanguage(language);
   const isSubscriptionPage = activePage === "Subscription Prices";
+
+  const refreshLiveBalance = async () => {
+    try {
+      if (shouldUseBrowserApi()) {
+        const dash = await browserApi<{ user?: { balance_usd: number }; account: { paidBalance: number } }>("/api/dashboard");
+        setBalanceUsd(Number((dash.user?.balance_usd ?? dash.account.paidBalance ?? 0).toFixed(6)));
+        return;
+      }
+      const res = await fetch(`${getApiBaseUrl()}/api/dashboard`);
+      if (res.ok) {
+        const dash = await res.json();
+        setBalanceUsd(Number((dash.user?.balance_usd ?? dash.account?.paidBalance ?? 0).toFixed(6)));
+      }
+    } catch {
+      // ignore offline
+    }
+  };
+
+  useEffect(() => {
+    refreshLiveBalance();
+  }, [activePage, dashboardOpen]);
 
   const navigate = (page: string, query?: Record<string, string | number | undefined>) => {
     const nextPage = page === "API Prices" ? "Pricing" : page;
@@ -243,6 +267,7 @@ export default function App() {
         language={language}
         mobileOpen={mobileOpen}
         searchItems={searchItems}
+        balanceUsd={balanceUsd}
         t={t}
         tc={tc}
         onNavigate={navigate}
@@ -296,9 +321,14 @@ export default function App() {
                 ) : activePage === "Models" ? (
                   <ModelsPage onOpenModel={navigate} />
                 ) : activePage === "Playground" ? (
-                  <PlaygroundPage onOpenDashboard={() => setDashboardOpen(true)} onNavigate={navigate} />
+                  <PlaygroundPage
+                    onOpenDashboard={() => setDashboardOpen(true)}
+                    onNavigate={navigate}
+                    balanceUsd={balanceUsd}
+                    onBalanceChange={setBalanceUsd}
+                  />
                 ) : activePage === "Checkout" ? (
-                  <CheckoutPage onNavigate={navigate} />
+                  <CheckoutPage onNavigate={navigate} onBalanceChange={setBalanceUsd} />
                 ) : activePage === "Teams" ? (
                   <TeamsPage onNavigate={navigate} />
                 ) : activePage === "Contact Sales" ? (
