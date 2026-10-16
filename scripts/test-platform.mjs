@@ -63,7 +63,16 @@ async function runTests() {
   assert.equal(ultraMaxRoute.upstreamModel, "gpt-6-astra");
   assert.equal(ultraMaxRoute.reasoning, "pro");
   assert.equal(ultraMaxRoute.reasoningEffort, "max");
-  console.log("✓ Behind-the-scenes model routing verified (GPT-5 nano, GPT-5.6 Luna, GPT-6 Luna, GPT-6 Sol / GPT-6.1 Sol, GPT-6 Astra)");
+
+  const explainRoute = resolveBackendModelRouting("ExplainFusion");
+  assert.equal(explainRoute.displayModel, "GPT-6 Luna");
+  assert.equal(explainRoute.upstreamModel, "gpt-6-luna");
+
+  const webSearchRoute = resolveBackendModelRouting("LingoFusion Pro", { allow_web_search: true });
+  assert.equal(webSearchRoute.upstreamModel, "gpt-5-search-api");
+  assert.equal(webSearchRoute.webSearch, true);
+  assert.equal(webSearchRoute.webSearchCallFeeUsd, 0.04);
+  console.log("✓ Behind-the-scenes model routing verified (GPT-5 nano, GPT-5.6 Luna, GPT-6 Luna, GPT-6 Sol / GPT-6.1 Sol, GPT-6 Astra, ExplainFusion, Web Search)");
 
   console.log("\n=== 2. Starting API Server for End-to-End Integration Tests ===");
   const serverProc = spawn("node", ["server.mjs"], {
@@ -104,6 +113,8 @@ async function runTests() {
     const lfModel = modelsPayload.data.find((m) => m.model_id === "LingoFusion");
     assert.ok(lfModel, "LingoFusion must be in model_pricing");
     assert.equal(lfModel.upstream_model_name, "gpt-6-luna");
+    const explainModel = modelsPayload.data.find((m) => m.model_id === "ExplainFusion");
+    assert.ok(explainModel, "ExplainFusion must be in model_pricing");
     console.log(`✓ GET /v1/models returned ${modelsPayload.data.length} LingoFusion models with per-1M pricing`);
 
     // Create an API key

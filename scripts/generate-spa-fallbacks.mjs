@@ -28,6 +28,7 @@ const routes = [
   "models/lingofusion-nano",
   "models/lingofusion-lite",
   "models/lingofusion-pro",
+  "models/explainfusion",
   "models/lingofusion-explain",
   "models/lingofusion-ultra",
   "models/lingofusion-native-1-7b",

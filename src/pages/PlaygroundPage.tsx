@@ -21,6 +21,7 @@ import {
   calculateGrossDeposit,
   defaultBrowserModelPricing,
   getApiBaseUrl,
+  getWebSearchCallRateUsd,
   shouldUseBrowserApi,
 } from "../data/browserApi";
 import type { ModelPricingRecord } from "../data/browserApi";
@@ -49,7 +50,7 @@ const ALLOWED_LINGOFUSION_MODELS = [
   "LingoFusion Lite",
   "LingoFusion",
   "LingoFusion Pro",
-  "LingoFusion Explain",
+  "ExplainFusion",
   "LingoFusion Ultra",
 ];
 
@@ -110,9 +111,10 @@ export function PlaygroundPage({
   const [translatedOutput, setTranslatedOutput] = useState<string>("");
   const [latestRun, setLatestRun] = useState<TranslationRun | null>(null);
 
-  // Model-specific reasoning toggles (for LingoFusion Pro & LingoFusion Ultra)
+  // Model-specific reasoning toggles (for LingoFusion Pro & LingoFusion Ultra) & Web Search
   const [proReasoningEnabled, setProReasoningEnabled] = useState<boolean>(false);
   const [ultraMaxEnabled, setUltraMaxEnabled] = useState<boolean>(false);
+  const [allowWebSearch, setAllowWebSearch] = useState<boolean>(false);
   const [streamToggle, setStreamToggle] = useState<boolean>(true);
 
   const [isRunning, setIsRunning] = useState<boolean>(false);
@@ -207,6 +209,8 @@ export function PlaygroundPage({
     const runId = `run-${Date.now()}`;
     const currentInput = userInput.trim();
 
+    const webSearchFee = allowWebSearch ? getWebSearchCallRateUsd(activeModel.model_id) : 0;
+
     const payload: Record<string, unknown> = {
       model: activeModel.model_id,
       from_language: fromLanguage,
@@ -214,6 +218,7 @@ export function PlaygroundPage({
       input: currentInput,
       messages: [{ role: "user", content: currentInput }],
       stream: streamToggle,
+      ...(allowWebSearch ? { allow_web_search: true } : {}),
       ...(activeModel.model_id === "LingoFusion Pro" && proReasoningEnabled
         ? { reasoning_enabled: true, reasoning_effort: "medium" }
         : {}),
@@ -274,6 +279,7 @@ export function PlaygroundPage({
             const partialCompletionTokens = i + 1;
             const partialCost = Number(
               (
+                webSearchFee +
                 pTokens * (activeModel.input_per_million / 1_000_000) +
                 partialCompletionTokens * (activeModel.output_per_million / 1_000_000)
               ).toFixed(6),
@@ -368,6 +374,7 @@ export function PlaygroundPage({
                 completionTokens += 1;
                 const liveCost = Number(
                   (
+                    webSearchFee +
                     promptTokens * (activeModel.input_per_million / 1_000_000) +
                     completionTokens * (activeModel.output_per_million / 1_000_000)
                   ).toFixed(6),
@@ -408,6 +415,7 @@ export function PlaygroundPage({
         finalCostUsd ??
         Number(
           (
+            webSearchFee +
             promptTokens * (activeModel.input_per_million / 1_000_000) +
             completionTokens * (activeModel.output_per_million / 1_000_000)
           ).toFixed(6),
@@ -679,11 +687,11 @@ export function PlaygroundPage({
 
       {/* Main Minimal Translation Card */}
       <div className="mt-6 overflow-hidden rounded-2xl border border-neutral-200/90 bg-white shadow-xs dark:border-white/10 dark:bg-neutral-900/70">
-        {/* Control Bar: Model Dropdown + Language Pair + Reasoning/Stream Toggles + Translate Button */}
+        {/* Control Bar: Model Dropdown + Language Pair + Reasoning/Web Search/Stream Toggles + Translate Button */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200/80 bg-neutral-50/60 px-4 py-3.5 dark:border-white/10 dark:bg-white/[0.02] sm:px-5">
           {/* Left: Model Selector + Language Pair */}
           <div className="flex flex-wrap items-center gap-2.5">
-            {/* Model Dropdown (Strictly LingoFusion Nano to Ultra) */}
+            {/* Model Dropdown (Strictly LingoFusion Nano to Ultra, showing only the name) */}
             <div className="relative">
               <select
                 aria-label="Select Model"
@@ -694,7 +702,7 @@ export function PlaygroundPage({
               >
                 {models.map((m) => (
                   <option key={m.model_id} value={m.model_id}>
-                    {m.model_id} (${m.input_per_million.toFixed(2)} / ${m.output_per_million.toFixed(2)})
+                    {m.model_id}
                   </option>
                 ))}
               </select>
@@ -741,8 +749,19 @@ export function PlaygroundPage({
             </select>
           </div>
 
-          {/* Right: Reasoning Option (if Pro/Ultra) + Stream Toggle + Translate Button */}
+          {/* Right: Allow Web Search + Reasoning Option (if Pro/Ultra) + Stream Toggle + Translate Button */}
           <div className="flex flex-wrap items-center gap-3">
+            <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300">
+              <input
+                type="checkbox"
+                data-testid="playground-web-search-toggle"
+                checked={allowWebSearch}
+                onChange={(e) => setAllowWebSearch(e.target.checked)}
+                className="h-3.5 w-3.5 rounded accent-neutral-950 dark:accent-white"
+              />
+              <span>Allow Web Search</span>
+            </label>
+
             {activeModel.model_id === "LingoFusion Pro" && (
               <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300">
                 <input

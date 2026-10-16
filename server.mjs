@@ -47,7 +47,7 @@ const textModels = [
   { model: "LingoFusion Lite", input: 0.50, output: 2.00 },
   { model: "LingoFusion", input: 1.00, output: 5.00 },
   { model: "LingoFusion Pro", input: 3.50, output: 18.00 },
-  { model: "LingoFusion Explain", input: 3.00, output: 2.00 },
+  { model: "ExplainFusion", input: 3.00, output: 2.00 },
   { model: "LingoFusion Ultra", input: 20.00, output: 120.00 },
 ];
 
@@ -56,7 +56,7 @@ const defaultPricingCatalog = [
   { model_id: "LingoFusion Lite", provider: "lingofusion", upstream_model_name: "gpt-5.6-luna", input_per_million: 0.5000, output_per_million: 2.0000, is_active: 1 },
   { model_id: "LingoFusion", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 1.0000, output_per_million: 5.0000, is_active: 1 },
   { model_id: "LingoFusion Pro", provider: "lingofusion", upstream_model_name: "gpt-6-sol", input_per_million: 3.5000, output_per_million: 18.0000, is_active: 1 },
-  { model_id: "LingoFusion Explain", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 3.0000, output_per_million: 2.0000, is_active: 1 },
+  { model_id: "ExplainFusion", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 3.0000, output_per_million: 2.0000, is_active: 1 },
   { model_id: "LingoFusion Ultra", provider: "lingofusion", upstream_model_name: "gpt-6-astra", input_per_million: 20.0000, output_per_million: 120.0000, is_active: 1 },
 ];
 
@@ -70,7 +70,7 @@ function seedDatabase() {
 
   // Remove any non-LingoFusion models so only LingoFusion Nano to Ultra exist
   sqlDb.exec(
-    "DELETE FROM model_pricing WHERE model_id NOT IN ('LingoFusion Nano', 'LingoFusion Lite', 'LingoFusion', 'LingoFusion Pro', 'LingoFusion Explain', 'LingoFusion Ultra')"
+    "DELETE FROM model_pricing WHERE model_id NOT IN ('LingoFusion Nano', 'LingoFusion Lite', 'LingoFusion', 'LingoFusion Pro', 'ExplainFusion', 'LingoFusion Ultra')"
   );
 
   const upsertModel = sqlDb.prepare(`
@@ -117,6 +117,13 @@ export function calculateTokenCostUsd(promptTokens, completionTokens, inputPerMi
   const outRate = Number(outputPerMillion) || 0;
   const cost = (pTokens * (inRate / 1_000_000)) + (cTokens * (outRate / 1_000_000));
   return Number(cost.toFixed(6));
+}
+
+export function getWebSearchCallRateUsd(modelName) {
+  const name = String(modelName || "LingoFusion").trim();
+  if (name === "LingoFusion Pro") return 0.04;
+  if (name === "LingoFusion Ultra") return 0.15;
+  return 0.015;
 }
 
 function getDefaultUser() {
@@ -256,6 +263,7 @@ const realModelRouting = {
   "LingoFusion Nano": { provider: "lingofusion", model: "gpt-5-nano", displayModel: "GPT-5 nano" },
   "LingoFusion Lite": { provider: "lingofusion", model: "gpt-5.6-luna", displayModel: "GPT-5.6 Luna" },
   "LingoFusion": { provider: "lingofusion", model: "gpt-6-luna", displayModel: "GPT-6 Luna" },
+  "ExplainFusion": { provider: "lingofusion", model: "gpt-6-luna", displayModel: "GPT-6 Luna" },
   "LingoFusion Explain": { provider: "lingofusion", model: "gpt-6-luna", displayModel: "GPT-6 Luna" },
   "LingoFusion Pro": { provider: "lingofusion", model: "gpt-6-sol", displayModel: "GPT-6 Sol", reasoningModel: "gpt-6.1-sol", reasoningDisplayModel: "GPT-6.1 Sol", reasoningEffort: "medium" },
   "LingoFusion Ultra": { provider: "lingofusion", model: "gpt-6-astra", displayModel: "GPT-6 Astra", reasoning: "pro", reasoningEffort: "high", maxReasoningEffort: "max" },
@@ -263,6 +271,7 @@ const realModelRouting = {
 
 export function resolveBackendModelRouting(modelName, options = {}) {
   const name = String(modelName || "LingoFusion").trim();
+  const webSearchEnabled = Boolean(options.allow_web_search || options.web_search);
   const reasoningEnabled = Boolean(
     options.reasoning ||
     options.reasoning_enabled ||
@@ -275,12 +284,25 @@ export function resolveBackendModelRouting(modelName, options = {}) {
     String(options.reasoning_effort || "").toLowerCase() === "max"
   );
 
+  if (webSearchEnabled) {
+    return {
+      upstreamModel: "gpt-5-search-api",
+      displayModel: "GPT-5 Search API",
+      reasoning: undefined,
+      reasoningEffort: undefined,
+      webSearch: true,
+      webSearchCallFeeUsd: getWebSearchCallRateUsd(name),
+    };
+  }
+
   if (name === "LingoFusion Nano") {
     return {
       upstreamModel: "gpt-5-nano",
       displayModel: "GPT-5 nano",
       reasoning: undefined,
       reasoningEffort: undefined,
+      webSearch: false,
+      webSearchCallFeeUsd: 0,
     };
   }
   if (name === "LingoFusion Lite") {
@@ -289,14 +311,18 @@ export function resolveBackendModelRouting(modelName, options = {}) {
       displayModel: "GPT-5.6 Luna",
       reasoning: undefined,
       reasoningEffort: undefined,
+      webSearch: false,
+      webSearchCallFeeUsd: 0,
     };
   }
-  if (name === "LingoFusion" || name === "LingoFusion Explain") {
+  if (name === "LingoFusion" || name === "ExplainFusion" || name === "LingoFusion Explain") {
     return {
       upstreamModel: "gpt-6-luna",
       displayModel: "GPT-6 Luna",
       reasoning: undefined,
       reasoningEffort: undefined,
+      webSearch: false,
+      webSearchCallFeeUsd: 0,
     };
   }
   if (name === "LingoFusion Pro") {
@@ -306,6 +332,8 @@ export function resolveBackendModelRouting(modelName, options = {}) {
         displayModel: "GPT-6.1 Sol",
         reasoning: "medium",
         reasoningEffort: "medium",
+        webSearch: false,
+        webSearchCallFeeUsd: 0,
       };
     }
     return {
@@ -313,6 +341,8 @@ export function resolveBackendModelRouting(modelName, options = {}) {
       displayModel: "GPT-6 Sol",
       reasoning: undefined,
       reasoningEffort: undefined,
+      webSearch: false,
+      webSearchCallFeeUsd: 0,
     };
   }
   if (name === "LingoFusion Ultra") {
@@ -321,6 +351,8 @@ export function resolveBackendModelRouting(modelName, options = {}) {
       displayModel: "GPT-6 Astra",
       reasoning: "pro",
       reasoningEffort: maxEnabled ? "max" : "high",
+      webSearch: false,
+      webSearchCallFeeUsd: 0,
     };
   }
   return {
@@ -328,6 +360,8 @@ export function resolveBackendModelRouting(modelName, options = {}) {
     displayModel: "GPT-6 Luna",
     reasoning: undefined,
     reasoningEffort: undefined,
+    webSearch: false,
+    webSearchCallFeeUsd: 0,
   };
 }
 
@@ -1091,7 +1125,8 @@ function applyCharge(db, amountMicroCents, modelId = "LingoFusion", promptTokens
 
 function resolveModelPricing(requestedModelId) {
   if (!requestedModelId) return null;
-  const trimmed = String(requestedModelId).trim();
+  const raw = String(requestedModelId).trim();
+  const trimmed = raw.toLowerCase() === "lingofusion explain" ? "ExplainFusion" : raw;
   const exact = sqlDb.prepare(
     "SELECT model_id, provider, upstream_model_name, input_per_million, output_per_million, is_active FROM model_pricing WHERE model_id = ? AND is_active = 1"
   ).get(trimmed);
@@ -1127,7 +1162,7 @@ function generateAssistantReply(modelPricing, messages, temperature = 0.7, body 
 
   const knownTranslation = syntheticTranslation(lastUser, fromLang, toLang);
   if (knownTranslation && knownTranslation !== lastUser) {
-    if (modelPricing.model_id === "LingoFusion Explain") {
+    if (modelPricing.model_id === "ExplainFusion" || modelPricing.model_id === "LingoFusion Explain") {
       return `${knownTranslation}\n\n— Literal & Contextual Note (${fromLang} → ${toLang}): Natural idiomatic rendering produced by ${modelPricing.model_id}.`;
     }
     return knownTranslation;
@@ -1284,12 +1319,13 @@ async function handleChatCompletions({ req, res, body, user, apiKeyId, source, d
     const finalizeStreamBilling = () => {
       if (settled) return null;
       settled = true;
-      const costUsd = calculateTokenCostUsd(
+      const tokenCostUsd = calculateTokenCostUsd(
         promptTokens,
         completionTokens,
         modelPricing.input_per_million,
         modelPricing.output_per_million,
       );
+      const costUsd = Number((tokenCostUsd + (routing.webSearchCallFeeUsd || 0)).toFixed(6));
       const deduction = deductUserBalanceAndLogUsage({
         userId: user.id,
         apiKeyId,
@@ -1308,7 +1344,7 @@ async function handleChatCompletions({ req, res, body, user, apiKeyId, source, d
           keyId: apiKeyId || "playground_session",
           endpoint: source === "api" ? "/v1/chat/completions" : "/api/playground/chat",
           model: modelPricing.model_id,
-          feature: "Chat completions",
+          feature: routing.webSearch ? "Web search translation" : "Chat completions",
           method: "POST",
           status: 200,
           processingStatus: clientAborted ? "aborted_partial" : "complete",
@@ -1537,12 +1573,13 @@ async function handleChatCompletions({ req, res, body, user, apiKeyId, source, d
     completionTokens = limitedWords.length;
   }
 
-  const costUsd = calculateTokenCostUsd(
+  const tokenCostUsd = calculateTokenCostUsd(
     promptTokens,
     completionTokens,
     modelPricing.input_per_million,
     modelPricing.output_per_million,
   );
+  const costUsd = Number((tokenCostUsd + (routing.webSearchCallFeeUsd || 0)).toFixed(6));
 
   const deduction = deductUserBalanceAndLogUsage({
     userId: user.id,
@@ -1572,7 +1609,7 @@ async function handleChatCompletions({ req, res, body, user, apiKeyId, source, d
       keyId: apiKeyId || "playground_session",
       endpoint: source === "api" ? "/v1/chat/completions" : "/api/playground/chat",
       model: modelPricing.model_id,
-      feature: "Chat completions",
+      feature: routing.webSearch ? "Web search translation" : "Chat completions",
       method: "POST",
       status: 200,
       processingStatus: "complete",
@@ -1599,6 +1636,7 @@ async function handleChatCompletions({ req, res, body, user, apiKeyId, source, d
     provider: modelPricing.provider,
     upstream_model: routing.upstreamModel,
     upstream_display_model: routing.displayModel,
+    allow_web_search: routing.webSearch,
     ...(routing.reasoning ? { reasoning: routing.reasoning } : {}),
     ...(routing.reasoningEffort ? { reasoning_effort: routing.reasoningEffort } : {}),
     choices: [

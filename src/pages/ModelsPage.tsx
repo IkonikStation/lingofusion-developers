@@ -27,7 +27,7 @@ export function ModelsPage({ onOpenModel }: { onOpenModel: (model: string) => vo
     const matchesCategory = activeTab === "all" ||
       (activeTab === "local" && model.local) ||
       (activeTab === "flagship" && ["LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(model.model)) ||
-      (activeTab === "efficient" && ["LingoFusion Nano", "LingoFusion Lite", "LingoFusion Explain"].includes(model.model));
+      (activeTab === "efficient" && ["LingoFusion Nano", "LingoFusion Lite", "ExplainFusion"].includes(model.model));
     return matchesQuery && matchesCategory;
   });
   const featured = ["LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"]

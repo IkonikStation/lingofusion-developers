@@ -120,7 +120,7 @@ export const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     description: "LingoFusion Pro is a professional-grade translator built for complex, high-stakes localization. It preserves context, tone, and ambiguity across long documents, keeps terminology consistent, and handles specialized subject matter with care. When accuracy and nuance are non-negotiable — legal, medical, technical, or marketing content — Pro delivers professional-quality results you can trust.",
     limitations: ["Higher latency than standard LingoFusion", "Very long jobs may be better suited to Batch", "Human review remains recommended for regulated content"],
   },
-  "LingoFusion Explain": {
+  ExplainFusion: {
     reasoning: "Higher",
     reasoningLevel: 4,
     speed: "Very fast",
@@ -129,7 +129,7 @@ export const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     contextWindow: "1,000,000",
     maxOutput: "384,000",
     quality: "Insightful",
-    description: "LingoFusion Explain specializes in translations that must also teach, explain, annotate, or clearly justify language choices for readers and reviewers.",
+    description: "ExplainFusion specializes in translations that must also teach, explain, annotate, or clearly justify language choices for readers and reviewers.",
     limitations: ["Explanations increase output length", "Not the lowest-cost choice for direct translation", "Concise mode is recommended for simple requests"],
   },
   "LingoFusion Ultra": {

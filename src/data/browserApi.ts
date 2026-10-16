@@ -138,16 +138,23 @@ type BrowserState = {
   secrets: Record<string, string>;
 };
 
-const storageKey = "lingofusion-browser-api-v2";
+const storageKey = "lingofusion-browser-api-v3";
 
 export const defaultBrowserModelPricing: ModelPricingRecord[] = [
   { id: "LingoFusion Nano", model_id: "LingoFusion Nano", object: "model", provider: "lingofusion", upstream_model_name: "gpt-5-nano", input_per_million: 0.05, output_per_million: 0.5, is_active: true },
   { id: "LingoFusion Lite", model_id: "LingoFusion Lite", object: "model", provider: "lingofusion", upstream_model_name: "gpt-5.6-luna", input_per_million: 0.5, output_per_million: 2.0, is_active: true },
   { id: "LingoFusion", model_id: "LingoFusion", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 1.0, output_per_million: 5.0, is_active: true },
   { id: "LingoFusion Pro", model_id: "LingoFusion Pro", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-sol", input_per_million: 3.5, output_per_million: 18.0, is_active: true },
-  { id: "LingoFusion Explain", model_id: "LingoFusion Explain", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 3.0, output_per_million: 2.0, is_active: true },
+  { id: "ExplainFusion", model_id: "ExplainFusion", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 3.0, output_per_million: 2.0, is_active: true },
   { id: "LingoFusion Ultra", model_id: "LingoFusion Ultra", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-astra", input_per_million: 20.0, output_per_million: 120.0, is_active: true },
 ];
+
+export function getWebSearchCallRateUsd(modelName: string): number {
+  const name = String(modelName || "LingoFusion").trim();
+  if (name === "LingoFusion Pro") return 0.04;
+  if (name === "LingoFusion Ultra") return 0.15;
+  return 0.015;
+}
 
 export function resolveBackendModelRouting(
   modelName: string,
@@ -157,9 +164,12 @@ export function resolveBackendModelRouting(
     reasoning_effort?: string;
     max?: boolean;
     max_reasoning?: boolean;
+    allow_web_search?: boolean;
+    web_search?: boolean;
   },
 ) {
   const name = String(modelName || "LingoFusion").trim();
+  const webSearchEnabled = Boolean(options?.allow_web_search || options?.web_search);
   const reasoningEnabled = Boolean(
     options?.reasoning ||
       options?.reasoning_enabled ||
@@ -172,12 +182,25 @@ export function resolveBackendModelRouting(
       String(options?.reasoning_effort || "").toLowerCase() === "max",
   );
 
+  if (webSearchEnabled) {
+    return {
+      upstreamModel: "gpt-5-search-api",
+      displayModel: "GPT-5 Search API",
+      reasoning: undefined,
+      reasoningEffort: undefined,
+      webSearch: true,
+      webSearchCallFeeUsd: getWebSearchCallRateUsd(name),
+    };
+  }
+
   if (name === "LingoFusion Nano") {
     return {
       upstreamModel: "gpt-5-nano",
       displayModel: "GPT-5 nano",
       reasoning: undefined,
       reasoningEffort: undefined,
+      webSearch: false,
+      webSearchCallFeeUsd: 0,
     };
   }
   if (name === "LingoFusion Lite") {
@@ -186,14 +209,18 @@ export function resolveBackendModelRouting(
       displayModel: "GPT-5.6 Luna",
       reasoning: undefined,
       reasoningEffort: undefined,
+      webSearch: false,
+      webSearchCallFeeUsd: 0,
     };
   }
-  if (name === "LingoFusion" || name === "LingoFusion Explain") {
+  if (name === "LingoFusion" || name === "ExplainFusion" || name === "LingoFusion Explain") {
     return {
       upstreamModel: "gpt-6-luna",
       displayModel: "GPT-6 Luna",
       reasoning: undefined,
       reasoningEffort: undefined,
+      webSearch: false,
+      webSearchCallFeeUsd: 0,
     };
   }
   if (name === "LingoFusion Pro") {
@@ -203,6 +230,8 @@ export function resolveBackendModelRouting(
         displayModel: "GPT-6.1 Sol",
         reasoning: "medium" as const,
         reasoningEffort: "medium" as const,
+        webSearch: false,
+        webSearchCallFeeUsd: 0,
       };
     }
     return {
@@ -210,6 +239,8 @@ export function resolveBackendModelRouting(
       displayModel: "GPT-6 Sol",
       reasoning: undefined,
       reasoningEffort: undefined,
+      webSearch: false,
+      webSearchCallFeeUsd: 0,
     };
   }
   if (name === "LingoFusion Ultra") {
@@ -218,6 +249,8 @@ export function resolveBackendModelRouting(
       displayModel: "GPT-6 Astra",
       reasoning: "pro" as const,
       reasoningEffort: (maxEnabled ? "max" : "high") as "high" | "max",
+      webSearch: false,
+      webSearchCallFeeUsd: 0,
     };
   }
   return {
@@ -225,6 +258,8 @@ export function resolveBackendModelRouting(
     displayModel: "GPT-6 Luna",
     reasoning: undefined,
     reasoningEffort: undefined,
+    webSearch: false,
+    webSearchCallFeeUsd: 0,
   };
 }
 
@@ -439,7 +474,7 @@ function translatePhrase(input: string, fromLanguage: string, toLanguage: string
   };
 
   if (phrases[key]) {
-    if (modelId === "LingoFusion Explain") {
+    if (modelId === "ExplainFusion" || modelId === "LingoFusion Explain") {
       return `${phrases[key]}\n\n— Literal & Contextual Note (${fromLanguage} → ${toLanguage}): Natural idiomatic rendering produced by ${modelId}.`;
     }
     return phrases[key];
@@ -502,8 +537,8 @@ function decodeUpstreamGateway() {
 }
 
 function buildBrowserTranslationPrompt(fromLanguage: string, toLanguage: string, modelId: string) {
-  if (modelId === "LingoFusion Explain") {
-    return `You are LingoFusion Explain, a high-precision translation system. Translate the user's text from ${fromLanguage} to ${toLanguage}, followed by a brief 1-sentence contextual note explaining any key idioms or register choices.`;
+  if (modelId === "ExplainFusion" || modelId === "LingoFusion Explain") {
+    return `You are ExplainFusion, a high-precision translation system. Translate the user's text from ${fromLanguage} to ${toLanguage}, followed by a brief 1-sentence contextual note explaining any key idioms or register choices.`;
   }
   return `You are LingoFusion, a deterministic, high-precision professional translation system. Translate the user's text accurately, faithfully, and naturally from ${fromLanguage} to ${toLanguage}. Preserve formatting, proper nouns, punctuation, and tone. Output ONLY the final translated text without any introduction, quotes, or commentary.`;
 }
@@ -524,9 +559,10 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
   }
 
   const body = requestBody(options);
-  const modelId = String(body.model || "LingoFusion");
+  const rawModelId = String(body.model || "LingoFusion");
+  const normalizedModelId = rawModelId.toLowerCase() === "lingofusion explain" ? "ExplainFusion" : rawModelId;
   const modelPricing = defaultBrowserModelPricing.find(
-    (m) => m.model_id.toLowerCase() === modelId.toLowerCase()
+    (m) => m.model_id.toLowerCase() === normalizedModelId.toLowerCase()
   ) ?? defaultBrowserModelPricing[2];
 
   const routing = resolveBackendModelRouting(modelPricing.model_id, {
@@ -535,6 +571,8 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
     reasoning_effort: typeof body.reasoning_effort === "string" ? body.reasoning_effort : undefined,
     max: Boolean(body.max),
     max_reasoning: Boolean(body.max_reasoning),
+    allow_web_search: Boolean(body.allow_web_search),
+    web_search: Boolean(body.web_search),
   });
 
   const messages = Array.isArray(body.messages) ? body.messages as Array<{ role: string; content: string }> : [];
@@ -591,7 +629,8 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
     completionTokens = Math.max(1, tokenEstimate(replyText));
   }
 
-  const costUsd = calculateTokenCost(promptTokens, completionTokens, modelPricing.input_per_million, modelPricing.output_per_million);
+  const tokenCostUsd = calculateTokenCost(promptTokens, completionTokens, modelPricing.input_per_million, modelPricing.output_per_million);
+  const costUsd = Number((tokenCostUsd + (routing.webSearchCallFeeUsd || 0)).toFixed(6));
 
   applyCharge(state, costUsd);
   const requestId = `chatcmpl-${randomId("browser")}`;
@@ -609,7 +648,7 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
     created_at: now,
   });
 
-  createChargeEntry(state, costUsd, `${modelPricing.model_id} (${promptTokens} in / ${completionTokens} out) via ${source}`);
+  createChargeEntry(state, costUsd, `${modelPricing.model_id}${routing.webSearch ? " + Web Search" : ""} (${promptTokens} in / ${completionTokens} out) via ${source}`);
   logRequest(state, {
     id: requestId,
     timestamp: now,
@@ -617,7 +656,7 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
     keyId: keyId || "playground_session",
     endpoint: source === "api" ? "/v1/chat/completions" : "/api/playground/chat",
     model: modelPricing.model_id,
-    feature: "Chat completions",
+    feature: routing.webSearch ? "Web search translation" : "Chat completions",
     status: 200,
     inputTokens: promptTokens,
     outputTokens: completionTokens,
@@ -638,6 +677,7 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
     provider: modelPricing.provider,
     upstream_model: routing.upstreamModel,
     upstream_display_model: routing.displayModel,
+    allow_web_search: routing.webSearch,
     ...(routing.reasoning ? { reasoning: routing.reasoning } : {}),
     ...(routing.reasoningEffort ? { reasoning_effort: routing.reasoningEffort } : {}),
     choices: [

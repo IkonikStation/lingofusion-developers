@@ -42,7 +42,7 @@ export const textModels: TextModel[] = [
     recommended: true,
   },
   { model: "LingoFusion Pro", inputUsd: 3.50, outputUsd: 18.00 },
-  { model: "LingoFusion Explain", inputUsd: 3.00, outputUsd: 2.00 },
+  { model: "ExplainFusion", inputUsd: 3.00, outputUsd: 2.00 },
   { model: "LingoFusion Ultra", inputUsd: 20.00, outputUsd: 120.00 },
 ];
 
@@ -125,7 +125,7 @@ export const textModelPresentations: Record<string, TextModelPresentation> = {
     bestFor: "Professional localization and complex content requiring stronger reasoning.",
     features: ["Advanced context handling", "Terminology consistency", "Tone preservation", "Long-form translation"],
   },
-  "LingoFusion Explain": {
+  ExplainFusion: {
     image: "/assets/models/explainfusion.png",
     imageScale: 1.71,
     capability: "Explanation-focused translation, rewriting, and educational localization workflows.",
@@ -176,7 +176,7 @@ export const pdfModels: SimpleModel[] = [
 export const latestModels = [
   "LingoFusion Ultra",
   "LingoFusion Pro",
-  "LingoFusion Explain",
+  "ExplainFusion",
   "LingoFusion",
   "LingoFusion Lite",
   "LingoFusion Native-1.7B",
@@ -228,7 +228,7 @@ export const navMenus = {
   Models: [
     "LingoFusion Ultra",
     "LingoFusion Pro",
-    "LingoFusion Explain",
+    "ExplainFusion",
     "LingoFusion",
     "LingoFusion Lite",
     "LingoFusion Native-1.7B",
@@ -280,7 +280,7 @@ export const modelDetails: Record<string, string> = {
     "Highest-quality multilingual reasoning and long-form translation for enterprise workflows.",
   "LingoFusion Pro":
     "Professional model for product-grade translation, writing, and localization tasks.",
-  "LingoFusion Explain":
+  ExplainFusion:
     "Premium model for explanation-heavy translation, rewriting, and educational localization workflows.",
   LingoFusion:
     "Recommended default model for most text generation and translation workloads.",
