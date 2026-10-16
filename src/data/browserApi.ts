@@ -1,5 +1,6 @@
 import { musicModels, textModelsByPricingMode } from "./pricing";
 import type { TextPricingMode } from "./pricing";
+import { buildModelSystemPrompt } from "./systemPrompts";
 
 export type ModelPricingRecord = {
   id: string;
@@ -536,11 +537,13 @@ function decodeUpstreamGateway() {
   return { endpoint, token };
 }
 
-function buildBrowserTranslationPrompt(fromLanguage: string, toLanguage: string, modelId: string) {
-  if (modelId === "ExplainFusion" || modelId === "LingoFusion Explain") {
-    return `You are ExplainFusion, a high-precision translation system. Translate the user's text from ${fromLanguage} to ${toLanguage}, followed by a brief 1-sentence contextual note explaining any key idioms or register choices.`;
-  }
-  return `You are LingoFusion, a deterministic, high-precision professional translation system. Translate the user's text accurately, faithfully, and naturally from ${fromLanguage} to ${toLanguage}. Preserve formatting, proper nouns, punctuation, and tone. Output ONLY the final translated text without any introduction, quotes, or commentary.`;
+function buildBrowserTranslationPrompt(fromLanguage: string, toLanguage: string, modelId: string, tone?: string) {
+  return buildModelSystemPrompt({
+    modelName: modelId,
+    fromLanguage,
+    toLanguage,
+    tone,
+  });
 }
 
 async function runChatCompletionBrowser(state: BrowserState, options?: RequestInit, source: "api" | "playground" = "playground") {
@@ -599,7 +602,12 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
         messages: [
           {
             role: "system",
-            content: buildBrowserTranslationPrompt(fromLanguage, toLanguage, modelPricing.model_id),
+            content: buildBrowserTranslationPrompt(
+              fromLanguage,
+              toLanguage,
+              modelPricing.model_id,
+              body.tone as string | undefined,
+            ),
           },
           {
             role: "user",
