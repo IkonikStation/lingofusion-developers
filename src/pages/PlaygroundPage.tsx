@@ -13,8 +13,12 @@ import {
   Wallet,
   X,
   Zap,
+  Eye,
+  FileText,
+  Code,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { MarkdownView } from "../components/MarkdownView";
 import { ModelIcon } from "../components/shared/FormFields";
 import {
   browserApi,
@@ -118,6 +122,8 @@ export function PlaygroundPage({
   const [ultraMaxEnabled, setUltraMaxEnabled] = useState<boolean>(false);
   const [allowWebSearch, setAllowWebSearch] = useState<boolean>(false);
   const [streamToggle, setStreamToggle] = useState<boolean>(true);
+  const [inputViewMode, setInputViewMode] = useState<"edit" | "preview">("edit");
+  const [outputViewMode, setOutputViewMode] = useState<"markdown" | "raw">("markdown");
 
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
@@ -820,13 +826,43 @@ export function PlaygroundPage({
         <div className="grid divide-y divide-neutral-200/80 dark:divide-white/10 md:grid-cols-2 md:divide-x md:divide-y-0">
           {/* Left Pane: Input Text */}
           <div className="flex flex-col p-4 sm:p-5">
-            <div className="mb-2 flex items-center justify-between">
-              <label
-                htmlFor="playground-user-input"
-                className="text-xs font-medium text-neutral-500 dark:text-neutral-400"
-              >
-                {fromLanguage}
-              </label>
+            <div className="mb-2.5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <label
+                  htmlFor="playground-user-input"
+                  className="text-xs font-semibold text-neutral-600 dark:text-neutral-300"
+                >
+                  {fromLanguage}
+                </label>
+                {/* View Mode Toggle: Edit vs Markdown Preview */}
+                <div className="inline-flex rounded-lg border border-neutral-200 bg-neutral-100 p-0.5 text-[11px] font-medium text-neutral-600 dark:border-white/10 dark:bg-white/5 dark:text-neutral-300">
+                  <button
+                    type="button"
+                    onClick={() => setInputViewMode("edit")}
+                    className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 transition ${
+                      inputViewMode === "edit"
+                        ? "bg-white text-neutral-950 shadow-2xs dark:bg-neutral-800 dark:text-white"
+                        : "hover:text-neutral-900 dark:hover:text-white"
+                    }`}
+                  >
+                    <FileText className="h-3 w-3" />
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInputViewMode("preview")}
+                    className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 transition ${
+                      inputViewMode === "preview"
+                        ? "bg-white text-neutral-950 shadow-2xs dark:bg-neutral-800 dark:text-white"
+                        : "hover:text-neutral-900 dark:hover:text-white"
+                    }`}
+                  >
+                    <Eye className="h-3 w-3" />
+                    Markdown
+                  </button>
+                </div>
+              </div>
+
               {userInput && (
                 <button
                   type="button"
@@ -842,29 +878,72 @@ export function PlaygroundPage({
                 </button>
               )}
             </div>
-            <textarea
-              id="playground-user-input"
-              data-testid="playground-user-input"
-              rows={9}
-              value={userInput}
-              onChange={(e) => setUserInput(e.target.value)}
-              onKeyDown={(e) => {
-                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                  e.preventDefault();
-                  handleRunTranslation();
-                }
-              }}
-              placeholder="Enter text to translate..."
-              className="w-full flex-1 resize-none bg-transparent text-base leading-7 text-neutral-950 outline-none placeholder:text-neutral-400 dark:text-white"
-            />
+
+            {inputViewMode === "edit" ? (
+              <textarea
+                id="playground-user-input"
+                data-testid="playground-user-input"
+                rows={9}
+                value={userInput}
+                onChange={(e) => setUserInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                    e.preventDefault();
+                    handleRunTranslation();
+                  }
+                }}
+                placeholder="Enter text to translate (supports Markdown & HTML)..."
+                className="w-full flex-1 resize-none bg-transparent font-sans text-base leading-7 text-neutral-950 outline-none placeholder:text-neutral-400 dark:text-white"
+              />
+            ) : (
+              <div className="min-h-[14rem] flex-1 overflow-y-auto">
+                {userInput.trim() ? (
+                  <MarkdownView content={userInput} />
+                ) : (
+                  <span className="text-neutral-400 dark:text-neutral-500">
+                    Type text in Edit mode to preview HTML markdown here.
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Right Pane: Translated Output */}
           <div className="flex flex-col bg-neutral-50/40 p-4 dark:bg-white/[0.01] sm:p-5">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
-                {toLanguage} ({activeModel.model_id})
-              </span>
+            <div className="mb-2.5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">
+                  {toLanguage} ({activeModel.model_id})
+                </span>
+                {/* View Mode Toggle: Markdown vs Raw */}
+                <div className="inline-flex rounded-lg border border-neutral-200 bg-neutral-100 p-0.5 text-[11px] font-medium text-neutral-600 dark:border-white/10 dark:bg-white/5 dark:text-neutral-300">
+                  <button
+                    type="button"
+                    onClick={() => setOutputViewMode("markdown")}
+                    className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 transition ${
+                      outputViewMode === "markdown"
+                        ? "bg-white text-neutral-950 shadow-2xs dark:bg-neutral-800 dark:text-white"
+                        : "hover:text-neutral-900 dark:hover:text-white"
+                    }`}
+                  >
+                    <Eye className="h-3 w-3" />
+                    Markdown
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOutputViewMode("raw")}
+                    className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 transition ${
+                      outputViewMode === "raw"
+                        ? "bg-white text-neutral-950 shadow-2xs dark:bg-neutral-800 dark:text-white"
+                        : "hover:text-neutral-900 dark:hover:text-white"
+                    }`}
+                  >
+                    <Code className="h-3 w-3" />
+                    Raw
+                  </button>
+                </div>
+              </div>
+
               {translatedOutput && (
                 <button
                   type="button"
@@ -885,12 +964,19 @@ export function PlaygroundPage({
               data-testid="playground-output-box"
               className="flex min-h-[14rem] flex-1 flex-col justify-between text-base leading-7 text-neutral-950 dark:text-neutral-100"
             >
-              <div className="whitespace-pre-wrap">
+              <div>
                 {translatedOutput ? (
-                  <>
-                    {translatedOutput}
-                    {latestRun?.streaming && " ▋"}
-                  </>
+                  outputViewMode === "markdown" ? (
+                    <MarkdownView
+                      content={translatedOutput}
+                      streaming={Boolean(latestRun?.streaming)}
+                    />
+                  ) : (
+                    <div className="whitespace-pre-wrap font-mono text-xs leading-6 text-neutral-900 dark:text-neutral-100">
+                      {translatedOutput}
+                      {latestRun?.streaming && " ▋"}
+                    </div>
+                  )
                 ) : (
                   <span className="text-neutral-400 dark:text-neutral-500">
                     {isRunning
