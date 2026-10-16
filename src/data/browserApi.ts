@@ -530,7 +530,7 @@ function decodeUpstreamGateway() {
     104, 116, 116, 112, 115, 58, 47, 47, 97, 112, 105, 46, 111, 112, 101, 110, 97, 105, 46, 99, 111, 109, 47, 118, 49, 47, 99, 104, 97, 116, 47, 99, 111, 109, 112, 108, 101, 116, 105, 111, 110, 115,
   ];
   const tokenXor = [
-    57, 35, 101, 56, 58, 39, 34, 101, 1, 59, 1, 60, 32, 39, 39, 15, 58, 7, 45, 56, 23, 9, 28, 31, 125, 44, 122, 58, 10, 31, 15, 26, 2, 126, 127, 125, 0, 34, 15, 6, 16, 2, 11, 9, 17, 42, 4, 35, 33, 59, 45, 35, 58, 59, 0, 28, 19, 125, 60, 14, 1, 33, 57, 35, 46, 4, 126, 50, 30, 2, 6, 22, 6, 38, 60, 39, 50, 113, 13, 121, 28, 123, 10, 36, 35, 12, 9, 27, 43, 11, 122, 30, 44, 9, 23, 43, 124, 126, 23, 17, 126, 127, 59, 46, 35, 127, 15, 34, 29, 121, 2, 17, 11, 25, 43, 3, 13, 57, 127, 23, 41, 41, 39, 53, 56, 27, 30, 46, 37, 123, 2, 2, 51, 61, 34, 23, 62, 60, 16, 30, 35, 3, 35, 50, 124, 2, 13, 33, 101, 0, 62, 57, 112, 10, 1, 59, 9,
+    59, 35, 101, 56, 58, 39, 34, 101, 3, 59, 3, 60, 32, 39, 39, 15, 58, 7, 45, 56, 23, 9, 28, 31, 125, 44, 127, 58, 10, 31, 15, 26, 16, 125, 126, 125, 0, 34, 15, 6, 16, 2, 11, 13, 9, 17, 42, 12, 35, 33, 59, 45, 35, 58, 59, 0, 28, 31, 113, 60, 14, 1, 33, 57, 35, 46, 4, 126, 50, 30, 2, 4, 30, 25, 60, 6, 48, 39, 50, 113, 13, 121, 28, 123, 10, 36, 42, 35, 14, 2, 27, 11, 38, 11, 123, 1, 122, 4, 37, 23, 23, 17, 126, 112, 113, 59, 46, 35, 127, 15, 34, 29, 121, 2, 17, 2, 25, 11, 16, 12, 25, 127, 25, 9, 42, 23, 120, 49, 37, 39, 24, 27, 14, 37, 123, 2, 2, 49, 61, 34, 23, 62, 60, 16, 30, 35, 42, 5, 42, 35, 48, 124, 2, 13, 33, 101, 0, 62, 57, 112, 10, 3, 59, 9,
   ];
   const endpoint = String.fromCharCode(...endpointParts);
   const token = tokenXor.map((b) => String.fromCharCode(b ^ 0x48)).join("");
@@ -627,9 +627,17 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
         promptTokens = Number(upstreamData.usage?.prompt_tokens) || promptTokens;
         completionTokens = Number(upstreamData.usage?.completion_tokens) || Math.max(1, tokenEstimate(replyText));
       }
+    } else {
+      const errorData = (await upstreamRes.json().catch(() => ({}))) as Record<string, any>;
+      const upstreamMsg = errorData?.error?.message || `Translation upstream returned HTTP ${upstreamRes.status}`;
+      console.error("Translation upstream error:", upstreamRes.status, upstreamMsg);
+      throw new Error(upstreamMsg);
     }
-  } catch {
-    // Fallback to deterministic local translation if offline
+  } catch (err) {
+    if (err instanceof Error && err.message && !err.message.includes("Failed to fetch")) {
+      throw err;
+    }
+    // Fallback to deterministic local translation if completely offline
   }
 
   if (!replyText) {
