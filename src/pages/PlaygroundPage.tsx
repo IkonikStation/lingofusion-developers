@@ -130,16 +130,17 @@ export function PlaygroundPage({
   const [latestRun, setLatestRun] = useState<TranslationRun | null>(null);
   const [history, setHistory] = useState<TranslationRun[]>([]);
 
-  const [temperature, setTemperature] = useState<number>(0.3);
-  const [maxTokens, setMaxTokens] = useState<number>(512);
+  // Model-specific reasoning toggles (for LingoFusion Pro & LingoFusion Ultra)
+  const [proReasoningEnabled, setProReasoningEnabled] = useState<boolean>(false);
+  const [ultraMaxEnabled, setUltraMaxEnabled] = useState<boolean>(false);
   const [streamToggle, setStreamToggle] = useState<boolean>(true);
 
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Balance & Ledger state
-  const [liveBalance, setLiveBalance] = useState<number>(balanceUsd ?? 10.0);
+  // Balance & Ledger state (starts at $0.00)
+  const [liveBalance, setLiveBalance] = useState<number>(balanceUsd ?? 0.0);
   const [usageLedger, setUsageLedger] = useState<UsageLedgerRecord[]>([]);
   const [depositLedger, setDepositLedger] = useState<DepositLedgerRecord[]>([]);
   const [apiKeys, setApiKeys] = useState<ApiKeyItem[]>([]);
@@ -245,15 +246,23 @@ export function PlaygroundPage({
     const runId = `run-${Date.now()}`;
     const currentInput = userInput.trim();
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       model: activeModel.model_id,
       from_language: fromLanguage,
       to_language: toLanguage,
       input: currentInput,
       messages: [{ role: "user", content: currentInput }],
-      temperature,
-      max_tokens: maxTokens,
       stream: streamToggle,
+      ...(activeModel.model_id === "LingoFusion Pro" && proReasoningEnabled
+        ? { reasoning_enabled: true, reasoning_effort: "medium" }
+        : {}),
+      ...(activeModel.model_id === "LingoFusion Ultra"
+        ? {
+            reasoning: "pro",
+            reasoning_effort: ultraMaxEnabled ? "max" : "high",
+            max: ultraMaxEnabled,
+          }
+        : {}),
     };
 
     const initialRun: TranslationRun = {
@@ -606,8 +615,6 @@ export function PlaygroundPage({
     "messages": [
       {"role": "user", "content": ${JSON.stringify(userInput)}}
     ],
-    "temperature": ${temperature},
-    "max_tokens": ${maxTokens},
     "stream": ${streamToggle}
   }'`;
 
@@ -648,7 +655,7 @@ export function PlaygroundPage({
                 data-testid="live-balance-value"
                 className="font-mono text-lg font-bold tracking-tight text-emerald-950 dark:text-emerald-100"
               >
-                ${liveBalance.toFixed(6)}
+                ${liveBalance.toFixed(2)}
               </span>
             </div>
           </div>
@@ -685,9 +692,9 @@ export function PlaygroundPage({
 
       {/* Main 2-Column Playground Layout */}
       <div className="mt-6 grid gap-6 lg:grid-cols-[21rem_minmax(0,1fr)]">
-        {/* Left Column: Model Selector (LingoFusion Nano to Ultra), Parameters, & Stripe Deposit */}
+        {/* Left Column: Model Selector (LingoFusion Nano to Ultra) & Stripe Deposit */}
         <div className="space-y-5">
-          {/* Model & Parameters Card */}
+          {/* Model & Settings Card */}
           <div className="rounded-2xl border border-neutral-200/90 bg-white p-5 shadow-xs dark:border-white/10 dark:bg-neutral-900/70">
             <div className="flex items-center justify-between">
               <h2 className="flex items-center gap-2 text-sm font-semibold text-neutral-950 dark:text-white">
@@ -738,58 +745,69 @@ export function PlaygroundPage({
               </div>
             </div>
 
-            {/* Temperature Control */}
-            <div className="mt-4">
-              <div className="flex items-center justify-between text-xs">
-                <label
-                  htmlFor="playground-temperature"
-                  className="font-medium text-neutral-700 dark:text-neutral-300"
+            {/* Optional Reasoning Toggle for LingoFusion Pro */}
+            {activeModel.model_id === "LingoFusion Pro" && (
+              <div className="mt-4 flex items-center justify-between rounded-xl border border-neutral-200/80 bg-neutral-50/70 px-3.5 py-2.5 dark:border-white/10 dark:bg-white/[0.03]">
+                <div>
+                  <span className="block text-xs font-semibold text-neutral-900 dark:text-white">
+                    Reasoning (Medium)
+                  </span>
+                  <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
+                    Enable medium reasoning depth
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={proReasoningEnabled}
+                  data-testid="playground-pro-reasoning-toggle"
+                  onClick={() => setProReasoningEnabled((v) => !v)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                    proReasoningEnabled
+                      ? "bg-neutral-950 dark:bg-white"
+                      : "bg-neutral-300 dark:bg-neutral-700"
+                  }`}
                 >
-                  Temperature
-                </label>
-                <span className="font-mono font-semibold text-neutral-900 dark:text-white">
-                  {temperature.toFixed(2)}
-                </span>
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-xs transition dark:bg-neutral-950 ${
+                      proReasoningEnabled ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
               </div>
-              <input
-                id="playground-temperature"
-                data-testid="playground-temperature"
-                type="range"
-                min={0}
-                max={2}
-                step={0.05}
-                value={temperature}
-                onChange={(e) => setTemperature(Number(e.target.value))}
-                className="mt-1.5 w-full accent-neutral-950 dark:accent-white"
-              />
-            </div>
+            )}
 
-            {/* Max Tokens Control */}
-            <div className="mt-4">
-              <div className="flex items-center justify-between text-xs">
-                <label
-                  htmlFor="playground-max-tokens"
-                  className="font-medium text-neutral-700 dark:text-neutral-300"
+            {/* Optional Max Reasoning Toggle for LingoFusion Ultra */}
+            {activeModel.model_id === "LingoFusion Ultra" && (
+              <div className="mt-4 flex items-center justify-between rounded-xl border border-neutral-200/80 bg-neutral-50/70 px-3.5 py-2.5 dark:border-white/10 dark:bg-white/[0.03]">
+                <div>
+                  <span className="block text-xs font-semibold text-neutral-900 dark:text-white">
+                    Max Reasoning Effort
+                  </span>
+                  <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
+                    {ultraMaxEnabled ? "Pro reasoning (Max effort)" : "Pro reasoning (High effort)"}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={ultraMaxEnabled}
+                  data-testid="playground-ultra-max-toggle"
+                  onClick={() => setUltraMaxEnabled((v) => !v)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                    ultraMaxEnabled
+                      ? "bg-neutral-950 dark:bg-white"
+                      : "bg-neutral-300 dark:bg-neutral-700"
+                  }`}
                 >
-                  Max Tokens
-                </label>
-                <span className="font-mono font-semibold text-neutral-900 dark:text-white">
-                  {maxTokens}
-                </span>
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-xs transition dark:bg-neutral-950 ${
+                      ultraMaxEnabled ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
               </div>
-              <input
-                id="playground-max-tokens"
-                data-testid="playground-max-tokens"
-                type="number"
-                min={1}
-                max={32768}
-                value={maxTokens}
-                onChange={(e) =>
-                  setMaxTokens(Math.max(1, Math.min(32768, Number(e.target.value) || 1)))
-                }
-                className="mt-1.5 h-9 w-full rounded-lg border border-neutral-300 bg-white px-3 font-mono text-xs text-neutral-950 outline-none dark:border-white/15 dark:bg-neutral-950 dark:text-white"
-              />
-            </div>
+            )}
 
             {/* Stream Toggle */}
             <div className="mt-4 flex items-center justify-between rounded-xl border border-neutral-200/80 bg-neutral-50/70 px-3.5 py-2.5 dark:border-white/10 dark:bg-white/[0.03]">

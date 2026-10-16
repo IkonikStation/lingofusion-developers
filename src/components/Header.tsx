@@ -141,7 +141,7 @@ export function Header({
             <Wallet className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             <span className="hidden text-[11px] font-medium text-emerald-700/80 xl:inline dark:text-emerald-300/80">Balance:</span>
             <span className="font-mono tracking-tight" data-testid="header-balance-amount">
-              ${Number(balanceUsd).toFixed(6)}
+              ${Number(balanceUsd).toFixed(2)}
             </span>
             <PlusCircle className="h-3 w-3 text-emerald-600/80 dark:text-emerald-400/80" />
           </button>

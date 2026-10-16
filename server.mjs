@@ -52,12 +52,12 @@ const textModels = [
 ];
 
 const defaultPricingCatalog = [
-  { model_id: "LingoFusion Nano", provider: "lingofusion", upstream_model_name: "lingofusion-nano", input_per_million: 0.0500, output_per_million: 0.5000, is_active: 1 },
-  { model_id: "LingoFusion Lite", provider: "lingofusion", upstream_model_name: "lingofusion-lite", input_per_million: 0.5000, output_per_million: 2.0000, is_active: 1 },
-  { model_id: "LingoFusion", provider: "lingofusion", upstream_model_name: "lingofusion-v4", input_per_million: 1.0000, output_per_million: 5.0000, is_active: 1 },
-  { model_id: "LingoFusion Pro", provider: "lingofusion", upstream_model_name: "lingofusion-pro-v4", input_per_million: 3.5000, output_per_million: 18.0000, is_active: 1 },
-  { model_id: "LingoFusion Explain", provider: "lingofusion", upstream_model_name: "lingofusion-explain-v4", input_per_million: 3.0000, output_per_million: 2.0000, is_active: 1 },
-  { model_id: "LingoFusion Ultra", provider: "lingofusion", upstream_model_name: "lingofusion-ultra-v4", input_per_million: 20.0000, output_per_million: 120.0000, is_active: 1 },
+  { model_id: "LingoFusion Nano", provider: "lingofusion", upstream_model_name: "gpt-5-nano", input_per_million: 0.0500, output_per_million: 0.5000, is_active: 1 },
+  { model_id: "LingoFusion Lite", provider: "lingofusion", upstream_model_name: "gpt-5.6-luna", input_per_million: 0.5000, output_per_million: 2.0000, is_active: 1 },
+  { model_id: "LingoFusion", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 1.0000, output_per_million: 5.0000, is_active: 1 },
+  { model_id: "LingoFusion Pro", provider: "lingofusion", upstream_model_name: "gpt-6-sol", input_per_million: 3.5000, output_per_million: 18.0000, is_active: 1 },
+  { model_id: "LingoFusion Explain", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 3.0000, output_per_million: 2.0000, is_active: 1 },
+  { model_id: "LingoFusion Ultra", provider: "lingofusion", upstream_model_name: "gpt-6-astra", input_per_million: 20.0000, output_per_million: 120.0000, is_active: 1 },
 ];
 
 function seedDatabase() {
@@ -65,7 +65,7 @@ function seedDatabase() {
   if (!userExists) {
     sqlDb.prepare(
       "INSERT INTO users (id, email, balance_usd, created_at) VALUES (?, ?, ?, ?)"
-    ).run(DEFAULT_USER_ID, DEFAULT_USER_EMAIL, 10.000000, new Date().toISOString());
+    ).run(DEFAULT_USER_ID, DEFAULT_USER_EMAIL, 0.000000, new Date().toISOString());
   }
 
   // Remove any non-LingoFusion models so only LingoFusion Nano to Ultra exist
@@ -253,21 +253,91 @@ const lmStudio = {
 };
 
 const realModelRouting = {
-  "LingoFusion Nano": { provider: "lingofusion", model: "lingofusion-nano-v1" },
-  "LingoFusion Lite": { provider: "lingofusion", model: "lingofusion-lite-v1" },
-  "LingoFusion": { provider: "deepseek", model: "deepseek-v4-flash", thinking: "disabled" },
-  "LingoFusion Explain": { provider: "deepseek", model: "deepseek-v4-flash", thinking: "disabled" },
-  "LingoFusion Pro": { provider: "deepseek", model: "deepseek-v4-pro", thinking: "enabled", reasoningEffort: "high" },
-  "LingoFusion Ultra": { provider: "deepseek", model: "deepseek-v4-pro", thinking: "enabled", reasoningEffort: "max" },
+  "LingoFusion Nano": { provider: "lingofusion", model: "gpt-5-nano", displayModel: "GPT-5 nano" },
+  "LingoFusion Lite": { provider: "lingofusion", model: "gpt-5.6-luna", displayModel: "GPT-5.6 Luna" },
+  "LingoFusion": { provider: "lingofusion", model: "gpt-6-luna", displayModel: "GPT-6 Luna" },
+  "LingoFusion Explain": { provider: "lingofusion", model: "gpt-6-luna", displayModel: "GPT-6 Luna" },
+  "LingoFusion Pro": { provider: "lingofusion", model: "gpt-6-sol", displayModel: "GPT-6 Sol", reasoningModel: "gpt-6.1-sol", reasoningDisplayModel: "GPT-6.1 Sol", reasoningEffort: "medium" },
+  "LingoFusion Ultra": { provider: "lingofusion", model: "gpt-6-astra", displayModel: "GPT-6 Astra", reasoning: "pro", reasoningEffort: "high", maxReasoningEffort: "max" },
 };
+
+export function resolveBackendModelRouting(modelName, options = {}) {
+  const name = String(modelName || "LingoFusion").trim();
+  const reasoningEnabled = Boolean(
+    options.reasoning ||
+    options.reasoning_enabled ||
+    options.reasoning_effort === "medium" ||
+    options.reasoning === "medium"
+  );
+  const maxEnabled = Boolean(
+    options.max ||
+    options.max_reasoning ||
+    String(options.reasoning_effort || "").toLowerCase() === "max"
+  );
+
+  if (name === "LingoFusion Nano") {
+    return {
+      upstreamModel: "gpt-5-nano",
+      displayModel: "GPT-5 nano",
+      reasoning: undefined,
+      reasoningEffort: undefined,
+    };
+  }
+  if (name === "LingoFusion Lite") {
+    return {
+      upstreamModel: "gpt-5.6-luna",
+      displayModel: "GPT-5.6 Luna",
+      reasoning: undefined,
+      reasoningEffort: undefined,
+    };
+  }
+  if (name === "LingoFusion" || name === "LingoFusion Explain") {
+    return {
+      upstreamModel: "gpt-6-luna",
+      displayModel: "GPT-6 Luna",
+      reasoning: undefined,
+      reasoningEffort: undefined,
+    };
+  }
+  if (name === "LingoFusion Pro") {
+    if (reasoningEnabled) {
+      return {
+        upstreamModel: "gpt-6.1-sol",
+        displayModel: "GPT-6.1 Sol",
+        reasoning: "medium",
+        reasoningEffort: "medium",
+      };
+    }
+    return {
+      upstreamModel: "gpt-6-sol",
+      displayModel: "GPT-6 Sol",
+      reasoning: undefined,
+      reasoningEffort: undefined,
+    };
+  }
+  if (name === "LingoFusion Ultra") {
+    return {
+      upstreamModel: "gpt-6-astra",
+      displayModel: "GPT-6 Astra",
+      reasoning: "pro",
+      reasoningEffort: maxEnabled ? "max" : "high",
+    };
+  }
+  return {
+    upstreamModel: "gpt-6-luna",
+    displayModel: "GPT-6 Luna",
+    reasoning: undefined,
+    reasoningEffort: undefined,
+  };
+}
 
 const defaultDb = {
   account: {
-    paidBalanceMicroCents: dollarsToMicroCents(10),
+    paidBalanceMicroCents: dollarsToMicroCents(0),
     rewardBalanceMicroCents: 0,
     pendingChargesMicroCents: 0,
     lifetimeSpendMicroCents: 0,
-    totalPaidCreditPurchasedMicroCents: dollarsToMicroCents(10),
+    totalPaidCreditPurchasedMicroCents: dollarsToMicroCents(0),
     totalRewardCreditEarnedMicroCents: 0,
   },
   autoRecharge: {
@@ -1156,14 +1226,17 @@ async function handleChatCompletions({ req, res, body, user, apiKeyId, source, d
   const completionId = `chatcmpl-${randomBytes(12).toString("hex")}`;
   const created = Math.floor(Date.now() / 1000);
 
+  const routing = resolveBackendModelRouting(modelPricing.model_id, body);
   const upstreamConfig = realModelsEnabled() ? getUpstreamConfig(modelPricing) : null;
 
-  // Build upstream payload
+  // Build upstream payload with dynamic behind-the-scenes model & reasoning config
   const upstreamPayload = {
     ...body,
-    model: modelPricing.upstream_model_name,
+    model: routing.upstreamModel,
     messages,
     stream: isStream,
+    ...(routing.reasoning ? { reasoning: routing.reasoning } : {}),
+    ...(routing.reasoningEffort ? { reasoning_effort: routing.reasoningEffort } : {}),
     ...(isStream ? { stream_options: { ...(body.stream_options || {}), include_usage: true } } : {}),
   };
 
@@ -1496,7 +1569,10 @@ async function handleChatCompletions({ req, res, body, user, apiKeyId, source, d
     created,
     model: modelPricing.model_id,
     provider: modelPricing.provider,
-    upstream_model: modelPricing.upstream_model_name,
+    upstream_model: routing.upstreamModel,
+    upstream_display_model: routing.displayModel,
+    ...(routing.reasoning ? { reasoning: routing.reasoning } : {}),
+    ...(routing.reasoningEffort ? { reasoning_effort: routing.reasoningEffort } : {}),
     choices: [
       {
         index: 0,

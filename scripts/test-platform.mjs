@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHmac } from "node:crypto";
-import { calculateGrossDepositCents, calculateTokenCostUsd } from "../server.mjs";
+import {
+  calculateGrossDepositCents,
+  calculateTokenCostUsd,
+  resolveBackendModelRouting,
+} from "../server.mjs";
 
 const TEST_PORT = 8799;
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
 
 async function runTests() {
-  console.log("=== 1. Testing Unit Formulas (Stripe Gross-Up & Token Pricing Engine) ===");
+  console.log("=== 1. Testing Unit Formulas & Behind-the-Scenes Model Routing ===");
 
   // Example from specification:
   // Model Price: $2.00 / 1M input, $8.00 / 1M output
@@ -21,10 +25,45 @@ async function runTests() {
   // Gross (in dollars) = (NetDeposit + 0.30) / (1 - 0.029)
   // Convert to integer cents using Math.ceil(Gross * 100)
   const deposit5 = calculateGrossDepositCents(5.0);
-  // (5 + 0.30) / 0.971 = 5.458290422... -> Math.ceil(545.829...) = 546 cents ($5.46)
   assert.equal(deposit5.grossAmountCents, 546, "Gross cents for $5.00 net deposit must be 546 cents");
   assert.equal(deposit5.grossChargedUsd, 5.46);
   console.log(`✓ Stripe fee gross-up verified: $5.00 net -> ${deposit5.grossAmountCents} cents ($${deposit5.grossChargedUsd})`);
+
+  // Verify Behind-the-Scenes Model Routing
+  const nanoRoute = resolveBackendModelRouting("LingoFusion Nano");
+  assert.equal(nanoRoute.displayModel, "GPT-5 nano");
+  assert.equal(nanoRoute.upstreamModel, "gpt-5-nano");
+
+  const liteRoute = resolveBackendModelRouting("LingoFusion Lite");
+  assert.equal(liteRoute.displayModel, "GPT-5.6 Luna");
+  assert.equal(liteRoute.upstreamModel, "gpt-5.6-luna");
+
+  const lfRoute = resolveBackendModelRouting("LingoFusion");
+  assert.equal(lfRoute.displayModel, "GPT-6 Luna");
+  assert.equal(lfRoute.upstreamModel, "gpt-6-luna");
+
+  const proDefaultRoute = resolveBackendModelRouting("LingoFusion Pro", { reasoning_enabled: false });
+  assert.equal(proDefaultRoute.displayModel, "GPT-6 Sol");
+  assert.equal(proDefaultRoute.upstreamModel, "gpt-6-sol");
+
+  const proReasoningRoute = resolveBackendModelRouting("LingoFusion Pro", { reasoning_enabled: true });
+  assert.equal(proReasoningRoute.displayModel, "GPT-6.1 Sol");
+  assert.equal(proReasoningRoute.upstreamModel, "gpt-6.1-sol");
+  assert.equal(proReasoningRoute.reasoning, "medium");
+  assert.equal(proReasoningRoute.reasoningEffort, "medium");
+
+  const ultraDefaultRoute = resolveBackendModelRouting("LingoFusion Ultra", { max: false });
+  assert.equal(ultraDefaultRoute.displayModel, "GPT-6 Astra");
+  assert.equal(ultraDefaultRoute.upstreamModel, "gpt-6-astra");
+  assert.equal(ultraDefaultRoute.reasoning, "pro");
+  assert.equal(ultraDefaultRoute.reasoningEffort, "high");
+
+  const ultraMaxRoute = resolveBackendModelRouting("LingoFusion Ultra", { max: true });
+  assert.equal(ultraMaxRoute.displayModel, "GPT-6 Astra");
+  assert.equal(ultraMaxRoute.upstreamModel, "gpt-6-astra");
+  assert.equal(ultraMaxRoute.reasoning, "pro");
+  assert.equal(ultraMaxRoute.reasoningEffort, "max");
+  console.log("✓ Behind-the-scenes model routing verified (GPT-5 nano, GPT-5.6 Luna, GPT-6 Luna, GPT-6 Sol / GPT-6.1 Sol, GPT-6 Astra)");
 
   console.log("\n=== 2. Starting API Server for End-to-End Integration Tests ===");
   const serverProc = spawn("node", ["server.mjs"], {
@@ -49,7 +88,7 @@ async function runTests() {
   });
 
   try {
-    // Reset test data first
+    // Reset test data first (ensures $0.00 balance)
     await fetch(`${BASE_URL}/api/billing/reset-local-data`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -64,6 +103,7 @@ async function runTests() {
     assert.equal(modelsPayload.data.length, 6, "Must have exactly the 6 LingoFusion Nano to Ultra models");
     const lfModel = modelsPayload.data.find((m) => m.model_id === "LingoFusion");
     assert.ok(lfModel, "LingoFusion must be in model_pricing");
+    assert.equal(lfModel.upstream_model_name, "gpt-6-luna");
     console.log(`✓ GET /v1/models returned ${modelsPayload.data.length} LingoFusion models with per-1M pricing`);
 
     // Create an API key
@@ -152,7 +192,7 @@ async function runTests() {
     assert.equal(webhookData.balance_usd, 5.0, "User balance must be credited exact net deposit ($5.00)");
     console.log(`✓ POST /api/webhooks/stripe verified signature, credited $5.00 net, recorded deposit_ledger`);
 
-    // Test Direct API Proxy (/v1/chat/completions) non-streaming
+    // Test Direct API Proxy (/v1/chat/completions) non-streaming with LingoFusion Pro + medium reasoning
     const chatRes = await fetch(`${BASE_URL}/v1/chat/completions`, {
       method: "POST",
       headers: {
@@ -160,7 +200,8 @@ async function runTests() {
         authorization: `Bearer ${apiKeySecret}`,
       },
       body: JSON.stringify({
-        model: "LingoFusion",
+        model: "LingoFusion Pro",
+        reasoning_enabled: true,
         messages: [{ role: "user", content: "Hello!" }],
         stream: false,
       }),
@@ -168,6 +209,9 @@ async function runTests() {
     assert.equal(chatRes.status, 200);
     const chatData = await chatRes.json();
     assert.equal(chatData.object, "chat.completion");
+    assert.equal(chatData.upstream_model, "gpt-6.1-sol");
+    assert.equal(chatData.upstream_display_model, "GPT-6.1 Sol");
+    assert.equal(chatData.reasoning, "medium");
     assert.ok(chatData.usage.prompt_tokens > 0);
     assert.ok(chatData.usage.completion_tokens > 0);
     assert.ok(chatData.usage.cost_usd > 0);
@@ -177,7 +221,7 @@ async function runTests() {
       "Balance must be atomically deducted by exact cost_usd",
     );
     console.log(
-      `✓ POST /v1/chat/completions (non-stream) billed $${chatData.usage.cost_usd.toFixed(6)}, new balance: $${chatData.usage.balance_usd.toFixed(6)}`,
+      `✓ POST /v1/chat/completions (LingoFusion Pro w/ reasoning -> ${chatData.upstream_display_model}) billed $${chatData.usage.cost_usd.toFixed(6)}`,
     );
 
     // Test Direct API Proxy (/v1/chat/completions) streaming SSE
@@ -188,7 +232,7 @@ async function runTests() {
         authorization: `Bearer ${apiKeySecret}`,
       },
       body: JSON.stringify({
-        model: "LingoFusion Pro",
+        model: "LingoFusion",
         messages: [{ role: "user", content: "Hello, how are you?" }],
         stream: true,
       }),
@@ -214,6 +258,7 @@ async function runTests() {
       },
       body: JSON.stringify({
         model: "LingoFusion Ultra",
+        max: true,
         messages: [{ role: "user", content: "Translate this detailed sentence into French accurately" }],
         stream: true,
         stream_delay_ms: 40,
@@ -261,6 +306,7 @@ async function runTests() {
     assert.equal(pgRes.status, 200);
     const pgData = await pgRes.json();
     assert.equal(pgData.model, "LingoFusion Lite");
+    assert.equal(pgData.upstream_display_model, "GPT-5.6 Luna");
 
     const finalDash = await (await fetch(`${BASE_URL}/api/dashboard`)).json();
     assert.equal(finalDash.usageLedger[0].source, "playground");

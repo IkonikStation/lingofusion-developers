@@ -138,16 +138,95 @@ type BrowserState = {
   secrets: Record<string, string>;
 };
 
-const storageKey = "lingofusion-browser-api-v1";
+const storageKey = "lingofusion-browser-api-v2";
 
 export const defaultBrowserModelPricing: ModelPricingRecord[] = [
-  { id: "LingoFusion Nano", model_id: "LingoFusion Nano", object: "model", provider: "lingofusion", upstream_model_name: "lingofusion-nano", input_per_million: 0.05, output_per_million: 0.5, is_active: true },
-  { id: "LingoFusion Lite", model_id: "LingoFusion Lite", object: "model", provider: "lingofusion", upstream_model_name: "lingofusion-lite", input_per_million: 0.5, output_per_million: 2.0, is_active: true },
-  { id: "LingoFusion", model_id: "LingoFusion", object: "model", provider: "lingofusion", upstream_model_name: "lingofusion-v4", input_per_million: 1.0, output_per_million: 5.0, is_active: true },
-  { id: "LingoFusion Pro", model_id: "LingoFusion Pro", object: "model", provider: "lingofusion", upstream_model_name: "lingofusion-pro-v4", input_per_million: 3.5, output_per_million: 18.0, is_active: true },
-  { id: "LingoFusion Explain", model_id: "LingoFusion Explain", object: "model", provider: "lingofusion", upstream_model_name: "lingofusion-explain-v4", input_per_million: 3.0, output_per_million: 2.0, is_active: true },
-  { id: "LingoFusion Ultra", model_id: "LingoFusion Ultra", object: "model", provider: "lingofusion", upstream_model_name: "lingofusion-ultra-v4", input_per_million: 20.0, output_per_million: 120.0, is_active: true },
+  { id: "LingoFusion Nano", model_id: "LingoFusion Nano", object: "model", provider: "lingofusion", upstream_model_name: "gpt-5-nano", input_per_million: 0.05, output_per_million: 0.5, is_active: true },
+  { id: "LingoFusion Lite", model_id: "LingoFusion Lite", object: "model", provider: "lingofusion", upstream_model_name: "gpt-5.6-luna", input_per_million: 0.5, output_per_million: 2.0, is_active: true },
+  { id: "LingoFusion", model_id: "LingoFusion", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 1.0, output_per_million: 5.0, is_active: true },
+  { id: "LingoFusion Pro", model_id: "LingoFusion Pro", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-sol", input_per_million: 3.5, output_per_million: 18.0, is_active: true },
+  { id: "LingoFusion Explain", model_id: "LingoFusion Explain", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 3.0, output_per_million: 2.0, is_active: true },
+  { id: "LingoFusion Ultra", model_id: "LingoFusion Ultra", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-astra", input_per_million: 20.0, output_per_million: 120.0, is_active: true },
 ];
+
+export function resolveBackendModelRouting(
+  modelName: string,
+  options?: {
+    reasoning?: boolean | string;
+    reasoning_enabled?: boolean;
+    reasoning_effort?: string;
+    max?: boolean;
+    max_reasoning?: boolean;
+  },
+) {
+  const name = String(modelName || "LingoFusion").trim();
+  const reasoningEnabled = Boolean(
+    options?.reasoning ||
+      options?.reasoning_enabled ||
+      options?.reasoning_effort === "medium" ||
+      options?.reasoning === "medium",
+  );
+  const maxEnabled = Boolean(
+    options?.max ||
+      options?.max_reasoning ||
+      String(options?.reasoning_effort || "").toLowerCase() === "max",
+  );
+
+  if (name === "LingoFusion Nano") {
+    return {
+      upstreamModel: "gpt-5-nano",
+      displayModel: "GPT-5 nano",
+      reasoning: undefined,
+      reasoningEffort: undefined,
+    };
+  }
+  if (name === "LingoFusion Lite") {
+    return {
+      upstreamModel: "gpt-5.6-luna",
+      displayModel: "GPT-5.6 Luna",
+      reasoning: undefined,
+      reasoningEffort: undefined,
+    };
+  }
+  if (name === "LingoFusion" || name === "LingoFusion Explain") {
+    return {
+      upstreamModel: "gpt-6-luna",
+      displayModel: "GPT-6 Luna",
+      reasoning: undefined,
+      reasoningEffort: undefined,
+    };
+  }
+  if (name === "LingoFusion Pro") {
+    if (reasoningEnabled) {
+      return {
+        upstreamModel: "gpt-6.1-sol",
+        displayModel: "GPT-6.1 Sol",
+        reasoning: "medium" as const,
+        reasoningEffort: "medium" as const,
+      };
+    }
+    return {
+      upstreamModel: "gpt-6-sol",
+      displayModel: "GPT-6 Sol",
+      reasoning: undefined,
+      reasoningEffort: undefined,
+    };
+  }
+  if (name === "LingoFusion Ultra") {
+    return {
+      upstreamModel: "gpt-6-astra",
+      displayModel: "GPT-6 Astra",
+      reasoning: "pro" as const,
+      reasoningEffort: (maxEnabled ? "max" : "high") as "high" | "max",
+    };
+  }
+  return {
+    upstreamModel: "gpt-6-luna",
+    displayModel: "GPT-6 Luna",
+    reasoning: undefined,
+    reasoningEffort: undefined,
+  };
+}
 
 export function calculateGrossDeposit(depositAmountUsd: number) {
   const net = Number(depositAmountUsd);
@@ -191,18 +270,18 @@ function createInitialState(): BrowserState {
       user: {
         id: "00000000-0000-4000-8000-000000000001",
         email: "developer@lingofusion.dev",
-        balance_usd: 10.0,
+        balance_usd: 0.0,
         created_at: new Date().toISOString(),
       },
       modelPricing: defaultBrowserModelPricing,
       usageLedger: [],
       depositLedger: [],
       account: {
-        paidBalance: 10.0,
+        paidBalance: 0.0,
         rewardBalance: 0,
         pendingCharges: 0,
         lifetimeSpend: 0,
-        totalPaidCreditPurchased: 10.0,
+        totalPaidCreditPurchased: 0.0,
         totalRewardCreditEarned: 0,
       },
       autoRecharge: {
@@ -477,13 +556,24 @@ function runChatCompletionBrowser(state: BrowserState, options?: RequestInit, so
     streaming: Boolean(body.stream),
   });
 
+  const routing = resolveBackendModelRouting(modelPricing.model_id, {
+    reasoning: body.reasoning as boolean | string | undefined,
+    reasoning_enabled: Boolean(body.reasoning_enabled),
+    reasoning_effort: typeof body.reasoning_effort === "string" ? body.reasoning_effort : undefined,
+    max: Boolean(body.max),
+    max_reasoning: Boolean(body.max_reasoning),
+  });
+
   return {
     id: requestId,
     object: "chat.completion",
     created: Math.floor(Date.now() / 1000),
     model: modelPricing.model_id,
     provider: modelPricing.provider,
-    upstream_model: modelPricing.upstream_model_name,
+    upstream_model: routing.upstreamModel,
+    upstream_display_model: routing.displayModel,
+    ...(routing.reasoning ? { reasoning: routing.reasoning } : {}),
+    ...(routing.reasoningEffort ? { reasoning_effort: routing.reasoningEffort } : {}),
     choices: [
       {
         index: 0,

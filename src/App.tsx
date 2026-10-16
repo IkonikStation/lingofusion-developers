@@ -59,7 +59,7 @@ export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [language, setLanguage] = useState<LanguageCode>("en");
   const [dashboardOpen, setDashboardOpen] = useState(false);
-  const [balanceUsd, setBalanceUsd] = useState<number>(10.0);
+  const [balanceUsd, setBalanceUsd] = useState<number>(0.0);
   const [proVariantKey, setProVariantKey] = useState<ProVariantKey>(() =>
     ["750k", "1m"].includes(window.localStorage.getItem("lingofusion-pro-variant") ?? "") ? "750k" : "350k",
   );
