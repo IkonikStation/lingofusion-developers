@@ -2,7 +2,6 @@ import React, {
   useCallback,
   useEffect,
   useRef,
-  useState,
 } from "react";
 
 interface LiveMarkdownEditorProps {
@@ -21,7 +20,7 @@ interface LiveMarkdownEditorProps {
 export function domToMarkdown(rootNode: Node): string {
   function serialize(node: Node): string {
     if (node.nodeType === Node.TEXT_NODE) {
-      return node.textContent || "";
+      return (node.textContent || "").replace(/\u200B/g, "");
     }
     if (node.nodeType !== Node.ELEMENT_NODE) {
       return "";
@@ -92,7 +91,10 @@ export function domToMarkdown(rootNode: Node): string {
   }
 
   const raw = serialize(rootNode);
-  return raw.replace(/\n{3,}/g, "\n\n").trim();
+  return raw
+    .replace(/\u200B/g, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 /**
@@ -274,7 +276,7 @@ function replaceMatchWithElement(
   }
   el.textContent = innerContent;
 
-  const afterNode = document.createTextNode(afterText.length > 0 ? afterText : "\u00A0");
+  const afterNode = document.createTextNode(afterText.length > 0 ? afterText : "\u200B");
 
   textNode.textContent = beforeText;
 
@@ -289,11 +291,54 @@ function replaceMatchWithElement(
   const sel = window.getSelection();
   if (sel) {
     const range = document.createRange();
-    range.setStart(afterNode, 1);
+    range.setStart(afterNode, afterText.length > 0 ? 0 : 1);
     range.collapse(true);
     sel.removeAllRanges();
     sel.addRange(range);
   }
+}
+
+/**
+ * Inspects the text node at caret offset for completed inline markdown syntax
+ * and converts it into live HTML formatting.
+ */
+function checkInlineMarkdown(textNode: Node, offset: number): boolean {
+  if (textNode.nodeType !== Node.TEXT_NODE) return false;
+  const text = textNode.textContent || "";
+  const before = text.slice(0, offset);
+
+  // 1. Inline Code: `code`
+  const codeMatch = before.match(/`([^`\n]+)`$/);
+  if (codeMatch && codeMatch[1].trim()) {
+    replaceMatchWithElement(textNode, offset, codeMatch[0].length, "code", codeMatch[1]);
+    return true;
+  }
+
+  // 2. Bold: **text**
+  const boldMatch = before.match(/\*\*([^*\n]+)\*\*$/);
+  if (boldMatch && boldMatch[1].trim()) {
+    replaceMatchWithElement(textNode, offset, boldMatch[0].length, "strong", boldMatch[1]);
+    return true;
+  }
+
+  // 3. Strikethrough: ~~text~~
+  const delMatch = before.match(/~~([^~\n]+)~~$/);
+  if (delMatch && delMatch[1].trim()) {
+    replaceMatchWithElement(textNode, offset, delMatch[0].length, "del", delMatch[1]);
+    return true;
+  }
+
+  // 4. Italic: *text* (excluding bold delimiters)
+  const italicMatch = before.match(/(?:^|[^*])\*([^*\n\s][^*\n]*)\*$/);
+  if (italicMatch && italicMatch[1].trim()) {
+    const matchLen = italicMatch[0].startsWith("*")
+      ? italicMatch[0].length
+      : italicMatch[0].length - 1;
+    replaceMatchWithElement(textNode, offset, matchLen, "em", italicMatch[1]);
+    return true;
+  }
+
+  return false;
 }
 
 export function LiveMarkdownEditor({
@@ -349,7 +394,7 @@ export function LiveMarkdownEditor({
 
         if (node.nodeType === Node.TEXT_NODE) {
           const text = node.textContent || "";
-          const before = text.slice(0, offset);
+          const before = text.slice(0, offset).trim();
 
           // Headings
           if (before === "#") {
@@ -399,41 +444,9 @@ export function LiveMarkdownEditor({
             return;
           }
 
-          // Inline Bold: **text**
-          const boldMatch = before.match(/\*\*([^*]+)\*\*$/);
-          if (boldMatch) {
+          // Inline formatting before space
+          if (checkInlineMarkdown(node, offset)) {
             e.preventDefault();
-            replaceMatchWithElement(node, offset, boldMatch[0].length, "strong", boldMatch[1]);
-            triggerUpdate();
-            return;
-          }
-
-          // Inline Italic: *text*
-          const italicMatch = before.match(/(?:^|[^*])\*([^*]+)\*$/);
-          if (italicMatch) {
-            e.preventDefault();
-            const matchLen = italicMatch[0].startsWith("*")
-              ? italicMatch[0].length
-              : italicMatch[0].length - 1;
-            replaceMatchWithElement(node, offset, matchLen, "em", italicMatch[1]);
-            triggerUpdate();
-            return;
-          }
-
-          // Inline Code: `code`
-          const codeMatch = before.match(/`([^`]+)`$/);
-          if (codeMatch) {
-            e.preventDefault();
-            replaceMatchWithElement(node, offset, codeMatch[0].length, "code", codeMatch[1]);
-            triggerUpdate();
-            return;
-          }
-
-          // Inline Strikethrough: ~~del~~
-          const delMatch = before.match(/~~([^~]+)~~$/);
-          if (delMatch) {
-            e.preventDefault();
-            replaceMatchWithElement(node, offset, delMatch[0].length, "del", delMatch[1]);
             triggerUpdate();
             return;
           }
@@ -443,6 +456,17 @@ export function LiveMarkdownEditor({
   };
 
   const handleInput = () => {
+    if (!isComposingRef.current) {
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        const node = range.startContainer;
+        const offset = range.startOffset;
+        if (node.nodeType === Node.TEXT_NODE) {
+          checkInlineMarkdown(node, offset);
+        }
+      }
+    }
     triggerUpdate();
   };
 
