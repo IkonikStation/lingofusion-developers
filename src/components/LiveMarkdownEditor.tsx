@@ -515,8 +515,10 @@ export function LiveMarkdownEditor({
           isComposingRef.current = false;
           triggerUpdate();
         }}
-        className={`focus:outline-none ${className}`}
-        style={{ minHeight: "14rem" }}
+        className={`min-h-[9rem] sm:min-h-[14rem] focus:outline-none ${className}`}
+        autoCapitalize="sentences"
+        autoCorrect="on"
+        spellCheck
       />
     </div>
   );

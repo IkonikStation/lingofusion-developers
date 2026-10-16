@@ -526,13 +526,13 @@ export function PlaygroundPage({
   };
 
   return (
-    <section className="mx-auto max-w-5xl py-6 sm:py-10">
+    <section className="mx-auto max-w-5xl px-2.5 py-4 sm:px-4 sm:py-8">
       {/* Minimal Top Bar: Title + Model Selector + Live Balance */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3.5">
+      <div className="flex flex-col gap-3.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
           <ModelIcon presentation={presentation} size="catalog" />
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-neutral-950 dark:text-white">
+            <h1 className="text-xl font-semibold tracking-tight text-neutral-950 sm:text-2xl dark:text-white">
               Playground
             </h1>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
@@ -542,16 +542,16 @@ export function PlaygroundPage({
         </div>
 
         {/* Right: Live Balance Pill + Add Credits Trigger */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start">
           <div
             data-testid="playground-live-balance"
-            className="inline-flex h-10 items-center gap-2.5 rounded-xl border border-neutral-200 bg-neutral-50/90 px-3.5 text-xs dark:border-white/10 dark:bg-neutral-900"
+            className="inline-flex h-9.5 items-center gap-2 rounded-xl border border-neutral-200 bg-neutral-50/90 px-3 text-xs sm:h-10 sm:px-3.5 dark:border-white/10 dark:bg-neutral-900"
           >
             <Wallet className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             <span className="text-neutral-500 dark:text-neutral-400">Balance:</span>
             <span
               data-testid="live-balance-value"
-              className="font-mono text-sm font-semibold text-neutral-950 dark:text-white"
+              className="font-mono text-xs font-semibold text-neutral-950 sm:text-sm dark:text-white"
             >
               ${liveBalance.toFixed(2)}
             </span>
@@ -563,7 +563,7 @@ export function PlaygroundPage({
               setDepositStatusMessage(null);
               setDepositModalOpen((v) => !v);
             }}
-            className="pressable inline-flex h-10 items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3.5 text-xs font-semibold text-neutral-900 shadow-2xs transition hover:bg-neutral-50 dark:border-white/15 dark:bg-neutral-800 dark:text-white dark:hover:bg-neutral-700"
+            className="pressable inline-flex h-9.5 items-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-3 text-xs font-semibold text-neutral-900 shadow-2xs transition hover:bg-neutral-50 sm:h-10 sm:px-3.5 dark:border-white/15 dark:bg-neutral-800 dark:text-white dark:hover:bg-neutral-700"
           >
             <Plus className="h-3.5 w-3.5" />
             Add Credits
@@ -573,15 +573,15 @@ export function PlaygroundPage({
 
       {/* Collapsible Minimal Stripe Deposit Drawer */}
       {depositModalOpen && (
-        <div className="mt-4 rounded-2xl border border-neutral-200 bg-neutral-50/80 p-4 shadow-xs dark:border-white/10 dark:bg-neutral-900/80">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CreditCard className="h-4 w-4 text-neutral-600 dark:text-neutral-300" />
+        <div className="mt-3.5 rounded-2xl border border-neutral-200 bg-neutral-50/80 p-3.5 shadow-xs sm:mt-4 sm:p-4 dark:border-white/10 dark:bg-neutral-900/80">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <CreditCard className="h-4 w-4 shrink-0 text-neutral-600 dark:text-neutral-300" />
               <span className="text-xs font-semibold text-neutral-950 dark:text-white">
                 Add Prepaid Credits (Min $5.00)
               </span>
               <span className="text-[11px] text-neutral-500">
-                • Stripe fee (2.9% + $0.30) grossed up automatically
+                • Stripe fee (2.9% + $0.30) grossed up
               </span>
             </div>
             <button
@@ -593,14 +593,14 @@ export function PlaygroundPage({
             </button>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               {[5, 10, 25, 50].map((preset) => (
                 <button
                   key={preset}
                   type="button"
                   onClick={() => setDepositAmount(preset)}
-                  className={`h-9 rounded-lg border px-3 text-xs font-semibold transition ${
+                  className={`h-9 flex-1 sm:flex-initial rounded-lg border px-3 text-xs font-semibold transition ${
                     depositAmount === preset
                       ? "border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-950"
                       : "border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-100 dark:border-white/10 dark:bg-neutral-800 dark:text-neutral-300"
@@ -616,13 +616,13 @@ export function PlaygroundPage({
                 data-testid="deposit-amount-input"
                 value={depositAmount}
                 onChange={(e) => setDepositAmount(Number(e.target.value))}
-                className="h-9 w-24 rounded-lg border border-neutral-300 bg-white px-2.5 font-mono text-xs text-neutral-950 outline-none dark:border-white/15 dark:bg-neutral-950 dark:text-white"
+                className="h-9 w-20 sm:w-24 rounded-lg border border-neutral-300 bg-white px-2.5 font-mono text-xs text-neutral-950 outline-none dark:border-white/15 dark:bg-neutral-950 dark:text-white"
               />
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:gap-3">
               <span className="font-mono text-xs text-neutral-600 dark:text-neutral-400" data-testid="gross-charge-preview">
-                Net: <strong>+${depositBreakdown.netDepositedUsd.toFixed(2)}</strong> • Total charged:{" "}
+                Net: <strong>+${depositBreakdown.netDepositedUsd.toFixed(2)}</strong> • Total:{" "}
                 <strong>${depositBreakdown.grossChargedUsd.toFixed(2)}</strong>
               </span>
               <button
@@ -630,7 +630,7 @@ export function PlaygroundPage({
                 disabled={depositBusy || depositAmount < 5}
                 data-testid="simulate-webhook-btn"
                 onClick={handleDepositCredit}
-                className="pressable inline-flex h-9 items-center gap-1.5 rounded-xl bg-neutral-950 px-4 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+                className="pressable inline-flex h-9.5 sm:h-9 w-full sm:w-auto items-center justify-center gap-1.5 rounded-xl bg-neutral-950 px-4 text-xs font-semibold text-white transition hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
               >
                 <Zap className="h-3.5 w-3.5" />
                 {depositBusy
@@ -652,7 +652,7 @@ export function PlaygroundPage({
       {errorBanner && (
         <div
           role="alert"
-          className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-xs text-red-900 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200"
+          className="mt-3.5 sm:mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between rounded-xl border border-red-300 bg-red-50 px-3.5 py-3 text-xs text-red-900 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200"
         >
           <div className="flex items-center gap-2">
             <AlertCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
@@ -680,19 +680,19 @@ export function PlaygroundPage({
       )}
 
       {/* Main Minimal Translation Card */}
-      <div className="mt-6 overflow-hidden rounded-2xl border border-neutral-200/90 bg-white shadow-xs dark:border-white/10 dark:bg-neutral-900/70">
-        {/* Control Bar: Model Dropdown + Language Pair + Reasoning/Web Search/Stream Toggles + Translate Button */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200/80 bg-neutral-50/60 px-4 py-3.5 dark:border-white/10 dark:bg-white/[0.02] sm:px-5">
+      <div className="mt-4 sm:mt-6 overflow-hidden rounded-2xl border border-neutral-200/90 bg-white shadow-xs dark:border-white/10 dark:bg-neutral-900/70">
+        {/* Responsive Control Bar */}
+        <div className="flex flex-col gap-3.5 border-b border-neutral-200/80 bg-neutral-50/60 p-3.5 dark:border-white/10 dark:bg-white/[0.02] sm:p-4 lg:flex-row lg:items-center lg:justify-between">
           {/* Left: Model Selector + Language Pair */}
-          <div className="flex flex-wrap items-center gap-2.5">
-            {/* Model Dropdown (Strictly LingoFusion Nano to Ultra, showing only the name) */}
-            <div className="relative">
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+            {/* Model Dropdown */}
+            <div className="relative w-full sm:w-auto">
               <select
                 aria-label="Select Model"
                 data-testid="playground-model-select"
                 value={selectedModelId}
                 onChange={(e) => setSelectedModelId(e.target.value)}
-                className="h-9 appearance-none rounded-xl border border-neutral-300 bg-white pl-3 pr-8 text-xs font-semibold text-neutral-950 outline-none transition focus:border-neutral-900 dark:border-white/15 dark:bg-neutral-950 dark:text-white"
+                className="h-9.5 sm:h-9 w-full sm:w-auto appearance-none rounded-xl border border-neutral-300 bg-white pl-3.5 pr-8 text-xs font-semibold text-neutral-950 outline-none transition focus:border-neutral-900 dark:border-white/15 dark:bg-neutral-950 dark:text-white"
               >
                 {models.map((m) => (
                   <option key={m.model_id} value={m.model_id}>
@@ -705,102 +705,109 @@ export function PlaygroundPage({
 
             <span className="hidden h-4 w-px bg-neutral-200 sm:inline-block dark:bg-white/10" />
 
-            {/* Source Language */}
-            <select
-              aria-label="Source language"
-              value={fromLanguage}
-              onChange={(e) => setFromLanguage(e.target.value)}
-              className="h-9 rounded-xl border border-neutral-200 bg-white px-2.5 text-xs font-medium text-neutral-900 outline-none dark:border-white/15 dark:bg-neutral-950 dark:text-white"
-            >
-              {playgroundLanguages.map((lang) => (
-                <option key={lang.code} value={lang.name}>
-                  {lang.name}
-                </option>
-              ))}
-            </select>
+            {/* Language Pair Selector: Full-width on mobile, auto on desktop */}
+            <div className="flex items-center gap-1.5 w-full sm:w-auto">
+              {/* Source Language */}
+              <select
+                aria-label="Source language"
+                value={fromLanguage}
+                onChange={(e) => setFromLanguage(e.target.value)}
+                className="h-9.5 sm:h-9 flex-1 sm:flex-initial sm:w-32 lg:w-36 rounded-xl border border-neutral-200 bg-white px-2.5 text-xs font-medium text-neutral-900 outline-none dark:border-white/15 dark:bg-neutral-950 dark:text-white"
+              >
+                {playgroundLanguages.map((lang) => (
+                  <option key={lang.code} value={lang.name}>
+                    {lang.name}
+                  </option>
+                ))}
+              </select>
 
-            <button
-              type="button"
-              onClick={swapLanguages}
-              title="Swap languages"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-neutral-200 bg-white text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-950 dark:border-white/15 dark:bg-neutral-950 dark:text-neutral-300 dark:hover:bg-white/10"
-            >
-              <ArrowRightLeft className="h-3.5 w-3.5" />
-            </button>
+              <button
+                type="button"
+                onClick={swapLanguages}
+                title="Swap languages"
+                className="inline-flex h-9.5 w-9.5 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl border border-neutral-200 bg-white text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-950 active:scale-95 dark:border-white/15 dark:bg-neutral-950 dark:text-neutral-300 dark:hover:bg-white/10"
+              >
+                <ArrowRightLeft className="h-3.5 w-3.5" />
+              </button>
 
-            {/* Target Language */}
-            <select
-              aria-label="Target language"
-              value={toLanguage}
-              onChange={(e) => setToLanguage(e.target.value)}
-              className="h-9 rounded-xl border border-neutral-200 bg-white px-2.5 text-xs font-medium text-neutral-900 outline-none dark:border-white/15 dark:bg-neutral-950 dark:text-white"
-            >
-              {playgroundLanguages.map((lang) => (
-                <option key={lang.code} value={lang.name}>
-                  {lang.name}
-                </option>
-              ))}
-            </select>
+              {/* Target Language */}
+              <select
+                aria-label="Target language"
+                value={toLanguage}
+                onChange={(e) => setToLanguage(e.target.value)}
+                className="h-9.5 sm:h-9 flex-1 sm:flex-initial sm:w-32 lg:w-36 rounded-xl border border-neutral-200 bg-white px-2.5 text-xs font-medium text-neutral-900 outline-none dark:border-white/15 dark:bg-neutral-950 dark:text-white"
+              >
+                {playgroundLanguages.map((lang) => (
+                  <option key={lang.code} value={lang.name}>
+                    {lang.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          {/* Right: Allow Web Search + Reasoning Option (if Pro/Ultra) + Stream Toggle + Translate Button */}
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300">
-              <input
-                type="checkbox"
-                data-testid="playground-web-search-toggle"
-                checked={allowWebSearch}
-                onChange={(e) => setAllowWebSearch(e.target.checked)}
-                className="h-3.5 w-3.5 rounded accent-neutral-950 dark:accent-white"
-              />
-              <span>Allow Web Search</span>
-            </label>
-
-            {activeModel.model_id === "LingoFusion Pro" && (
+          {/* Right: Options (Web Search, Reasoning, Stream) + Translate Action Button */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between lg:justify-end">
+            {/* Toggles Row */}
+            <div className="flex flex-wrap items-center gap-3">
               <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300">
                 <input
                   type="checkbox"
-                  data-testid="playground-pro-reasoning-toggle"
-                  checked={proReasoningEnabled}
-                  onChange={(e) => setProReasoningEnabled(e.target.checked)}
+                  data-testid="playground-web-search-toggle"
+                  checked={allowWebSearch}
+                  onChange={(e) => setAllowWebSearch(e.target.checked)}
                   className="h-3.5 w-3.5 rounded accent-neutral-950 dark:accent-white"
                 />
-                <span>Reasoning</span>
+                <span>Allow Web Search</span>
               </label>
-            )}
 
-            {activeModel.model_id === "LingoFusion Ultra" && (
-              <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300">
+              {activeModel.model_id === "LingoFusion Pro" && (
+                <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300">
+                  <input
+                    type="checkbox"
+                    data-testid="playground-pro-reasoning-toggle"
+                    checked={proReasoningEnabled}
+                    onChange={(e) => setProReasoningEnabled(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded accent-neutral-950 dark:accent-white"
+                  />
+                  <span>Reasoning</span>
+                </label>
+              )}
+
+              {activeModel.model_id === "LingoFusion Ultra" && (
+                <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-300">
+                  <input
+                    type="checkbox"
+                    data-testid="playground-ultra-max-toggle"
+                    checked={ultraMaxEnabled}
+                    onChange={(e) => setUltraMaxEnabled(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded accent-neutral-950 dark:accent-white"
+                  />
+                  <span>Max Effort</span>
+                </label>
+              )}
+
+              <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-400">
                 <input
                   type="checkbox"
-                  data-testid="playground-ultra-max-toggle"
-                  checked={ultraMaxEnabled}
-                  onChange={(e) => setUltraMaxEnabled(e.target.checked)}
+                  data-testid="playground-stream-toggle"
+                  checked={streamToggle}
+                  onChange={(e) => setStreamToggle(e.target.checked)}
                   className="h-3.5 w-3.5 rounded accent-neutral-950 dark:accent-white"
                 />
-                <span>Max Effort</span>
+                <span>Stream</span>
               </label>
-            )}
+            </div>
 
-            <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium text-neutral-600 dark:text-neutral-400">
-              <input
-                type="checkbox"
-                data-testid="playground-stream-toggle"
-                checked={streamToggle}
-                onChange={(e) => setStreamToggle(e.target.checked)}
-                className="h-3.5 w-3.5 rounded accent-neutral-950 dark:accent-white"
-              />
-              <span>Stream</span>
-            </label>
-
+            {/* Translate Button: Full width on mobile, auto on desktop */}
             {isRunning && streamToggle ? (
               <button
                 type="button"
                 onClick={handleStopStream}
                 data-testid="playground-stop-btn"
-                className="pressable inline-flex h-9 items-center gap-1.5 rounded-xl bg-red-600 px-4 text-xs font-semibold text-white shadow-xs hover:bg-red-700"
+                className="pressable inline-flex h-10 sm:h-9 w-full sm:w-auto items-center justify-center gap-1.5 rounded-xl bg-red-600 px-5 text-sm sm:text-xs font-semibold text-white shadow-xs hover:bg-red-700"
               >
-                <Square className="h-3 w-3 fill-current" />
+                <Square className="h-3.5 w-3.5 fill-current" />
                 Stop
               </button>
             ) : (
@@ -809,9 +816,9 @@ export function PlaygroundPage({
                 disabled={isRunning || !userInput.trim()}
                 onClick={handleRunTranslation}
                 data-testid="playground-run-btn"
-                className="pressable inline-flex h-9 items-center gap-1.5 rounded-xl bg-neutral-950 px-4 text-xs font-semibold text-white shadow-xs transition hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+                className="pressable inline-flex h-10 sm:h-9 w-full sm:w-auto items-center justify-center gap-1.5 rounded-xl bg-neutral-950 px-5 text-sm sm:text-xs font-semibold text-white shadow-xs transition hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
               >
-                <Play className="h-3 w-3 fill-current" />
+                <Play className="h-3.5 w-3.5 fill-current" />
                 {isRunning ? "Translating..." : "Translate"}
               </button>
             )}
@@ -821,7 +828,7 @@ export function PlaygroundPage({
         {/* Clean Side-by-Side Input & Output Panes */}
         <div className="grid divide-y divide-neutral-200/80 dark:divide-white/10 md:grid-cols-2 md:divide-x md:divide-y-0">
           {/* Left Pane: Input Text with Live Markdown */}
-          <div className="flex flex-col p-4 sm:p-5">
+          <div className="flex flex-col p-3.5 sm:p-5">
             <div className="mb-2.5 flex items-center justify-between">
               <label
                 htmlFor="playground-user-input"
@@ -838,7 +845,7 @@ export function PlaygroundPage({
                     setTranslatedOutput("");
                     setLatestRun(null);
                   }}
-                  className="inline-flex items-center gap-1 text-[11px] text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-white/10 dark:hover:text-neutral-200"
                 >
                   <Trash2 className="h-3 w-3" />
                   Clear
@@ -858,7 +865,7 @@ export function PlaygroundPage({
           </div>
 
           {/* Right Pane: Translated Output (Always Markdown) */}
-          <div className="flex flex-col bg-neutral-50/40 p-4 dark:bg-white/[0.01] sm:p-5">
+          <div className="flex flex-col bg-neutral-50/40 p-3.5 sm:p-5 dark:bg-white/[0.01]">
             <div className="mb-2.5 flex items-center justify-between">
               <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">
                 {toLanguage} ({activeModel.model_id})
@@ -868,7 +875,7 @@ export function PlaygroundPage({
                 <button
                   type="button"
                   onClick={() => copyToClipboard(translatedOutput, "output")}
-                  className="inline-flex items-center gap-1 text-[11px] text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
+                  className="inline-flex items-center gap-1 rounded-lg border border-neutral-200/80 bg-white px-2.5 py-1 text-[11px] font-medium text-neutral-600 shadow-2xs transition hover:bg-neutral-50 hover:text-neutral-950 dark:border-white/10 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700 dark:hover:text-white"
                 >
                   {copiedId === "output" ? (
                     <Check className="h-3 w-3 text-emerald-600" />
@@ -882,7 +889,7 @@ export function PlaygroundPage({
 
             <div
               data-testid="playground-output-box"
-              className="flex min-h-[14rem] flex-1 flex-col justify-between text-base leading-7 text-neutral-950 dark:text-neutral-100"
+              className="flex min-h-[8rem] sm:min-h-[14rem] flex-1 flex-col justify-between text-base leading-7 text-neutral-950 dark:text-neutral-100"
             >
               <div>
                 {translatedOutput ? (
@@ -901,10 +908,10 @@ export function PlaygroundPage({
 
               {/* Real-time token usage and cost breakdown badge */}
               {latestRun && (
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-neutral-200/70 pt-3 dark:border-white/10">
+                <div className="mt-3.5 sm:mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-neutral-200/70 pt-2.5 sm:pt-3 dark:border-white/10">
                   <span
                     data-testid="response-usage-badge"
-                    className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-mono text-xs font-medium text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
+                    className="inline-flex w-full sm:w-auto items-center justify-center sm:justify-start gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-mono text-[11px] sm:text-xs font-medium text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
                   >
                     <Activity className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
                     Tokens: {latestRun.promptTokens} in / {latestRun.completionTokens} out • Cost: $
