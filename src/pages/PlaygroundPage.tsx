@@ -22,7 +22,9 @@ import {
   defaultBrowserModelPricing,
   getApiBaseUrl,
   getWebSearchCallRateUsd,
+  recordBrowserStreamUsage,
   shouldUseBrowserApi,
+  streamChatCompletionBrowser,
 } from "../data/browserApi";
 import type { ModelPricingRecord } from "../data/browserApi";
 import { playgroundLanguages } from "../data/playgroundLanguages";
@@ -247,7 +249,7 @@ export function PlaygroundPage({
     };
     setLatestRun(initialRun);
 
-    if (shouldUseBrowserApi() || !streamToggle) {
+    if (!streamToggle) {
       try {
         const response = await callApi<{
           id: string;
@@ -270,32 +272,6 @@ export function PlaygroundPage({
         const pTokens = response.usage?.prompt_tokens ?? 1;
         const cTokens = response.usage?.completion_tokens ?? 1;
         const costUsd = response.usage?.cost_usd ?? 0;
-
-        if (streamToggle && fullContent) {
-          const pieces = fullContent.match(/\S+\s*/g) || [fullContent];
-          let acc = "";
-          for (let i = 0; i < pieces.length; i++) {
-            acc += pieces[i];
-            const partialCompletionTokens = i + 1;
-            const partialCost = Number(
-              (
-                webSearchFee +
-                pTokens * (activeModel.input_per_million / 1_000_000) +
-                partialCompletionTokens * (activeModel.output_per_million / 1_000_000)
-              ).toFixed(6),
-            );
-            setTranslatedOutput(acc);
-            setLatestRun({
-              ...initialRun,
-              outputText: acc,
-              promptTokens: pTokens,
-              completionTokens: partialCompletionTokens,
-              costUsd: partialCost,
-              streaming: i < pieces.length - 1,
-            });
-            await new Promise((r) => setTimeout(r, 15));
-          }
-        }
 
         const completedRun: TranslationRun = {
           ...initialRun,
@@ -322,18 +298,23 @@ export function PlaygroundPage({
       return;
     }
 
-    // Streaming SSE fetch to POST /api/playground/chat
+    // Real-time streaming SSE fetch
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
     try {
-      const baseUrl = getApiBaseUrl();
-      const response = await fetch(`${baseUrl}/api/playground/chat`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
+      let response: Response;
+      if (shouldUseBrowserApi()) {
+        response = await streamChatCompletionBrowser(payload, controller.signal);
+      } else {
+        const baseUrl = getApiBaseUrl();
+        response = await fetch(`${baseUrl}/api/playground/chat`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+      }
 
       if (!response.ok) {
         const errBody = await response.json().catch(() => ({}));
@@ -420,6 +401,17 @@ export function PlaygroundPage({
             completionTokens * (activeModel.output_per_million / 1_000_000)
           ).toFixed(6),
         );
+
+      if (shouldUseBrowserApi()) {
+        const remaining = recordBrowserStreamUsage({
+          modelId: activeModel.model_id,
+          promptTokens,
+          completionTokens,
+          costUsd: computedCost,
+          source: "playground",
+        });
+        updateBalance(remaining);
+      }
 
       const completedRun: TranslationRun = {
         ...initialRun,

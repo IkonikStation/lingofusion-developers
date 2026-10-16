@@ -716,6 +716,142 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
   };
 }
 
+export function recordBrowserStreamUsage({
+  modelId,
+  promptTokens,
+  completionTokens,
+  costUsd,
+  source = "playground",
+}: {
+  modelId: string;
+  promptTokens: number;
+  completionTokens: number;
+  costUsd: number;
+  source?: "api" | "playground";
+}): number {
+  const state = loadState();
+  applyCharge(state, costUsd);
+  const now = new Date().toISOString();
+  state.dashboard.usageLedger?.unshift({
+    id: randomId("ulg"),
+    user_id: state.dashboard.user?.id || "00000000-0000-4000-8000-000000000001",
+    api_key_id: null,
+    model_id: modelId,
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+    cost_usd: costUsd,
+    source,
+    created_at: now,
+  });
+  createChargeEntry(
+    state,
+    costUsd,
+    `${modelId} (${promptTokens} in / ${completionTokens} out) via ${source}`,
+  );
+  logRequest(state, {
+    id: `chatcmpl-${randomId("browser")}`,
+    timestamp: now,
+    projectId: state.dashboard.projects[0]?.id || "proj_default",
+    keyId: "playground_session",
+    endpoint: source === "api" ? "/v1/chat/completions" : "/api/playground/chat",
+    model: modelId,
+    feature: "Chat completions (streaming)",
+    status: 200,
+    inputTokens: promptTokens,
+    outputTokens: completionTokens,
+    reasoningTokens: 0,
+    totalTokens: promptTokens + completionTokens,
+    words: 0,
+    cost: costUsd,
+    latencyMs: 120,
+    errorCode: "",
+    streaming: true,
+  });
+  saveState(state);
+  return state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance;
+}
+
+export async function streamChatCompletionBrowser(
+  body: Record<string, any>,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const state = loadState();
+  if ((state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) <= 0) {
+    fail("Insufficient balance. Please deposit credits.");
+  }
+
+  const rawModelId = String(body.model || "LingoFusion");
+  const normalizedModelId =
+    rawModelId.toLowerCase() === "lingofusion explain" ? "ExplainFusion" : rawModelId;
+  const modelPricing =
+    defaultBrowserModelPricing.find(
+      (m) => m.model_id.toLowerCase() === normalizedModelId.toLowerCase(),
+    ) ?? defaultBrowserModelPricing[2];
+
+  const routing = resolveBackendModelRouting(modelPricing.model_id, {
+    reasoning: body.reasoning as boolean | string | undefined,
+    reasoning_enabled: Boolean(body.reasoning_enabled),
+    reasoning_effort: typeof body.reasoning_effort === "string" ? body.reasoning_effort : undefined,
+    max: Boolean(body.max),
+    max_reasoning: Boolean(body.max_reasoning),
+    allow_web_search: Boolean(body.allow_web_search),
+    web_search: Boolean(body.web_search),
+  });
+
+  const messages = Array.isArray(body.messages)
+    ? (body.messages as Array<{ role: string; content: string }>)
+    : [];
+  const lastUser = String(
+    messages.filter((m) => m.role === "user").pop()?.content ||
+      body.input ||
+      "Hello, how are you?",
+  ).trim();
+  const fromLanguage = String(body.from_language || "English");
+  const toLanguage = String(body.to_language || "French");
+
+  const { endpoint, token } = decodeUpstreamGateway();
+  const effort = routing.reasoningEffort === "max" ? "xhigh" : routing.reasoningEffort;
+
+  const upstreamRes = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      model: routing.upstreamModel,
+      messages: [
+        {
+          role: "system",
+          content: buildBrowserTranslationPrompt(
+            fromLanguage,
+            toLanguage,
+            modelPricing.model_id,
+            body.tone as string | undefined,
+          ),
+        },
+        {
+          role: "user",
+          content: lastUser,
+        },
+      ],
+      stream: true,
+      stream_options: { include_usage: true },
+      ...(effort ? { reasoning_effort: effort } : {}),
+    }),
+    signal,
+  });
+
+  if (!upstreamRes.ok) {
+    const errorData = (await upstreamRes.json().catch(() => ({}))) as Record<string, any>;
+    const upstreamMsg =
+      errorData?.error?.message || `Translation upstream returned HTTP ${upstreamRes.status}`;
+    throw new Error(upstreamMsg);
+  }
+
+  return upstreamRes;
+}
+
 function runTranslation(state: BrowserState, options?: RequestInit) {
   const started = Date.now();
   const { key, project } = authorize(state, options);
