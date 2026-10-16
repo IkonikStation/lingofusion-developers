@@ -73,6 +73,8 @@ async function runTests() {
   const explainRoute = resolveBackendModelRouting("ExplainFusion");
   assert.equal(explainRoute.displayModel, "GPT-6 Luna");
   assert.equal(explainRoute.upstreamModel, "gpt-6-luna");
+  assert.equal(explainRoute.reasoning, "low");
+  assert.equal(explainRoute.reasoningEffort, "low");
 
   const webSearchRoute = resolveBackendModelRouting("LingoFusion Pro", { allow_web_search: true });
   assert.equal(webSearchRoute.upstreamModel, "gpt-5-search-api");

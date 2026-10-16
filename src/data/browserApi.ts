@@ -214,12 +214,22 @@ export function resolveBackendModelRouting(
       webSearchCallFeeUsd: 0,
     };
   }
-  if (name === "LingoFusion" || name === "ExplainFusion" || name === "LingoFusion Explain") {
+  if (name === "LingoFusion") {
     return {
       upstreamModel: "gpt-6-luna",
       displayModel: "GPT-6 Luna",
       reasoning: "none" as const,
       reasoningEffort: "none" as const,
+      webSearch: false,
+      webSearchCallFeeUsd: 0,
+    };
+  }
+  if (name === "ExplainFusion" || name === "LingoFusion Explain") {
+    return {
+      upstreamModel: "gpt-6-luna",
+      displayModel: "GPT-6 Luna",
+      reasoning: "low" as const,
+      reasoningEffort: "low" as const,
       webSearch: false,
       webSearchCallFeeUsd: 0,
     };
