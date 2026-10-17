@@ -60,12 +60,13 @@ const defaultPricingCatalog = [
   { model_id: "LingoFusion Ultra", provider: "lingofusion", upstream_model_name: "gpt-6-astra", input_per_million: 20.0000, output_per_million: 120.0000, is_active: 1 },
 ];
 
-// In-image translation runs on OpenAI's GPT-Image-2.5 Sunburst model. Both tiers
-// share the same upstream model ID and differ only in output resolution.
+// In-image translation is served as LingoFusion Image Translate (upstream
+// gpt-image-2.5-sunburst). Both tiers share the same upstream model ID and
+// differ only in output resolution.
 const imageModelCatalog = [
   {
-    model_id: "GPT-Image-2.5 Sunburst",
-    label: "GPT-Image-2.5 Sunburst",
+    model_id: "LingoFusion Image Translate",
+    label: "LingoFusion Image Translate",
     size: "Standard",
     resolution: "standard",
     upstream_model_name: "gpt-image-2.5-sunburst",
@@ -74,8 +75,8 @@ const imageModelCatalog = [
     default_size: process.env.LINGOFUSION_IMAGE_SIZE_STANDARD || "1024x1024",
   },
   {
-    model_id: "GPT-Image-2.5 Sunburst (4K)",
-    label: "GPT-Image-2.5 Sunburst 4K",
+    model_id: "LingoFusion Image Translate (4K)",
+    label: "LingoFusion Image Translate 4K",
     size: "4K",
     resolution: "4k",
     upstream_model_name: "gpt-image-2.5-sunburst",

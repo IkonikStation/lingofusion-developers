@@ -169,14 +169,14 @@ export const musicModels: SimpleModel[] = [
   { model: "LingoFusion Music", priceUsd: 0.10, pricingUnit: "per_generation" },
 ];
 
-// In-image translation runs on OpenAI's GPT-Image-2.5 Sunburst model. The
-// standard and 4K tiers share the same upstream model ID and differ only in the
-// requested output resolution.
+// In-image translation is served as LingoFusion Image Translate (upstream
+// gpt-image-2.5-sunburst). The standard and 4K tiers share the same upstream
+// model ID and differ only in the requested output resolution.
 export const imageModels: ImageModel[] = [
   {
     size: "Standard",
-    model: "GPT-Image-2.5 Sunburst",
-    label: "GPT-Image-2.5 Sunburst",
+    model: "LingoFusion Image Translate",
+    label: "LingoFusion Image Translate",
     upstreamModel: "gpt-image-2.5-sunburst",
     resolution: "standard",
     inputUsd: 12.00,
@@ -184,8 +184,8 @@ export const imageModels: ImageModel[] = [
   },
   {
     size: "4K",
-    model: "GPT-Image-2.5 Sunburst",
-    label: "GPT-Image-2.5 Sunburst 4K",
+    model: "LingoFusion Image Translate",
+    label: "LingoFusion Image Translate 4K",
     upstreamModel: "gpt-image-2.5-sunburst",
     resolution: "4k",
     inputUsd: 15.00,

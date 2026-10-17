@@ -879,7 +879,7 @@ export function PlaygroundPage({
 
             <span className="hidden h-4 w-px bg-neutral-200 sm:inline-block dark:bg-white/10" />
 
-            {/* Model Dropdown (text models, or GPT-Image-2.5 Sunburst tiers in Image mode) */}
+            {/* Model Dropdown (text models, or LingoFusion Image Translate tiers in Image mode) */}
             <div className="relative">
               {mode === "image" ? (
                 <select

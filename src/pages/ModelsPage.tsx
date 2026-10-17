@@ -120,7 +120,7 @@ export function ModelsPage({
           <span className="text-sm text-neutral-500">USD per 1M tokens</span>
         </div>
         <p className="mb-5 max-w-3xl text-sm leading-6 text-neutral-600 dark:text-neutral-400">
-          Translate text embedded in images, screenshots, and product shots with GPT-Image-2.5 Sunburst. The Standard and 4K tiers run on the same model; the 4K tier renders at 4K resolution. Test both live in the Playground.
+          Translate text embedded in images, screenshots, and product shots with LingoFusion Image Translate. The Standard and 4K tiers run on the same model; the 4K tier renders at 4K resolution. Test both live in the Playground.
         </p>
         <div className="grid gap-5 sm:grid-cols-2">
           {imageModels.map((model) => (
@@ -136,7 +136,7 @@ export function ModelsPage({
                   <div>
                     <h3 className="text-base font-semibold text-neutral-950 dark:text-white">{model.label}</h3>
                     <p className="mt-0.5 text-xs text-neutral-500">
-                      {model.resolution === "4k" ? "4K resolution" : "Standard resolution"} · OpenAI
+                      {model.resolution === "4k" ? "4K resolution" : "Standard resolution"} · LingoFusion
                     </p>
                   </div>
                 </div>
