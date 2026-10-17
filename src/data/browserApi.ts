@@ -1,6 +1,6 @@
-import { musicModels, textModelsByPricingMode } from "./pricing";
+import { musicModels, resolveImageModel, textModelsByPricingMode } from "./pricing";
 import type { TextPricingMode } from "./pricing";
-import { buildModelSystemPrompt } from "./systemPrompts";
+import { buildImageTranslationInstruction, buildModelSystemPrompt } from "./systemPrompts";
 
 export type ModelPricingRecord = {
   id: string;
@@ -862,6 +862,143 @@ export async function streamChatCompletionBrowser(
   return upstreamRes;
 }
 
+async function runImageTranslationBrowser(
+  state: BrowserState,
+  options?: RequestInit,
+  source: "api" | "playground" = "playground",
+) {
+  const started = Date.now();
+  if ((state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) <= 0) {
+    fail("Insufficient balance. Please deposit credits.");
+  }
+
+  const body = requestBody(options);
+  const model = resolveImageModel(String(body.model || ""), String(body.resolution || ""));
+  const fromLanguage = String(body.from_language || "English") || "English";
+  const toLanguage = String(body.to_language || "French") || "French";
+
+  const inlineImage = typeof body.image === "string" ? body.image : "";
+  const imageUrl = typeof body.image_url === "string" ? body.image_url : "";
+
+  let blob: Blob | null = null;
+  try {
+    if (inlineImage.startsWith("data:")) {
+      blob = await (await fetch(inlineImage)).blob();
+    } else if (/^https?:\/\//i.test(imageUrl)) {
+      blob = await (await fetch(imageUrl)).blob();
+    } else if (/^https?:\/\//i.test(inlineImage)) {
+      blob = await (await fetch(inlineImage)).blob();
+    }
+  } catch {
+    blob = null;
+  }
+  if (!blob) fail("Could not read the supplied image.");
+
+  const { endpoint, token } = decodeUpstreamGateway();
+  const editsEndpoint = endpoint.replace(/\/chat\/completions\/?$/, "/images/edits");
+  const prompt = buildImageTranslationInstruction({ fromLanguage, toLanguage });
+  const size = model.resolution === "4k" ? "3840x2160" : "1024x1024";
+
+  const form = new FormData();
+  form.append("model", model.upstreamModel);
+  form.append("prompt", prompt);
+  form.append("size", size);
+  form.append("n", "1");
+  form.append("image", blob, "source.png");
+
+  const upstreamRes = await fetch(editsEndpoint, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+
+  if (!upstreamRes.ok) {
+    const errorData = (await upstreamRes.json().catch(() => ({}))) as Record<string, any>;
+    throw new Error(
+      errorData?.error?.message || `Image upstream returned HTTP ${upstreamRes.status}`,
+    );
+  }
+
+  const payload = (await upstreamRes.json()) as Record<string, any>;
+  const first = Array.isArray(payload?.data) ? payload.data[0] : null;
+  const imageResult = first?.b64_json
+    ? `data:image/png;base64,${first.b64_json}`
+    : String(first?.url || "");
+  if (!imageResult) fail("The image provider returned no image.");
+
+  const usage = payload?.usage && typeof payload.usage === "object" ? payload.usage : {};
+  const promptTokens =
+    Number(usage.input_tokens) || Number(usage.prompt_tokens) || tokenEstimate(prompt);
+  const completionTokens = Number(usage.output_tokens) || Number(usage.completion_tokens) || 0;
+  const costUsd = calculateTokenCost(
+    promptTokens,
+    completionTokens,
+    model.inputUsd,
+    model.outputUsd,
+  );
+
+  applyCharge(state, costUsd);
+  const requestId = `img-${randomId("browser")}`;
+  const now = new Date().toISOString();
+
+  state.dashboard.usageLedger?.unshift({
+    id: randomId("ulg"),
+    user_id: state.dashboard.user?.id || "00000000-0000-4000-8000-000000000001",
+    api_key_id: null,
+    model_id: model.label,
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+    cost_usd: costUsd,
+    source,
+    created_at: now,
+  });
+  createChargeEntry(
+    state,
+    costUsd,
+    `${model.label} image translation (${promptTokens} in / ${completionTokens} out) via ${source}`,
+  );
+  logRequest(state, {
+    id: requestId,
+    timestamp: now,
+    projectId: state.dashboard.projects[0]?.id || "proj_default",
+    keyId: "playground_session",
+    endpoint: "/api/playground/image",
+    model: model.label,
+    feature: "Image translation",
+    status: 200,
+    inputTokens: promptTokens,
+    outputTokens: completionTokens,
+    reasoningTokens: 0,
+    totalTokens: promptTokens + completionTokens,
+    words: 0,
+    cost: costUsd,
+    latencyMs: Math.max(20, Date.now() - started),
+    errorCode: "",
+    streaming: false,
+  });
+
+  return {
+    id: requestId,
+    object: "image.translation",
+    model: model.model,
+    label: model.label,
+    resolution: model.resolution,
+    provider: "openai",
+    upstream_model: model.upstreamModel,
+    from_language: fromLanguage,
+    to_language: toLanguage,
+    image: imageResult,
+    image_mime_type: first?.b64_json ? "image/png" : undefined,
+    usage: {
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      total_tokens: promptTokens + completionTokens,
+      cost_usd: costUsd,
+      balance_usd: state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance,
+    },
+  };
+}
+
 function runTranslation(state: BrowserState, options?: RequestInit) {
   const started = Date.now();
   const { key, project } = authorize(state, options);
@@ -998,6 +1135,8 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
     };
   } else if (method === "POST" && path === "/api/playground/chat") {
     result = await runChatCompletionBrowser(state, options, "playground");
+  } else if (method === "POST" && path === "/api/playground/image") {
+    result = await runImageTranslationBrowser(state, options, "playground");
   } else if (method === "POST" && path === "/v1/chat/completions") {
     result = await runChatCompletionBrowser(state, options, "api");
   } else if (method === "POST" && path === "/api/billing/deposit") {

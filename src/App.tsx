@@ -45,7 +45,7 @@ const searchItems = Array.from(
     ...transcriptionModels.map((model) => model.model),
     ...dubbingModels.map((model) => model.model),
     ...musicModels.map((model) => model.model),
-    ...imageModels.map((model) => model.size),
+    ...imageModels.flatMap((model) => [model.size, model.model, model.label]),
     ...pdfModels.map((model) => model.model),
   ]),
 );

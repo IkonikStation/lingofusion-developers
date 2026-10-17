@@ -23,8 +23,14 @@ export type SimpleModel = {
   pricingUnit?: "per_word" | "per_1k_characters" | "per_minute" | "per_generation" | "per_500_extractions";
 };
 
+export type ImageResolution = "standard" | "4k";
+
 export type ImageModel = {
   size: string;
+  model: string;
+  label: string;
+  upstreamModel: string;
+  resolution: ImageResolution;
   inputUsd: number;
   outputUsd: number;
 };
@@ -163,10 +169,48 @@ export const musicModels: SimpleModel[] = [
   { model: "LingoFusion Music", priceUsd: 0.10, pricingUnit: "per_generation" },
 ];
 
+// In-image translation runs on OpenAI's GPT-Image-2.5 Sunburst model. The
+// standard and 4K tiers share the same upstream model ID and differ only in the
+// requested output resolution.
 export const imageModels: ImageModel[] = [
-  { size: "Standard", inputUsd: 12.00, outputUsd: 45.00 },
-  { size: "4K", inputUsd: 15.00, outputUsd: 50.00 },
+  {
+    size: "Standard",
+    model: "GPT-Image-2.5 Sunburst",
+    label: "GPT-Image-2.5 Sunburst",
+    upstreamModel: "gpt-image-2.5-sunburst",
+    resolution: "standard",
+    inputUsd: 12.00,
+    outputUsd: 45.00,
+  },
+  {
+    size: "4K",
+    model: "GPT-Image-2.5 Sunburst",
+    label: "GPT-Image-2.5 Sunburst 4K",
+    upstreamModel: "gpt-image-2.5-sunburst",
+    resolution: "4k",
+    inputUsd: 15.00,
+    outputUsd: 50.00,
+  },
 ];
+
+export function resolveImageModel(
+  modelName?: string,
+  resolution?: string,
+): ImageModel {
+  const res = String(resolution || "").trim().toLowerCase();
+  if (res === "standard" || res === "4k") {
+    const byResolution = imageModels.find((model) => model.resolution === res);
+    if (byResolution) return byResolution;
+  }
+  const name = String(modelName || "").trim().toLowerCase();
+  const byName = imageModels.find(
+    (model) =>
+      model.label.toLowerCase() === name ||
+      model.model.toLowerCase() === name ||
+      model.size.toLowerCase() === name,
+  );
+  return byName ?? imageModels[0];
+}
 
 export const pdfModels: SimpleModel[] = [
   { model: "PDF text extraction", priceUsd: 0.02, pricingUnit: "per_500_extractions" },

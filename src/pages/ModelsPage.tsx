@@ -1,8 +1,8 @@
-import { ArrowDown, ArrowRight, Search, X } from "lucide-react";
+import { ArrowDown, ArrowRight, Image as ImageIcon, Search, X } from "lucide-react";
 import { useState } from "react";
 import { ModelIcon, SelectField } from "../components/shared/FormFields";
 import { nativeLocalModels } from "../data/nativeLocal";
-import { textModelPresentations, textModelsByPricingMode, webSearchPricing } from "../data/pricing";
+import { imageModels, textModelPresentations, textModelsByPricingMode, webSearchPricing } from "../data/pricing";
 import type { TextModel, TextPricingMode } from "../data/pricing";
 import { modelSlug, withBasePath } from "../lib/utils";
 
@@ -12,7 +12,11 @@ function localSpecs(model: TextModel) {
   return model.local ? nativeLocalModels[model.model as keyof typeof nativeLocalModels] : undefined;
 }
 
-export function ModelsPage({ onOpenModel }: { onOpenModel: (model: string) => void }) {
+export function ModelsPage({
+  onOpenModel,
+}: {
+  onOpenModel: (model: string, query?: Record<string, string | number | undefined>) => void;
+}) {
   const [activeTab, setActiveTab] = useState<CategoryTab>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [pricingMode, setPricingMode] = useState<TextPricingMode>("instant");
@@ -108,6 +112,58 @@ export function ModelsPage({ onOpenModel }: { onOpenModel: (model: string) => vo
           {!filtered.length && <div className="models-empty"><h3>No models found</h3><p>Try another name or category.</p><button type="button" className="models-text-link" onClick={() => { setSearchQuery(""); setActiveTab("all"); }}>Reset filters <X size={15} /></button></div>}
         </div>
         <p className="mt-4 text-xs text-neutral-500">Standard API rates in USD. Local models run on your own hardware with no per-token API charge.</p>
+      </section>
+
+      <section className="models-section" aria-labelledby="image-translation-heading">
+        <div className="models-section-heading">
+          <h2 id="image-translation-heading">Image translation</h2>
+          <span className="text-sm text-neutral-500">USD per 1M tokens</span>
+        </div>
+        <p className="mb-5 max-w-3xl text-sm leading-6 text-neutral-600 dark:text-neutral-400">
+          Translate text embedded in images, screenshots, and product shots with GPT-Image-2.5 Sunburst. The Standard and 4K tiers run on the same model; the 4K tier renders at 4K resolution. Test both live in the Playground.
+        </p>
+        <div className="grid gap-5 sm:grid-cols-2">
+          {imageModels.map((model) => (
+            <article
+              key={model.size}
+              className="flex flex-col rounded-2xl border border-neutral-200/90 bg-white p-6 shadow-xs dark:border-white/[0.08] dark:bg-neutral-900/60"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-neutral-200/80 bg-neutral-50 text-neutral-700 dark:border-white/10 dark:bg-white/[0.04] dark:text-neutral-200">
+                    <ImageIcon size={18} />
+                  </span>
+                  <div>
+                    <h3 className="text-base font-semibold text-neutral-950 dark:text-white">{model.label}</h3>
+                    <p className="mt-0.5 text-xs text-neutral-500">
+                      {model.resolution === "4k" ? "4K resolution" : "Standard resolution"} · OpenAI
+                    </p>
+                  </div>
+                </div>
+                <span className="rounded-full border border-neutral-200 bg-neutral-100 px-2.5 py-0.5 text-[10px] font-semibold text-neutral-700 dark:border-white/10 dark:bg-white/[0.06] dark:text-neutral-300">
+                  {model.size}
+                </span>
+              </div>
+              <dl className="mt-5 grid grid-cols-2 gap-3 border-t border-neutral-200/80 pt-4 text-xs dark:border-white/[0.08]">
+                <div>
+                  <dt className="text-neutral-500">Input / 1M</dt>
+                  <dd className="mt-0.5 font-mono text-base font-bold text-neutral-950 dark:text-white">${model.inputUsd.toFixed(2)}</dd>
+                </div>
+                <div>
+                  <dt className="text-neutral-500">Output / 1M</dt>
+                  <dd className="mt-0.5 font-mono text-base font-bold text-neutral-950 dark:text-white">${model.outputUsd.toFixed(2)}</dd>
+                </div>
+              </dl>
+              <button
+                type="button"
+                onClick={() => onOpenModel("Playground", { mode: "image", model: model.label })}
+                className="models-primary mt-6 self-start"
+              >
+                Try in Playground <ArrowRight size={16} />
+              </button>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section id="compare-models" className="models-section scroll-mt-24" aria-labelledby="compare-heading">
