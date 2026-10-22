@@ -1429,46 +1429,33 @@ export function PlaygroundPage({
         </div>
       )}
 
-      {/* Insufficient Balance Modal Pop-up (Non-annoying centered modal) */}
+      {/* Insufficient Balance Pop-up (Centered floating pill, zero screen-dimming box) */}
       {insufficientModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          {/* Subtle backdrop */}
-          <div
-            className="fixed inset-0 bg-neutral-950/40 backdrop-blur-xs transition-opacity"
-            onClick={() => setInsufficientModalOpen(false)}
-          />
-
+        <div className="fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2 px-4 transition-all animate-in fade-in zoom-in-95 duration-150">
           <div
             role="dialog"
             aria-modal="true"
-            className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-neutral-900"
+            className="flex items-center gap-3.5 rounded-full border border-neutral-200/90 bg-white/95 py-2.5 pl-3.5 pr-3 shadow-xl backdrop-blur-md dark:border-white/10 dark:bg-neutral-900/95"
           >
-            <div className="flex items-start gap-3.5">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400">
-                <AlertCircle className="h-5 w-5" />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-base font-semibold text-neutral-950 dark:text-white">
-                  Insufficient balance
-                </h3>
-                <p className="mt-1 text-xs leading-relaxed text-neutral-600 dark:text-neutral-400">
-                  Please deposit credits to continue translating and using LingoFusion services.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setInsufficientModalOpen(false)}
-                className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
-              >
-                <X className="h-4 w-4" />
-              </button>
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400">
+              <AlertCircle className="h-4 w-4" />
             </div>
 
-            <div className="mt-6 flex items-center justify-end gap-2.5">
+            <div className="flex items-center gap-1.5 whitespace-nowrap">
+              <span className="text-xs font-semibold text-neutral-950 dark:text-white">
+                Insufficient balance
+              </span>
+              <span className="text-neutral-400 dark:text-neutral-500">•</span>
+              <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                Please deposit credits to continue
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 pl-1">
               <button
                 type="button"
                 onClick={() => setInsufficientModalOpen(false)}
-                className="inline-flex h-9 items-center justify-center rounded-xl border border-neutral-200 px-4 text-xs font-semibold text-neutral-700 hover:bg-neutral-100 dark:border-white/10 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                className="inline-flex h-7 items-center justify-center rounded-full px-3 text-xs font-medium text-neutral-600 hover:bg-neutral-100 dark:border-white/10 dark:text-neutral-300 dark:hover:bg-neutral-800"
               >
                 Dismiss
               </button>
@@ -1479,9 +1466,9 @@ export function PlaygroundPage({
                   setDepositStatusMessage(null);
                   setDepositModalOpen(true);
                 }}
-                className="pressable inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-neutral-950 px-4 text-xs font-semibold text-white shadow-xs transition hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+                className="pressable inline-flex h-7 items-center justify-center gap-1 rounded-full bg-neutral-950 px-3 text-xs font-semibold text-white shadow-xs transition hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
               >
-                <Plus className="h-3.5 w-3.5" />
+                <Plus className="h-3 w-3" />
                 Add Funds
               </button>
             </div>
