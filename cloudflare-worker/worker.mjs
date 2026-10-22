@@ -4,17 +4,27 @@
 //   - VOICE_API_KEY
 //   - OPENAI_API_KEY (optional)
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, Idempotency-Key",
-};
+const ALLOWED_ORIGINS = [
+  "https://ikonikstation.github.io",
+  "http://localhost:5173",
+  "http://localhost:8787",
+  "http://localhost:3000",
+];
 
-function jsonResponse(data, status = 200) {
+function getCorsHeaders(origin) {
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    "Access-Control-Allow-Origin": allowed,
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Idempotency-Key, X-LingoFusion-Client-Token",
+  };
+}
+
+function jsonResponse(data, status = 200, origin = "") {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
-      ...CORS_HEADERS,
+      ...getCorsHeaders(origin),
       "Content-Type": "application/json",
     },
   });
@@ -36,8 +46,9 @@ function calculateGrossDeposit(netDepositUsd) {
 
 export default {
   async fetch(request, env) {
+    const requestOrigin = request.headers.get("origin") || "";
     if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: CORS_HEADERS });
+      return new Response(null, { status: 204, headers: getCorsHeaders(requestOrigin) });
     }
 
     const url = new URL(request.url);
@@ -46,7 +57,24 @@ export default {
     try {
       // 1. Health check
       if (request.method === "GET" && (path === "/" || path === "/api/health")) {
-        return jsonResponse({ status: "ok", gateway: "lingofusion-edge" });
+        return jsonResponse({ status: "ok", gateway: "lingofusion-edge" }, 200, requestOrigin);
+      }
+
+      // Security check for browser playground actions:
+      // Must come from your official domain or supply the valid client handshake header
+      const clientToken = request.headers.get("x-lingofusion-client-token");
+      const isAllowedOrigin = ALLOWED_ORIGINS.includes(requestOrigin);
+      const isDirectBotRequest = !isAllowedOrigin && clientToken !== "lf_play_secure_649f7";
+
+      if ((path.startsWith("/api/playground") || path.startsWith("/v1/audio/speech")) && isDirectBotRequest) {
+        return jsonResponse(
+          {
+            error: "forbidden",
+            message: "Direct automated requests to this edge endpoint are restricted.",
+          },
+          403,
+          requestOrigin,
+        );
       }
 
       // 2. Create Stripe Checkout Session (server-side only using env.STRIPE_SECRET_KEY)

@@ -1141,6 +1141,7 @@ async function runSpeechBrowser(state: BrowserState, options?: RequestInit) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-LingoFusion-Client-Token": "lf_play_secure_649f7",
       },
       body: JSON.stringify({
         input,
