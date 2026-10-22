@@ -408,6 +408,11 @@ export function PlaygroundPage({
 
   const handleRunTranslation = async () => {
     if (!userInput.trim() || isRunning) return;
+    if (liveBalance <= 0) {
+      setDepositStatusMessage(null);
+      setDepositModalOpen(true);
+      return;
+    }
     setErrorBanner(null);
     setIsRunning(true);
     setTranslatedOutput("");
@@ -494,7 +499,12 @@ export function PlaygroundPage({
         await loadModelsAndState();
       } catch (err) {
         const message = err instanceof Error ? err.message : "Request failed";
-        setErrorBanner(message);
+        if (message.toLowerCase().includes("insufficient") || message.toLowerCase().includes("deposit")) {
+          setDepositStatusMessage(null);
+          setDepositModalOpen(true);
+        } else {
+          setErrorBanner(message);
+        }
         setLatestRun(null);
       } finally {
         setIsRunning(false);
@@ -636,7 +646,12 @@ export function PlaygroundPage({
         await loadModelsAndState();
       } else {
         const message = err instanceof Error ? err.message : "Stream failed";
-        setErrorBanner(message);
+        if (message.toLowerCase().includes("insufficient") || message.toLowerCase().includes("deposit")) {
+          setDepositStatusMessage(null);
+          setDepositModalOpen(true);
+        } else {
+          setErrorBanner(message);
+        }
         setLatestRun(null);
       }
     } finally {
@@ -690,6 +705,11 @@ export function PlaygroundPage({
 
   const handleRunImageTranslation = async () => {
     if (imageRunning) return;
+    if (liveBalance <= 0) {
+      setDepositStatusMessage(null);
+      setDepositModalOpen(true);
+      return;
+    }
     const trimmedUrl = imageUrl.trim();
     if (!imageSource && !trimmedUrl) {
       setErrorBanner("Upload an image or paste an image URL to translate.");
@@ -751,7 +771,13 @@ export function PlaygroundPage({
       }
       await loadModelsAndState();
     } catch (err) {
-      setErrorBanner(err instanceof Error ? err.message : "Image translation failed");
+      const message = err instanceof Error ? err.message : "Image translation failed";
+      if (message.toLowerCase().includes("insufficient") || message.toLowerCase().includes("deposit")) {
+        setDepositStatusMessage(null);
+        setDepositModalOpen(true);
+      } else {
+        setErrorBanner(message);
+      }
       setImageRun(null);
     } finally {
       setImageRunning(false);
@@ -761,6 +787,11 @@ export function PlaygroundPage({
   const handleRunVoiceSynthesis = async () => {
     const textToSpeak = userInput.trim() || translatedOutput.trim();
     if (!textToSpeak || voiceRunning) return;
+    if (liveBalance <= 0) {
+      setDepositStatusMessage(null);
+      setDepositModalOpen(true);
+      return;
+    }
     setErrorBanner(null);
     setVoiceRunning(true);
     setVoiceAudioUrl(null);
@@ -832,7 +863,13 @@ export function PlaygroundPage({
 
       await loadModelsAndState();
     } catch (err) {
-      setErrorBanner(err instanceof Error ? err.message : "Voice synthesis failed");
+      const message = err instanceof Error ? err.message : "Voice synthesis failed";
+      if (message.toLowerCase().includes("insufficient") || message.toLowerCase().includes("deposit")) {
+        setDepositStatusMessage(null);
+        setDepositModalOpen(true);
+      } else {
+        setErrorBanner(message);
+      }
     } finally {
       setVoiceRunning(false);
     }
