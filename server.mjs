@@ -245,7 +245,7 @@ function deductUserBalanceAndLogUsage({
         thresholdUsd <= 999 &&
         Number.isFinite(targetBalanceUsd) &&
         targetBalanceUsd >= 5 &&
-        targetBalanceUsd <= 1000 &&
+        targetBalanceUsd <= 50000 &&
         targetBalanceUsd > thresholdUsd &&
         currentBalance <= thresholdUsd
       ) {
@@ -3005,10 +3005,10 @@ async function route(req, res) {
     if (req.method === "POST" && (url.pathname === "/api/create-checkout-session" || url.pathname === "/api/billing/deposit")) {
       const body = await parseBody(req);
       const depositAmount = Number(body.amount ?? body.depositAmount);
-      if (!Number.isFinite(depositAmount) || depositAmount < 5 || depositAmount > 1000) {
+      if (!Number.isFinite(depositAmount) || depositAmount < 1 || depositAmount > 50000) {
         return send(res, 400, {
           error: "deposit_amount_out_of_range",
-          message: "Top-up amount must be between $5.00 and $1,000.00 USD.",
+          message: "Top-up amount must be between $1.00 and $50,000.00 USD.",
         });
       }
 
@@ -3381,7 +3381,7 @@ async function route(req, res) {
         return send(res, 409, { error: "recharge_confirmation_required" });
       }
       const amount = Number(body.amount);
-      if (amount < 5 || amount > 1000) return send(res, 400, { error: "recharge_amount_out_of_range" });
+      if (amount < 1 || amount > 50000) return send(res, 400, { error: "recharge_amount_out_of_range" });
       const user = getDefaultUser();
       const { grossChargedUsd } = calculateGrossDepositCents(amount);
       creditUserDeposit({
@@ -3434,10 +3434,10 @@ async function route(req, res) {
           message: "'When my balance reaches' must be between $1.00 and $999.00 USD.",
         });
       }
-      if (!Number.isFinite(amount) || amount < 5 || amount > 1000) {
+      if (!Number.isFinite(amount) || amount < 1 || amount > 50000) {
         return send(res, 400, {
           error: "recharge_amount_out_of_range",
-          message: "'Bring my balance back up to' must be between $5.00 and $1,000.00 USD.",
+          message: "'Bring my balance back up to' must be between $1.00 and $50,000.00 USD.",
         });
       }
       if (threshold >= amount) {

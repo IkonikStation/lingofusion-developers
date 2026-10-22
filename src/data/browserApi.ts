@@ -526,8 +526,8 @@ function applyCharge(state: BrowserState, cost: number) {
     auto.threshold >= 1 &&
     auto.threshold <= 999 &&
     Number.isFinite(auto.amount) &&
-    auto.amount >= 5 &&
-    auto.amount <= 1000 &&
+    auto.amount >= 1 &&
+    auto.amount <= 50000 &&
     auto.amount > auto.threshold &&
     account.paidBalance <= auto.threshold
   ) {
@@ -1277,8 +1277,8 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
   } else if (method === "POST" && (path === "/api/create-checkout-session" || path === "/api/billing/deposit")) {
     const body = requestBody(options);
     const depositAmount = Number(body.amount ?? body.depositAmount ?? body.topUpAmount);
-    if (!Number.isFinite(depositAmount) || depositAmount < 5 || depositAmount > 1000) {
-      fail("Top-up amount must be between $5.00 and $1,000.00 USD.");
+    if (!Number.isFinite(depositAmount) || depositAmount < 1 || depositAmount > 50000) {
+      fail("Top-up amount must be between $1.00 and $50,000.00 USD.");
     }
     const currency = "usd";
     const { netDepositedUsd, grossAmountCents, grossChargedUsd, estimatedStripeFeeUsd } = calculateGrossDeposit(depositAmount);
@@ -1529,7 +1529,7 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
     const body = requestBody(options);
     const amount = Number(body.amount);
     if (body.confirm !== "ADD_LOCAL_TEST_BALANCE") fail("recharge_confirmation_required");
-    if (amount < 5 || amount > 1000) fail("recharge_amount_out_of_range");
+    if (amount < 1 || amount > 50000) fail("recharge_amount_out_of_range");
     state.dashboard.account.paidBalance = Number((state.dashboard.account.paidBalance + amount).toFixed(6));
     state.dashboard.account.totalPaidCreditPurchased = Number((state.dashboard.account.totalPaidCreditPurchased + amount).toFixed(6));
     if (state.dashboard.user) {
@@ -1569,8 +1569,8 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
     if (!Number.isFinite(threshold) || threshold < 1 || threshold > 999) {
       fail("'When my balance reaches' must be between $1.00 and $999.00 USD.");
     }
-    if (!Number.isFinite(amount) || amount < 5 || amount > 1000) {
-      fail("'Bring my balance back up to' must be between $5.00 and $1,000.00 USD.");
+    if (!Number.isFinite(amount) || amount < 1 || amount > 50000) {
+      fail("'Bring my balance back up to' must be between $1.00 and $50,000.00 USD.");
     }
     if (threshold >= amount) {
       fail("'Bring my balance back up to' must be greater than 'When my balance reaches'.");

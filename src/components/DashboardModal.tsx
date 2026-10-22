@@ -917,7 +917,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                 {tab === "Billing" && (
                   <Panel
                     title="Billing & Credits"
-                    description="Top up your prepaid credit balance via Stripe Checkout ($5 – $1,000 USD) and review your transaction ledger."
+                    description="Top up your prepaid credit balance via Stripe Checkout ($1 – $50,000 USD) and review your transaction ledger."
                   >
                     <MetricGrid
                       items={[
@@ -938,7 +938,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                                 Add Funds to Balance
                               </h4>
                               <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                                Choose a preset tier or enter a custom amount ($5 – $1,000 USD)
+                                Choose a preset tier or enter a custom amount ($1 – $50,000 USD)
                               </p>
                             </div>
                           </div>
@@ -962,10 +962,10 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
 
                           <div className="pt-1">
                             <NumberInput
-                              label="Custom amount ($5 – $1,000 USD)"
+                              label="Custom amount ($1 – $50,000 USD)"
                               value={rechargeAmount}
-                              min={5}
-                              max={1000}
+                              min={1}
+                              max={50000}
                               onChange={setRechargeAmount}
                             />
                           </div>
@@ -973,7 +973,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
 
                         <div className="flex flex-col justify-between bg-neutral-50/60 p-5 dark:bg-white/[0.02] sm:p-6">
                           {(() => {
-                            const breakdown = calculateGrossDeposit(Math.max(5, Math.min(1000, Number(rechargeAmount) || 5)));
+                            const breakdown = calculateGrossDeposit(Math.max(1, Math.min(50000, Number(rechargeAmount) || 1)));
                             return (
                               <>
                                 <div className="space-y-2.5 text-xs">
@@ -999,7 +999,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                                   <ActionButton
                                     onClick={addBalance}
                                     className="w-full"
-                                    disabled={busyAction === "recharge" || rechargeAmount < 5 || rechargeAmount > 1000}
+                                    disabled={busyAction === "recharge" || rechargeAmount < 1 || rechargeAmount > 50000}
                                   >
                                     <CreditCard className="h-4 w-4" />
                                     {busyAction === "recharge"
@@ -1133,7 +1133,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                         <option value="Enabled">{tc("Enabled")}</option>
                       </SelectInput>
                       <NumberInput label="When my balance reaches ($1 – $999)" value={autoRecharge.threshold} min={1} max={999} step={1} onChange={(value) => setAutoRecharge({ ...autoRecharge, threshold: value })} />
-                      <NumberInput label="Bring my balance back up to ($5 – $1,000)" value={autoRecharge.amount} min={5} max={1000} step={1} onChange={(value) => setAutoRecharge({ ...autoRecharge, amount: value })} />
+                      <NumberInput label="Bring my balance back up to ($1 – $50,000)" value={autoRecharge.amount} min={1} max={50000} step={1} onChange={(value) => setAutoRecharge({ ...autoRecharge, amount: value })} />
                       <NumberInput label="Monthly limit" value={autoRecharge.monthlyLimit} min={0} max={10000} onChange={(value) => setAutoRecharge({ ...autoRecharge, monthlyLimit: value })} />
                       <TextInput label="Payment method" value={autoRecharge.paymentMethod} onChange={(value) => setAutoRecharge({ ...autoRecharge, paymentMethod: value })} />
                       <SelectInput label="Notifications" value={autoRecharge.notify ? "Enabled" : "Disabled"} onChange={(value) => setAutoRecharge({ ...autoRecharge, notify: value === "Enabled" })}>

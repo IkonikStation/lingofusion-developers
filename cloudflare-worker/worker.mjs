@@ -86,10 +86,10 @@ export default {
 
         const body = await request.json().catch(() => ({}));
         const depositAmount = Number(body.amount ?? body.depositAmount ?? body.topUpAmount);
-        if (!Number.isFinite(depositAmount) || depositAmount < 5 || depositAmount > 1000) {
+        if (!Number.isFinite(depositAmount) || depositAmount < 1 || depositAmount > 50000) {
           return jsonResponse({
             error: "deposit_amount_out_of_range",
-            message: "Top-up amount must be between $5.00 and $1,000.00 USD.",
+            message: "Top-up amount must be between $1.00 and $50,000.00 USD.",
           }, 400);
         }
 

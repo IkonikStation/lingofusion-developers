@@ -882,8 +882,8 @@ export function PlaygroundPage({
     setErrorBanner(null);
     setDepositStatusMessage(null);
     setPaymentNotice(null);
-    if (!Number.isFinite(depositAmount) || depositAmount < 5 || depositAmount > 1000) {
-      setErrorBanner("Top-up amount must be between $5.00 and $1,000.00 USD.");
+    if (!Number.isFinite(depositAmount) || depositAmount < 1 || depositAmount > 50000) {
+      setErrorBanner("Top-up amount must be between $1.00 and $50,000.00 USD.");
       return;
     }
     setDepositBusy(true);
@@ -926,8 +926,8 @@ export function PlaygroundPage({
       setAutoTopUpError("'When my balance reaches' must be between $1.00 and $999.00 USD.");
       return;
     }
-    if (!Number.isFinite(autoTopUpTarget) || autoTopUpTarget < 5 || autoTopUpTarget > 1000) {
-      setAutoTopUpError("'Bring my balance back up to' must be between $5.00 and $1,000.00 USD.");
+    if (!Number.isFinite(autoTopUpTarget) || autoTopUpTarget < 1 || autoTopUpTarget > 50000) {
+      setAutoTopUpError("'Bring my balance back up to' must be between $1.00 and $50,000.00 USD.");
       return;
     }
     if (autoTopUpThreshold >= autoTopUpTarget) {
@@ -1063,7 +1063,7 @@ export function PlaygroundPage({
                   Add Funds
                 </h2>
                 <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                  Top up your LingoFusion credit balance ($5 – $1,000 USD)
+                  Top up your LingoFusion credit balance ($1 – $50,000 USD)
                 </p>
               </div>
             </div>
@@ -1118,7 +1118,7 @@ export function PlaygroundPage({
                     >
                       Custom Amount
                     </label>
-                    <span className="text-[11px] text-neutral-400">Min $5 • Max $1,000 USD</span>
+                    <span className="text-[11px] text-neutral-400">Min $1 • Max $50,000 USD</span>
                   </div>
                   <div className="relative flex items-center">
                     <span className="pointer-events-none absolute left-4 font-sans text-base font-medium text-neutral-400">
@@ -1127,15 +1127,15 @@ export function PlaygroundPage({
                     <input
                       id="deposit-amount-input"
                       type="number"
-                      min={5}
-                      max={1000}
+                      min={1}
+                      max={50000}
                       step={1}
                       aria-label="Custom top-up amount in USD"
                       data-testid="deposit-amount-input"
                       value={depositAmount || ""}
                       onChange={(e) => {
                         const val = Number(e.target.value);
-                        setDepositAmount(val > 1000 ? 1000 : val);
+                        setDepositAmount(val > 50000 ? 50000 : val);
                       }}
                       className="h-12 w-full rounded-xl border border-neutral-200 bg-white pl-8 pr-16 font-sans tabular-nums text-base font-semibold text-neutral-950 outline-none transition focus:border-neutral-950 dark:border-white/15 dark:bg-neutral-950 dark:text-white dark:focus:border-white"
                     />
@@ -1204,7 +1204,7 @@ export function PlaygroundPage({
 
                   <button
                     type="button"
-                    disabled={depositBusy || !Number.isFinite(depositAmount) || depositAmount < 5 || depositAmount > 1000}
+                    disabled={depositBusy || !Number.isFinite(depositAmount) || depositAmount < 1 || depositAmount > 50000}
                     data-testid="simulate-webhook-btn"
                     onClick={handleDepositCredit}
                     className="pressable inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-neutral-950 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
@@ -1337,7 +1337,7 @@ export function PlaygroundPage({
                   >
                     Bring my balance back up to:
                   </label>
-                  <span className="text-[11px] text-neutral-400">($5 to $1,000)</span>
+                  <span className="text-[11px] text-neutral-400">($1 to $50,000)</span>
                 </div>
                 <div className="relative flex items-center">
                   <span className="pointer-events-none absolute left-3.5 font-sans text-sm font-medium text-neutral-400">
@@ -1347,23 +1347,23 @@ export function PlaygroundPage({
                     id="auto-topup-target-input"
                     data-testid="auto-topup-target-input"
                     type="number"
-                    min={5}
-                    max={1000}
+                    min={1}
+                    max={50000}
                     step="1"
                     value={autoTopUpTarget}
                     onChange={(e) => {
                       const raw = e.target.value;
                       if (raw === "") {
-                        setAutoTopUpTarget(5);
+                        setAutoTopUpTarget(1);
                         return;
                       }
                       const val = Number(raw);
                       if (!Number.isFinite(val)) return;
-                      setAutoTopUpTarget(Math.min(1000, Math.max(5, val)));
+                      setAutoTopUpTarget(Math.min(50000, Math.max(1, val)));
                     }}
                     onBlur={() => {
                       setAutoTopUpTarget((prev) =>
-                        Math.min(1000, Math.max(5, Number(prev) || 5)),
+                        Math.min(50000, Math.max(1, Number(prev) || 1)),
                       );
                     }}
                     className="h-10 w-full rounded-xl border border-neutral-200 bg-white pl-7 pr-12 font-sans tabular-nums text-sm font-semibold text-neutral-950 outline-none transition focus:border-neutral-950 dark:border-white/15 dark:bg-neutral-950 dark:text-white dark:focus:border-white"
