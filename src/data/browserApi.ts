@@ -595,7 +595,7 @@ function decodeUpstreamGateway() {
 export const DEFAULT_EDGE_GATEWAY_URL = String(
   import.meta.env.VITE_LINGOFUSION_GATEWAY_URL ||
     import.meta.env.VITE_LINGOFUSION_API_URL ||
-    "https://sewing-services-receiving-por.trycloudflare.com",
+    "https://lingofusion-gateway.lingofusion-api.workers.dev",
 ).replace(/\/$/, "");
 
 function buildBrowserTranslationPrompt(fromLanguage: string, toLanguage: string, modelId: string, tone?: string) {
