@@ -1,0 +1,161 @@
+import type { ReactNode } from "react";
+
+type DisplayTextModel = {
+  model: string;
+  input: string;
+  output: string;
+  recommended?: boolean;
+};
+
+type DisplaySimpleModel = {
+  model: string;
+  price: string;
+};
+
+type DisplayImageModel = {
+  size: string;
+  input: string;
+  output: string;
+};
+
+type PricingCardHeader = {
+  headerAction?: ReactNode;
+  headerNote?: ReactNode;
+  tableClassName?: string;
+};
+
+type PricingCardProps = PricingCardHeader &
+  (
+    | {
+        title: string;
+        unit: string;
+        kind: "text";
+        rows: DisplayTextModel[];
+        labels: PricingLabels;
+      }
+    | {
+        title: string;
+        unit: string;
+        kind: "simple";
+        rows: DisplaySimpleModel[];
+        labels: PricingLabels;
+      }
+    | {
+        title: string;
+        unit: string;
+        kind: "image";
+        rows: DisplayImageModel[];
+        labels: PricingLabels;
+      }
+  );
+
+export type PricingLabels = {
+  model: string;
+  input: string;
+  output: string;
+  price: string;
+  imageSize: string;
+  recommended: string;
+};
+
+export function PricingCard(props: PricingCardProps) {
+  return (
+    <section className="scroll-mt-24 border-t border-neutral-200 pt-10 dark:border-neutral-800">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-xl font-normal text-neutral-900 dark:text-neutral-50">{props.title}</h2>
+          <p className="mt-1 text-xs text-neutral-500">{props.unit}</p>
+        </div>
+        {props.headerAction && <div className="shrink-0">{props.headerAction}</div>}
+      </div>
+
+      {props.headerNote && (
+        <div className="mb-4 text-xs leading-5 text-neutral-600 dark:text-neutral-400" aria-live="polite">
+          {props.headerNote}
+        </div>
+      )}
+
+      <div className={`overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800 ${props.tableClassName ?? ""}`}>
+        {props.kind === "text" && <TextTable rows={props.rows} labels={props.labels} />}
+        {props.kind === "simple" && <SimpleTable rows={props.rows} labels={props.labels} />}
+        {props.kind === "image" && <ImageTable rows={props.rows} labels={props.labels} />}
+      </div>
+    </section>
+  );
+}
+
+function TextTable({ rows, labels }: { rows: DisplayTextModel[]; labels: PricingLabels }) {
+  return (
+    <table className="w-full min-w-[500px] text-left text-xs">
+      <thead className="border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/50">
+        <tr>
+          <th className="px-5 py-3 font-medium text-neutral-600 dark:text-neutral-400">{labels.model}</th>
+          <th className="px-5 py-3 font-medium text-neutral-600 dark:text-neutral-400">{labels.input}</th>
+          <th className="px-5 py-3 font-medium text-neutral-600 dark:text-neutral-400">{labels.output}</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
+        {rows.map((row) => (
+          <tr key={row.model} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/30">
+            <td className="px-5 py-3.5">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-neutral-900 dark:text-neutral-100">{row.model}</span>
+                {row.recommended && (
+                  <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+                    {labels.recommended}
+                  </span>
+                )}
+              </div>
+            </td>
+            <td className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.input}</td>
+            <td className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.output}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function SimpleTable({ rows, labels }: { rows: DisplaySimpleModel[]; labels: PricingLabels }) {
+  return (
+    <table className="w-full min-w-[360px] text-left text-xs">
+      <thead className="border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/50">
+        <tr>
+          <th className="px-5 py-3 font-medium text-neutral-600 dark:text-neutral-400">{labels.model}</th>
+          <th className="px-5 py-3 font-medium text-neutral-600 dark:text-neutral-400">{labels.price}</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
+        {rows.map((row) => (
+          <tr key={row.model} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/30">
+            <td className="px-5 py-3.5 font-semibold text-neutral-900 dark:text-neutral-100">{row.model}</td>
+            <td className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.price}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function ImageTable({ rows, labels }: { rows: DisplayImageModel[]; labels: PricingLabels }) {
+  return (
+    <table className="w-full min-w-[500px] text-left text-xs">
+      <thead className="border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/50">
+        <tr>
+          <th className="px-5 py-3 font-medium text-neutral-600 dark:text-neutral-400">{labels.imageSize}</th>
+          <th className="px-5 py-3 font-medium text-neutral-600 dark:text-neutral-400">{labels.input}</th>
+          <th className="px-5 py-3 font-medium text-neutral-600 dark:text-neutral-400">{labels.output}</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
+        {rows.map((row) => (
+          <tr key={row.size} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/30">
+            <td className="px-5 py-3.5 font-semibold text-neutral-900 dark:text-neutral-100">{row.size}</td>
+            <td className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.input}</td>
+            <td className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.output}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}

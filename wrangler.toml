@@ -1,0 +1,6 @@
+name = "lingofusion-gateway"
+main = "cloudflare-worker/worker.mjs"
+compatibility_date = "2025-01-01"
+
+[vars]
+APP_URL = "https://ikonikstation.github.io/lingofusion-developers/playground"

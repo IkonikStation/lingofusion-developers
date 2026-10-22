@@ -1,0 +1,29 @@
+{
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "api": "node server.mjs",
+    "dev:all": "node scripts/dev-all.mjs",
+    "build": "tsc -b && vite build && node scripts/generate-spa-fallbacks.mjs",
+    "preview": "vite preview",
+    "test": "node scripts/test-platform.mjs"
+  },
+  "dependencies": {
+    "@lmstudio/sdk": "^1.5.0",
+    "@vitejs/plugin-react": "latest",
+    "highlight.js": "^11.11.1",
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "stripe": "^23.0.0",
+    "typescript": "latest",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "autoprefixer": "latest",
+    "postcss": "latest",
+    "tailwindcss": "^3.4.17"
+  }
+}
