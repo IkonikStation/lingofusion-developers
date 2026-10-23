@@ -2014,30 +2014,42 @@ export function PlaygroundPage({
                 </div>
 
                 {pendingGifts.length > 0 && (
-                  <div className="space-y-2 rounded-xl border border-purple-200 bg-purple-50/60 p-3.5 dark:border-purple-500/20 dark:bg-purple-500/[0.08]">
-                    <div className="flex items-center justify-between text-xs font-semibold text-purple-950 dark:text-purple-200">
-                      <span>Found {pendingGifts.length} gift{pendingGifts.length > 1 ? "s" : ""}!</span>
-                      <span className="font-bold">
-                        Total: +${formatUsd(pendingGifts.reduce((s, g) => s + (Number(g.amountUsd) || 0), 0))} USD
-                      </span>
-                    </div>
-                    <div className="max-h-40 divide-y divide-purple-200/60 overflow-y-auto text-xs dark:divide-purple-500/20">
-                      {pendingGifts.map((g, idx) => (
-                        <div key={idx} className="py-2 text-[11px]">
-                          <div className="flex items-center justify-between font-medium text-purple-900 dark:text-purple-300">
-                            <span>From: {g.senderName || "A friend"}</span>
-                            <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                              +${formatUsd(g.amountUsd)} USD
+                  <div className="space-y-3">
+                    {pendingGifts.map((g, idx) => (
+                      <div
+                        key={idx}
+                        className="overflow-hidden rounded-2xl border border-purple-200 bg-gradient-to-br from-purple-900 via-purple-950 to-neutral-950 p-4 text-white shadow-lg dark:border-purple-500/30"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 backdrop-blur-xs">
+                              <Gift className="h-4 w-4 text-purple-300" />
+                            </div>
+                            <span className="text-[11px] font-semibold uppercase tracking-wider text-purple-200">
+                              LingoFusion Gift
                             </span>
                           </div>
-                          {g.giftMessage && (
-                            <p className="mt-0.5 italic text-neutral-600 dark:text-neutral-400">
-                              "{g.giftMessage}"
-                            </p>
-                          )}
+                          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                            Ready to Claim
+                          </span>
                         </div>
-                      ))}
-                    </div>
+
+                        <div className="mt-3">
+                          <div className="font-sans text-2xl font-extrabold tracking-tight text-white">
+                            +${formatUsd(g.amountUsd)} USD
+                          </div>
+                          <p className="mt-1 text-[11px] text-purple-200/80">
+                            From: <span className="font-medium text-white">{g.senderName || "A friend"}</span>
+                          </p>
+                        </div>
+
+                        {g.giftMessage && (
+                          <div className="mt-3 rounded-xl bg-white/10 p-2.5 text-[11px] italic leading-relaxed text-purple-100 backdrop-blur-xs">
+                            "{g.giftMessage}"
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
 
