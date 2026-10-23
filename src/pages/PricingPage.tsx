@@ -146,7 +146,7 @@ export function PricingPage({
   const textPricingDescription = textPricingMode === "fast"
     ? "Fast mode is priced at 1.5× Default for supported models."
     : textPricingMode === "ultrafast"
-    ? "Ultrafast mode uses non-thinking processing for Pro and Ultra at 4× Default."
+    ? "Translate up to 6× faster without compromising quality, for 4× the standard price."
     : textPricingMode === "instant"
     ? "Real-time streaming processing with immediate results."
     : "Batch API offers 50% discount for asynchronous requests with 24-hour turnaround.";
