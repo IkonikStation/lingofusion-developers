@@ -2,6 +2,7 @@ import { ExternalLink, Menu, Moon, PlusCircle, Search, Sun, Wallet, X } from "lu
 import { useMemo, useState } from "react";
 import type { LanguageCode, TranslationKey } from "../data/i18n";
 import { languages } from "../data/i18n";
+import { formatUsd } from "../lib/utils";
 
 type HeaderProps = {
   activePage: string;
@@ -141,7 +142,7 @@ export function Header({
             <Wallet className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             <span className="hidden text-[11px] font-medium text-emerald-700/80 xl:inline dark:text-emerald-300/80">Balance:</span>
             <span className="font-sans tabular-nums tracking-tight" data-testid="header-balance-amount">
-              ${Number(balanceUsd).toFixed(2)}
+              ${formatUsd(Number(balanceUsd) || 0)}
             </span>
             <PlusCircle className="h-3 w-3 text-emerald-600/80 dark:text-emerald-400/80" />
           </button>

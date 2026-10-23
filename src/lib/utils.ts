@@ -75,3 +75,12 @@ export function humanizePlanId(planId: string) {
   };
   return names[planId] ?? planId;
 }
+
+export function formatUsd(amount: number): string {
+  if (!Number.isFinite(amount)) return "0.00";
+  return amount.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+

@@ -44,7 +44,7 @@ import {
 import type { ModelPricingRecord } from "../data/browserApi";
 import { playgroundLanguages } from "../data/playgroundLanguages";
 import { imageModels, textModelPresentations, ttsModels } from "../data/pricing";
-import { pageQuery } from "../lib/utils";
+import { formatUsd, pageQuery } from "../lib/utils";
 
 type TranslationRun = {
   id: string;
@@ -323,7 +323,7 @@ export function PlaygroundPage({
               if (verified.verified && typeof verified.net_deposited_usd === "number") {
                 setPaymentNotice({
                   type: "success",
-                  message: `Payment received! +$${verified.net_deposited_usd.toFixed(2)} USD added to your credit balance.`,
+                  message: `Payment received! +$${formatUsd(verified.net_deposited_usd)} USD added to your credit balance.`,
                 });
               }
             } catch {
@@ -953,7 +953,7 @@ export function PlaygroundPage({
       setAutoTopUpEnabled(enabledVal);
       setAutoTopUpMessage(
         enabledVal
-          ? `Auto top-up enabled: when balance reaches $${autoTopUpThreshold.toFixed(2)}, bring it back up to $${autoTopUpTarget.toFixed(2)} USD.`
+          ? `Auto top-up enabled: when balance reaches $${formatUsd(autoTopUpThreshold)}, bring it back up to $${formatUsd(autoTopUpTarget)} USD.`
           : "Auto top-up disabled.",
       );
     } catch (err) {
@@ -1002,7 +1002,7 @@ export function PlaygroundPage({
               data-testid="live-balance-value"
               className="font-sans tabular-nums text-sm font-semibold text-neutral-950 dark:text-white"
             >
-              ${liveBalance.toFixed(2)}
+              ${formatUsd(liveBalance)}
             </span>
           </div>
 
@@ -1166,10 +1166,10 @@ export function PlaygroundPage({
                 <div className="flex items-center justify-between rounded-xl border border-neutral-200/70 bg-neutral-50/50 px-4 py-3 text-xs dark:border-white/10 dark:bg-white/[0.02]">
                   <span className="text-neutral-500 dark:text-neutral-400">Balance after top-up</span>
                   <div className="flex items-center gap-2 font-sans tabular-nums">
-                    <span className="text-neutral-400">${liveBalance.toFixed(2)}</span>
+                    <span className="text-neutral-400">${formatUsd(liveBalance)}</span>
                     <span className="text-neutral-400">→</span>
                     <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                      ${(liveBalance + depositBreakdown.netDepositedUsd).toFixed(2)}
+                      ${formatUsd(liveBalance + depositBreakdown.netDepositedUsd)}
                     </span>
                   </div>
                 </div>
@@ -1189,13 +1189,13 @@ export function PlaygroundPage({
                     <div className="flex items-center justify-between text-neutral-600 dark:text-neutral-300">
                       <span>Net credit added</span>
                       <span className="font-sans tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
-                        +${depositBreakdown.netDepositedUsd.toFixed(2)} USD
+                        +${formatUsd(depositBreakdown.netDepositedUsd)} USD
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-neutral-500 dark:text-neutral-400">
                       <span>Processing fee</span>
                       <span className="font-sans tabular-nums">
-                        ${depositBreakdown.estimatedStripeFeeUsd.toFixed(2)} USD
+                        ${formatUsd(depositBreakdown.estimatedStripeFeeUsd)} USD
                       </span>
                     </div>
                     <div className="border-t border-neutral-200/80 pt-3 dark:border-white/10">
@@ -1204,7 +1204,7 @@ export function PlaygroundPage({
                           Total due
                         </span>
                         <span className="font-sans tabular-nums text-lg font-bold tracking-tight text-neutral-950 dark:text-white">
-                          ${depositBreakdown.grossChargedUsd.toFixed(2)}{" "}
+                          ${formatUsd(depositBreakdown.grossChargedUsd)}{" "}
                           <span className="text-xs font-medium text-neutral-500">USD</span>
                         </span>
                       </div>

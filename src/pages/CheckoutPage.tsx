@@ -1,7 +1,7 @@
 import { ArrowLeft, CheckCircle2, CreditCard, ShieldCheck, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { browserApi, calculateGrossDeposit, getApiBaseUrl, shouldUseBrowserApi } from "../data/browserApi";
-import { humanizePlanId, pageQuery, withBasePath } from "../lib/utils";
+import { formatUsd, humanizePlanId, pageQuery, withBasePath } from "../lib/utils";
 
 export function CheckoutPage({
   onNavigate,
@@ -106,7 +106,7 @@ export function CheckoutPage({
                 </div>
 
                 <h1 className="mt-4 text-2xl font-semibold tracking-tight text-neutral-950 dark:text-white sm:text-3xl">
-                  Add ${netUsd.toFixed(2)} {currencyParam} to your balance
+                  Add ${formatUsd(netUsd)} {currencyParam} to your balance
                 </h1>
                 <p className="mt-2.5 text-sm leading-6 text-neutral-500 dark:text-neutral-400">
                   Credits are available immediately after payment and can be used across LingoFusion Text, Image, and Voice models.
@@ -115,7 +115,7 @@ export function CheckoutPage({
                 <ul className="mt-6 space-y-2.5 text-xs text-neutral-600 dark:text-neutral-300">
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                    <span>Full ${netUsd.toFixed(2)} {currencyParam} net credit deposited</span>
+                    <span>Full ${formatUsd(netUsd)} {currencyParam} net credit deposited</span>
                   </li>
                   <li className="flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
@@ -151,7 +151,7 @@ export function CheckoutPage({
                   <div className="flex items-center justify-between">
                     <dt className="text-neutral-500 dark:text-neutral-400">Credits added to balance</dt>
                     <dd className="font-sans tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
-                      +${netUsd.toFixed(2)} {currencyParam}
+                      +${formatUsd(netUsd)} {currencyParam}
                     </dd>
                   </div>
                   <div className="flex items-center justify-between">
@@ -159,13 +159,13 @@ export function CheckoutPage({
                       Processing fee
                     </dt>
                     <dd className="font-sans tabular-nums text-neutral-700 dark:text-neutral-300">
-                      ${feeUsd.toFixed(2)} {currencyParam}
+                      ${formatUsd(feeUsd)} {currencyParam}
                     </dd>
                   </div>
                   <div className="flex items-baseline justify-between border-t border-neutral-200/80 pt-3 text-sm font-semibold text-neutral-950 dark:border-white/10 dark:text-white">
                     <dt>Total due</dt>
                     <dd className="font-sans tabular-nums text-lg font-bold">
-                      ${grossUsd.toFixed(2)}{" "}
+                      ${formatUsd(grossUsd)}{" "}
                       <span className="text-xs font-medium text-neutral-500">{currencyParam}</span>
                     </dd>
                   </div>
@@ -181,7 +181,7 @@ export function CheckoutPage({
                       onClick={completeStripeCheckout}
                       className="pressable inline-flex h-11 w-full items-center justify-center rounded-xl bg-neutral-950 px-6 text-sm font-semibold text-white shadow-sm transition hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
                     >
-                      {busy ? "Processing..." : `Pay $${grossUsd.toFixed(2)} ${currencyParam}`}
+                      {busy ? "Processing..." : `Pay $${formatUsd(grossUsd)} ${currencyParam}`}
                     </button>
                     <button
                       type="button"

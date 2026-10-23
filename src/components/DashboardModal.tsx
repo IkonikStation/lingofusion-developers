@@ -20,6 +20,7 @@ import { browserApi, calculateGrossDeposit, getApiBaseUrl, shouldUseBrowserApi }
 import { sdkExamples } from "../data/sdkExamples";
 import type { SdkLanguage } from "../data/sdkExamples";
 import { highlightCode } from "../lib/highlightCode";
+import { formatUsd } from "../lib/utils";
 
 type DashboardModalProps = {
   tc: (text: string) => string;
@@ -980,17 +981,17 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                                   <div className="flex items-center justify-between text-neutral-600 dark:text-neutral-300">
                                     <span>Credits added</span>
                                     <span className="font-sans tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
-                                      +${breakdown.netDepositedUsd.toFixed(2)} USD
+                                      +${formatUsd(breakdown.netDepositedUsd)} USD
                                     </span>
                                   </div>
                                   <div className="flex items-center justify-between text-neutral-500 dark:text-neutral-400">
                                     <span>Processing fee</span>
-                                    <span className="font-sans tabular-nums">${breakdown.estimatedStripeFeeUsd.toFixed(2)} USD</span>
+                                    <span className="font-sans tabular-nums">${formatUsd(breakdown.estimatedStripeFeeUsd)} USD</span>
                                   </div>
                                   <div className="flex items-baseline justify-between border-t border-neutral-200 pt-2.5 text-sm font-semibold text-neutral-950 dark:border-white/10 dark:text-white">
                                     <span>Total due</span>
                                     <span className="font-sans tabular-nums text-base font-bold">
-                                      ${breakdown.grossChargedUsd.toFixed(2)} USD
+                                      ${formatUsd(breakdown.grossChargedUsd)} USD
                                     </span>
                                   </div>
                                 </div>
@@ -1004,7 +1005,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                                     <CreditCard className="h-4 w-4" />
                                     {busyAction === "recharge"
                                       ? tc("Redirecting to Stripe...")
-                                      : `Checkout +$${breakdown.netDepositedUsd.toFixed(2)} USD`}
+                                      : `Checkout +$${formatUsd(breakdown.netDepositedUsd)} USD`}
                                   </ActionButton>
                                   <div className="flex items-center justify-between pt-1">
                                     <span className="inline-flex items-center gap-1 text-[11px] text-neutral-400">
