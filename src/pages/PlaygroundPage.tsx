@@ -2034,7 +2034,7 @@ export function PlaygroundPage({
           <div className="flex flex-col bg-neutral-50/40 p-4 dark:bg-white/[0.01] sm:p-5">
             <div className="mb-2.5 flex items-center justify-between">
               <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">
-                {toLanguage} ({activeModel.model_id})
+                Text output
               </span>
 
               {translatedOutput && (
@@ -2215,7 +2215,7 @@ export function PlaygroundPage({
               <div className="flex flex-col bg-neutral-50/40 p-4 dark:bg-white/[0.01] sm:p-5">
                 <div className="mb-2.5 flex items-center justify-between">
                   <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">
-                    {toLanguage} ({activeImageModel.label})
+                    Image output
                   </span>
 
                   {imageOutput && (
@@ -2312,7 +2312,7 @@ export function PlaygroundPage({
               <div className="flex flex-col bg-neutral-50/40 p-4 dark:bg-white/[0.01] sm:p-5">
                 <div className="mb-2.5 flex items-center justify-between">
                   <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">
-                    Music Track ({selectedMusicModel} · ElevenLabs Music v2)
+                    Music output
                   </span>
                   {musicAudioUrl && (
                     <a
@@ -2337,7 +2337,7 @@ export function PlaygroundPage({
                           <div className="flex items-center gap-2">
                             <Music className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                             <span className="text-xs font-semibold text-neutral-900 dark:text-white">
-                              {selectedMusicModel}
+                              Music audio
                             </span>
                           </div>
                           {musicRun && (
@@ -2392,7 +2392,7 @@ export function PlaygroundPage({
                     ) : (
                       <span className="text-sm text-neutral-400 dark:text-neutral-500">
                         {musicRunning
-                          ? "Composing music with ElevenLabs Music v2..."
+                          ? "Generating music..."
                           : "Generated music will appear here."}
                       </span>
                     )}
@@ -2462,12 +2462,12 @@ export function PlaygroundPage({
               <div className="flex flex-col bg-neutral-50/40 p-4 dark:bg-white/[0.01] sm:p-5">
                 <div className="mb-2.5 flex items-center justify-between">
                   <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">
-                    Audio Output ({selectedVoiceModel})
+                    Voice output
                   </span>
                   {voiceAudioUrl && (
                     <a
                       href={voiceAudioUrl}
-                      download={`${selectedVoiceModel.toLowerCase().replace(/\s+/g, "-")}.mp3`}
+                      download="lingofusion-voice.mp3"
                       className="inline-flex items-center gap-1 text-[11px] text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
                     >
                       <Download className="h-3 w-3" />
@@ -2487,7 +2487,7 @@ export function PlaygroundPage({
                           <div className="flex items-center gap-2">
                             <Volume2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                             <span className="text-xs font-semibold text-neutral-900 dark:text-white">
-                              {selectedVoiceModel}
+                              Voice audio
                             </span>
                           </div>
                           {voiceRun && (
