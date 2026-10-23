@@ -146,8 +146,8 @@ export const defaultBrowserModelPricing: ModelPricingRecord[] = [
   { id: "LingoFusion Nano", model_id: "LingoFusion Nano", object: "model", provider: "lingofusion", upstream_model_name: "gpt-5-nano", input_per_million: 0.05, output_per_million: 0.5, is_active: true },
   { id: "LingoFusion Lite", model_id: "LingoFusion Lite", object: "model", provider: "lingofusion", upstream_model_name: "gpt-5.6-luna", input_per_million: 0.5, output_per_million: 2.0, is_active: true },
   { id: "LingoFusion", model_id: "LingoFusion", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 1.0, output_per_million: 5.0, is_active: true },
-  { id: "LingoFusion Pro", model_id: "LingoFusion Pro", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-sol", input_per_million: 3.5, output_per_million: 18.0, is_active: true },
-  { id: "ExplainFusion", model_id: "ExplainFusion", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 3.0, output_per_million: 2.0, is_active: true },
+  { id: "LingoFusion Pro", model_id: "LingoFusion Pro", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-sol", input_per_million: 3.5, output_per_million: 20.0, is_active: true },
+  { id: "ExplainFusion", model_id: "ExplainFusion", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 2.0, output_per_million: 0.5, is_active: true },
   { id: "LingoFusion Ultra", model_id: "LingoFusion Ultra", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-astra", input_per_million: 20.0, output_per_million: 120.0, is_active: true },
 ];
 
@@ -388,6 +388,11 @@ function loadState(targetUserId?: string): BrowserState {
     }
     const parsed = JSON.parse(stored) as BrowserState;
     parsed.dashboard.modelPricing = defaultBrowserModelPricing;
+    parsed.dashboard.models = textModelsByPricingMode.instant.map((model) => ({
+      model: model.model,
+      input: model.inputUsd,
+      output: model.outputUsd,
+    }));
     if (!parsed.dashboard.usageLedger) parsed.dashboard.usageLedger = [];
     if (!parsed.dashboard.depositLedger) parsed.dashboard.depositLedger = [];
     if (!parsed.dashboard.user || parsed.dashboard.user.id !== userId) {

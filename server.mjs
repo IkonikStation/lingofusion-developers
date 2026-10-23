@@ -47,8 +47,8 @@ const textModels = [
   { model: "LingoFusion Nano", input: 0.05, output: 0.50 },
   { model: "LingoFusion Lite", input: 0.50, output: 2.00 },
   { model: "LingoFusion", input: 1.00, output: 5.00 },
-  { model: "LingoFusion Pro", input: 3.50, output: 18.00 },
-  { model: "ExplainFusion", input: 3.00, output: 2.00 },
+  { model: "LingoFusion Pro", input: 3.50, output: 20.00 },
+  { model: "ExplainFusion", input: 2.00, output: 0.50 },
   { model: "LingoFusion Ultra", input: 20.00, output: 120.00 },
 ];
 
@@ -56,8 +56,8 @@ const defaultPricingCatalog = [
   { model_id: "LingoFusion Nano", provider: "lingofusion", upstream_model_name: "gpt-5-nano", input_per_million: 0.0500, output_per_million: 0.5000, is_active: 1 },
   { model_id: "LingoFusion Lite", provider: "lingofusion", upstream_model_name: "gpt-5.6-luna", input_per_million: 0.5000, output_per_million: 2.0000, is_active: 1 },
   { model_id: "LingoFusion", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 1.0000, output_per_million: 5.0000, is_active: 1 },
-  { model_id: "LingoFusion Pro", provider: "lingofusion", upstream_model_name: "gpt-6-sol", input_per_million: 3.5000, output_per_million: 18.0000, is_active: 1 },
-  { model_id: "ExplainFusion", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 3.0000, output_per_million: 2.0000, is_active: 1 },
+  { model_id: "LingoFusion Pro", provider: "lingofusion", upstream_model_name: "gpt-6-sol", input_per_million: 3.5000, output_per_million: 20.0000, is_active: 1 },
+  { model_id: "ExplainFusion", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 2.0000, output_per_million: 0.5000, is_active: 1 },
   { model_id: "LingoFusion Ultra", provider: "lingofusion", upstream_model_name: "gpt-6-astra", input_per_million: 20.0000, output_per_million: 120.0000, is_active: 1 },
   { model_id: "LingoFusion Voice", provider: "lingofusion", upstream_model_name: "lf_voice_v4", input_per_million: 150.0000, output_per_million: 150.0000, is_active: 1 },
   { model_id: "LingoFusion Voice Flash", provider: "lingofusion", upstream_model_name: "lf_voice_v4_turbo", input_per_million: 80.0000, output_per_million: 80.0000, is_active: 1 },
