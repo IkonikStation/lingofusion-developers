@@ -165,7 +165,7 @@ export const dubbingModels: SimpleModel[] = [
 ];
 
 export const musicModels: SimpleModel[] = [
-  { model: "LingoFusion Music", priceUsd: 0.10, pricingUnit: "per_generation" },
+  { model: "LingoFusion Music", priceUsd: 0.50, pricingUnit: "per_minute" },
 ];
 
 // In-image translation is served as LingoFusion Image Translate (upstream

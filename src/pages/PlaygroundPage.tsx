@@ -11,6 +11,7 @@ import {
   Image as ImageIcon,
   Link2,
   Loader2,
+  Music,
   Play,
   Plus,
   ShieldCheck,
@@ -43,7 +44,7 @@ import {
 } from "../data/browserApi";
 import type { ModelPricingRecord } from "../data/browserApi";
 import { playgroundLanguages } from "../data/playgroundLanguages";
-import { imageModels, textModelPresentations, ttsModels } from "../data/pricing";
+import { imageModels, musicModels, textModelPresentations, ttsModels } from "../data/pricing";
 import { getCurrentUser, subscribeAuth } from "../data/auth";
 import { formatUsd, pageQuery } from "../lib/utils";
 
@@ -185,12 +186,26 @@ export function PlaygroundPage({
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Playground modality: text translation vs in-image translation vs voice synthesis
-  const [mode, setMode] = useState<"text" | "image" | "voice">(() => {
+  // Playground modality: text translation vs in-image translation vs voice synthesis vs music generation
+  const [mode, setMode] = useState<"text" | "image" | "voice" | "music">(() => {
     const q = pageQuery().get("mode");
+    if (q === "music") return "music";
     if (q === "voice" || q === "tts") return "voice";
     return q === "image" ? "image" : "text";
   });
+  const [selectedMusicModel, setSelectedMusicModel] = useState<string>("LingoFusion Music");
+  const [musicDurationSeconds, setMusicDurationSeconds] = useState<number>(30);
+  const [musicInstrumental, setMusicInstrumental] = useState<boolean>(false);
+  const [musicAudioUrl, setMusicAudioUrl] = useState<string | null>(null);
+  const [musicRunning, setMusicRunning] = useState<boolean>(false);
+  const [musicPlaying, setMusicPlaying] = useState<boolean>(false);
+  const musicAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [musicRun, setMusicRun] = useState<{
+    id: string;
+    model: string;
+    durationSeconds: number;
+    costUsd: number;
+  } | null>(null);
   const [selectedVoiceModel, setSelectedVoiceModel] = useState<string>(() => {
     const requested = pageQuery().get("model");
     const match = ttsModels.find(
@@ -410,6 +425,17 @@ export function PlaygroundPage({
         label: model.model,
         icon: <Volume2 className="h-3.5 w-3.5 shrink-0 text-neutral-400" />,
         hint: `$${model.priceUsd?.toFixed(2)}/1K chars`,
+      })),
+    [],
+  );
+
+  const musicModelItems = useMemo(
+    () =>
+      musicModels.map((model) => ({
+        id: model.model,
+        label: model.model,
+        icon: <Music className="h-3.5 w-3.5 shrink-0 text-neutral-400" />,
+        hint: `$${model.priceUsd?.toFixed(2)}/min`,
       })),
     [],
   );
@@ -873,6 +899,94 @@ export function PlaygroundPage({
       }
     } finally {
       setVoiceRunning(false);
+    }
+  };
+
+  const handleRunMusicGeneration = async () => {
+    const prompt = userInput.trim() || translatedOutput.trim();
+    if (!prompt || musicRunning) return;
+    if (liveBalance <= 0) {
+      setInsufficientModalOpen(true);
+      return;
+    }
+    setErrorBanner(null);
+    setMusicRunning(true);
+    setMusicAudioUrl(null);
+    setMusicRun(null);
+
+    const runId = `music-${Date.now()}`;
+    const payload = {
+      model: selectedMusicModel,
+      prompt,
+      duration_seconds: musicDurationSeconds,
+      force_instrumental: musicInstrumental,
+    };
+
+    try {
+      if (shouldUseBrowserApi()) {
+        const response = await callApi<{
+          id: string;
+          model: string;
+          status: string;
+          output: {
+            prompt: string;
+            duration_seconds: number;
+            audio_url: string;
+          };
+          usage: {
+            audio_seconds: number;
+            audio_minutes: number;
+            cost_usd: number;
+          };
+        }>("/api/playground/music", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+
+        setMusicAudioUrl(response.output.audio_url);
+        setMusicRun({
+          id: response.id || runId,
+          model: response.model || selectedMusicModel,
+          durationSeconds: response.output.duration_seconds || musicDurationSeconds,
+          costUsd: response.usage?.cost_usd || (0.50 * (musicDurationSeconds / 60)),
+        });
+      } else {
+        const baseUrl = getApiBaseUrl();
+        const res = await fetch(`${baseUrl}/api/playground/music`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          const msg =
+            typeof errData?.error === "object" && errData?.error?.message
+              ? errData.error.message
+              : errData?.message || `HTTP ${res.status}`;
+          throw new Error(msg);
+        }
+
+        const data = await res.json();
+        setMusicAudioUrl(data.audio_url);
+        setMusicRun({
+          id: data.id || runId,
+          model: data.model || selectedMusicModel,
+          durationSeconds: data.duration_seconds || musicDurationSeconds,
+          costUsd: 0.50 * ((data.duration_seconds || musicDurationSeconds) / 60),
+        });
+      }
+
+      await loadModelsAndState();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Music generation failed";
+      if (message.toLowerCase().includes("insufficient") || message.toLowerCase().includes("deposit")) {
+        setInsufficientModalOpen(true);
+      } else {
+        setErrorBanner(message);
+      }
+    } finally {
+      setMusicRunning(false);
     }
   };
 
@@ -1576,7 +1690,7 @@ export function PlaygroundPage({
 
               {/* Modality + model selector + live pricing */}
               <div className="flex flex-wrap items-center gap-2.5">
-                {/* Modality Toggle: Text vs Image vs Voice */}
+                {/* Modality Toggle: Text vs Image vs Voice vs Music */}
                 <div
                   role="group"
                   aria-label="Playground mode"
@@ -1586,6 +1700,7 @@ export function PlaygroundPage({
                     ["text", "Text"],
                     ["image", "Image"],
                     ["voice", "Voice"],
+                    ["music", "Music"],
                   ] as const).map(([value, label]) => (
                     <button
                       key={value}
@@ -1601,6 +1716,7 @@ export function PlaygroundPage({
                     >
                       {value === "image" && <ImageIcon className="h-3.5 w-3.5" />}
                       {value === "voice" && <Volume2 className="h-3.5 w-3.5" />}
+                      {value === "music" && <Music className="h-3.5 w-3.5" />}
                       {label}
                     </button>
                   ))}
@@ -1610,46 +1726,58 @@ export function PlaygroundPage({
                 <Picker
                   className="w-full sm:w-56"
                   label={
-                    mode === "voice"
-                      ? "Select voice model"
-                      : mode === "image"
-                        ? "Select image model"
-                        : "Select model"
+                    mode === "music"
+                      ? "Select music model"
+                      : mode === "voice"
+                        ? "Select voice model"
+                        : mode === "image"
+                          ? "Select image model"
+                          : "Select model"
                   }
                   testId={
-                    mode === "voice"
-                      ? "playground-voice-model-select"
-                      : mode === "image"
-                        ? "playground-image-model-select"
-                        : "playground-model-select"
+                    mode === "music"
+                      ? "playground-music-model-select"
+                      : mode === "voice"
+                        ? "playground-voice-model-select"
+                        : mode === "image"
+                          ? "playground-image-model-select"
+                          : "playground-model-select"
                   }
                   searchPlaceholder={
-                    mode === "voice"
-                      ? "Search voice models…"
-                      : mode === "image"
-                        ? "Search image models…"
-                        : "Search models…"
+                    mode === "music"
+                      ? "Search music models…"
+                      : mode === "voice"
+                        ? "Search voice models…"
+                        : mode === "image"
+                          ? "Search image models…"
+                          : "Search models…"
                   }
                   items={
-                    mode === "voice"
-                      ? voiceModelItems
-                      : mode === "image"
-                        ? imageModelItems
-                        : modelItems
+                    mode === "music"
+                      ? musicModelItems
+                      : mode === "voice"
+                        ? voiceModelItems
+                        : mode === "image"
+                          ? imageModelItems
+                          : modelItems
                   }
                   value={
-                    mode === "voice"
-                      ? selectedVoiceModel
-                      : mode === "image"
-                        ? selectedImageModel
-                        : selectedModelId
+                    mode === "music"
+                      ? selectedMusicModel
+                      : mode === "voice"
+                        ? selectedVoiceModel
+                        : mode === "image"
+                          ? selectedImageModel
+                          : selectedModelId
                   }
                   onChange={
-                    mode === "voice"
-                      ? setSelectedVoiceModel
-                      : mode === "image"
-                        ? setSelectedImageModel
-                        : setSelectedModelId
+                    mode === "music"
+                      ? setSelectedMusicModel
+                      : mode === "voice"
+                        ? setSelectedVoiceModel
+                        : mode === "image"
+                          ? setSelectedImageModel
+                          : setSelectedModelId
                   }
                   align="left"
                 />
@@ -1691,6 +1819,37 @@ export function PlaygroundPage({
 
                     <span className="hidden font-sans tabular-nums text-[11px] text-neutral-500 md:inline dark:text-neutral-400">
                       ${selectedVoiceModel.toLowerCase().includes("flash") ? "0.08" : "0.15"} / 1K chars
+                    </span>
+                  </>
+                )}
+                {mode === "music" && (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-neutral-500 dark:text-neutral-400">Duration:</label>
+                      <select
+                        value={musicDurationSeconds}
+                        onChange={(e) => setMusicDurationSeconds(Number(e.target.value))}
+                        className="h-8 rounded-lg border border-neutral-200 bg-white px-2 text-xs font-semibold text-neutral-900 outline-none dark:border-white/15 dark:bg-neutral-950 dark:text-white"
+                      >
+                        <option value={15}>15 sec ($0.125)</option>
+                        <option value={30}>30 sec ($0.25)</option>
+                        <option value={60}>60 sec ($0.50)</option>
+                        <option value={120}>2 min ($1.00)</option>
+                      </select>
+                    </div>
+
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
+                      <input
+                        type="checkbox"
+                        checked={musicInstrumental}
+                        onChange={(e) => setMusicInstrumental(e.target.checked)}
+                        className="rounded border-neutral-300 text-neutral-950 focus:ring-0 dark:border-white/15"
+                      />
+                      <span>Instrumental</span>
+                    </label>
+
+                    <span className="hidden font-sans tabular-nums text-[11px] text-neutral-500 md:inline dark:text-neutral-400">
+                      $0.50 / min
                     </span>
                   </>
                 )}
@@ -1752,7 +1911,22 @@ export function PlaygroundPage({
                 </Popover>
               )}
 
-              {mode === "voice" ? (
+              {mode === "music" ? (
+                <button
+                  type="button"
+                  disabled={musicRunning || (!userInput.trim() && !translatedOutput.trim())}
+                  onClick={handleRunMusicGeneration}
+                  data-testid="playground-music-run-btn"
+                  className="pressable inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-neutral-950 px-5 text-xs font-semibold text-white shadow-xs transition hover:bg-neutral-800 disabled:opacity-50 sm:flex-none dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+                >
+                  {musicRunning ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Music className="h-3 w-3" />
+                  )}
+                  {musicRunning ? "Generating music..." : "Generate music"}
+                </button>
+              ) : mode === "voice" ? (
                 <button
                   type="button"
                   disabled={voiceRunning || (!userInput.trim() && !translatedOutput.trim())}
@@ -2083,6 +2257,153 @@ export function PlaygroundPage({
                         <Activity className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
                         Tokens: {imageRun.promptTokens} in / {imageRun.completionTokens} out • Cost: $
                         {formatCostBadge(imageRun.costUsd)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : mode === "music" ? (
+            /* Music Generation Layout */
+            <>
+              {/* Left Pane: Prompt Input */}
+              <div className="flex flex-col border-b border-neutral-200/70 p-4 dark:border-white/10 sm:p-5 lg:border-r lg:border-b-0">
+                <div className="mb-2.5 flex items-center justify-between">
+                  <label
+                    htmlFor="playground-music-input"
+                    className="text-xs font-semibold text-neutral-600 dark:text-neutral-300"
+                  >
+                    Music Prompt & Style
+                  </label>
+                  {userInput && (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserInput("");
+                          setMusicAudioUrl(null);
+                          setMusicRun(null);
+                        }}
+                        className="inline-flex items-center gap-1 text-[11px] text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        Clear
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-1 flex-col rounded-xl border border-neutral-200 bg-white p-3.5 transition focus-within:border-neutral-400 dark:border-white/10 dark:bg-neutral-950 dark:focus-within:border-white/30">
+                  <LiveMarkdownEditor
+                    id="playground-music-input"
+                    data-testid="playground-music-input"
+                    value={userInput}
+                    onChange={setUserInput}
+                    onSubmit={handleRunMusicGeneration}
+                    placeholder="Describe the track: 'Upbeat summer indie pop song with catchy vocal melodies, driving acoustic drums and bright synths'..."
+                    className="w-full flex-1 text-base leading-7 text-neutral-950 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Right Pane: Audio Player & Result */}
+              <div className="flex flex-col bg-neutral-50/40 p-4 dark:bg-white/[0.01] sm:p-5">
+                <div className="mb-2.5 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">
+                    Music Track ({selectedMusicModel} · ElevenLabs Music v2)
+                  </span>
+                  {musicAudioUrl && (
+                    <a
+                      href={musicAudioUrl}
+                      download={`lingofusion-music-${Date.now()}.mp3`}
+                      className="inline-flex items-center gap-1 text-[11px] text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
+                    >
+                      <Download className="h-3 w-3" />
+                      Download audio
+                    </a>
+                  )}
+                </div>
+
+                <div
+                  data-testid="playground-music-output"
+                  className="flex min-h-[14rem] flex-1 flex-col justify-between"
+                >
+                  <div className="flex flex-1 flex-col items-center justify-center gap-4 py-8">
+                    {musicAudioUrl ? (
+                      <div className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-5 shadow-xs dark:border-white/10 dark:bg-neutral-900">
+                        <div className="mb-4 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Music className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                            <span className="text-xs font-semibold text-neutral-900 dark:text-white">
+                              {selectedMusicModel}
+                            </span>
+                          </div>
+                          {musicRun && (
+                            <span className="font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
+                              {musicRun.durationSeconds}s track
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!musicAudioRef.current) return;
+                              if (musicPlaying) {
+                                musicAudioRef.current.pause();
+                                setMusicPlaying(false);
+                              } else {
+                                musicAudioRef.current.play().catch(() => {});
+                                setMusicPlaying(true);
+                              }
+                            }}
+                            data-testid="playground-music-play-toggle-btn"
+                            className="pressable inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-neutral-950 px-5 text-xs font-semibold text-white shadow-xs transition hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+                          >
+                            {musicPlaying ? (
+                              <>
+                                <Square className="h-3.5 w-3.5 fill-current" />
+                                Pause
+                              </>
+                            ) : (
+                              <>
+                                <Play className="h-3.5 w-3.5 fill-current" />
+                                Listen
+                              </>
+                            )}
+                          </button>
+
+                          <audio
+                            ref={musicAudioRef}
+                            src={musicAudioUrl}
+                            controls
+                            autoPlay
+                            onPlay={() => setMusicPlaying(true)}
+                            onPause={() => setMusicPlaying(false)}
+                            onEnded={() => setMusicPlaying(false)}
+                            className="h-11 flex-1"
+                            data-testid="playground-music-audio-player"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-neutral-400 dark:text-neutral-500">
+                        {musicRunning
+                          ? "Composing music with ElevenLabs Music v2..."
+                          : "Generated music will appear here."}
+                      </span>
+                    )}
+                  </div>
+
+                  {musicRun && (
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-neutral-200/70 pt-3 dark:border-white/10">
+                      <span
+                        data-testid="music-response-usage-badge"
+                        className="inline-flex items-center gap-1.5 rounded-full border border-purple-200 bg-purple-50 px-3 py-1 font-sans tabular-nums text-xs font-medium text-purple-900 dark:border-purple-500/30 dark:bg-purple-500/10 dark:text-purple-200"
+                      >
+                        <Activity className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+                        {musicRun.durationSeconds}s audio • Cost: ${formatCostBadge(musicRun.costUsd)} ($0.50/min)
                       </span>
                     </div>
                   )}

@@ -178,7 +178,7 @@ export default {
       const isAllowedOrigin = ALLOWED_ORIGINS.includes(requestOrigin);
       const isDirectBotRequest = !isAllowedOrigin && clientToken !== "lf_play_secure_649f7";
 
-      if ((path.startsWith("/api/playground") || path.startsWith("/v1/audio/speech")) && isDirectBotRequest) {
+      if ((path.startsWith("/api/playground") || path.startsWith("/v1/audio/speech") || path.startsWith("/v1/music")) && isDirectBotRequest) {
         return jsonResponse(
           {
             error: "forbidden",
@@ -440,6 +440,65 @@ export default {
           status: upstreamRes.status,
           headers: resHeaders,
         });
+      }
+
+      // 4d. Music Generation Proxy (server-side only using env.VOICE_API_KEY / ElevenLabs Music v2)
+      if (request.method === "POST" && (path === "/api/playground/music" || path === "/v1/music")) {
+        const voiceKey = env.VOICE_API_KEY;
+        if (!voiceKey) {
+          return jsonResponse({ error: "music_provider_not_configured", message: "VOICE_API_KEY secret is not set on Worker." }, 503, requestOrigin);
+        }
+
+        const body = await request.json().catch(() => ({}));
+        const prompt = String(body.prompt || body.input || body.text || "").trim();
+        if (!prompt) {
+          return jsonResponse({ error: "missing_prompt", message: "Music prompt is required." }, 400, requestOrigin);
+        }
+
+        const durationSeconds = Math.max(5, Math.min(300, Number(body.duration_seconds || body.duration || 30)));
+        const musicLengthMs = Math.round(durationSeconds * 1000);
+        const modelId = "music_v2";
+
+        const upstreamRes = await fetch("https://api.elevenlabs.io/v1/music", {
+          method: "POST",
+          headers: {
+            "xi-api-key": voiceKey,
+            "Content-Type": "application/json",
+            Accept: "audio/mpeg",
+          },
+          body: JSON.stringify({
+            prompt,
+            model_id: modelId,
+            music_length_ms: musicLengthMs,
+            force_instrumental: Boolean(body.force_instrumental ?? false),
+          }),
+        });
+
+        if (!upstreamRes.ok) {
+          const errData = await upstreamRes.json().catch(() => ({}));
+          return jsonResponse({
+            error: "music_generation_failed",
+            message: errData?.detail?.message || errData?.message || `Music generation failed (HTTP ${upstreamRes.status})`,
+          }, upstreamRes.status, requestOrigin);
+        }
+
+        const arrayBuffer = await upstreamRes.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = "";
+        const chunkSize = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+        }
+        const base64 = btoa(binary);
+
+        return jsonResponse({
+          id: `music_${ crypto.randomUUID().replace(/-/g, "").slice(0, 16) }`,
+          model: "LingoFusion Music",
+          upstream_model: "music_v2",
+          status: "completed",
+          audio_url: `data:audio/mpeg;base64,${base64}`,
+          duration_seconds: durationSeconds,
+        }, 200, requestOrigin);
       }
 
       // 5. OAuth: public client config (client IDs are public identifiers)

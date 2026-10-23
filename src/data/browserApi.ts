@@ -1210,21 +1210,51 @@ async function runSpeechBrowser(state: BrowserState, options?: RequestInit) {
   };
 }
 
-function runMusic(state: BrowserState, options?: RequestInit) {
+async function runMusic(state: BrowserState, options?: RequestInit) {
   const started = Date.now();
   const { key, project } = authorize(state, options);
   if (!key.scopes.includes("Music generation")) fail("missing_scope");
   const body = requestBody(options);
-  const model = musicModels.find((candidate) => candidate.model === body.model);
+  const model = musicModels.find((candidate) => candidate.model === body.model) ?? musicModels[0];
   const prompt = String(body.prompt ?? "").trim();
-  const durationSeconds = Math.round(Number(body.duration_seconds));
-  if (!model) fail("unsupported_model");
+  const durationSeconds = Math.round(Number(body.duration_seconds || 30));
   if (!prompt || !Number.isFinite(durationSeconds) || durationSeconds < 1 || durationSeconds > 3600) fail("invalid_request");
 
-  const cost = model.priceUsd ?? 0;
+  // Rate: $0.50 per minute
+  const durationMinutes = durationSeconds / 60;
+  const cost = Number(((model.priceUsd ?? 0.50) * durationMinutes).toFixed(6));
+
+  if ((state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) < cost) {
+    fail("Insufficient balance. Please deposit credits.");
+  }
+
+  let audioUrl = "";
+  try {
+    const upstreamRes = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/playground/music`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-LingoFusion-Client-Token": "lf_play_secure_649f7",
+      },
+      body: JSON.stringify({
+        prompt,
+        duration_seconds: durationSeconds,
+        force_instrumental: Boolean(body.force_instrumental),
+      }),
+    });
+
+    const data = (await upstreamRes.json().catch(() => ({}))) as Record<string, any>;
+    if (!upstreamRes.ok || !data.audio_url) {
+      throw new Error(data?.message || data?.error || `Music generation failed (HTTP ${upstreamRes.status})`);
+    }
+    audioUrl = String(data.audio_url);
+  } catch (err) {
+    throw err instanceof Error ? err : new Error(String(err));
+  }
+
   const requestId = randomId("req");
   applyCharge(state, cost);
-  createChargeEntry(state, cost, `${model.model} /v1/music`);
+  createChargeEntry(state, cost, `${model.model} /v1/music (${durationSeconds}s)`);
   logRequest(state, {
     id: requestId,
     timestamp: new Date().toISOString(),
@@ -1247,16 +1277,16 @@ function runMusic(state: BrowserState, options?: RequestInit) {
   return {
     id: requestId,
     model: model.model,
+    upstream_model: "music_v2",
     status: "completed",
     output: {
       prompt,
       duration_seconds: durationSeconds,
-      audio_url: `browser://lingofusion-music/${requestId}.wav`,
-      note: "Simulated LingoFusion Music generation. No audio file is created.",
+      audio_url: audioUrl,
     },
     usage: {
       audio_seconds: durationSeconds,
-      audio_minutes: durationSeconds / 60,
+      audio_minutes: durationMinutes,
       cost_usd: cost,
     },
   };
@@ -1604,8 +1634,8 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
     result = state.dashboard;
   } else if (method === "POST" && path === "/v1/translate") {
     result = runTranslation(state, options);
-  } else if (method === "POST" && path === "/v1/music") {
-    result = runMusic(state, options);
+  } else if (method === "POST" && (path === "/v1/music" || path === "/api/playground/music")) {
+    result = await runMusic(state, options);
   } else if (method === "POST" && (path === "/v1/audio/speech" || path === "/api/playground/speech")) {
     result = await runSpeechBrowser(state, options);
   } else {
