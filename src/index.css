@@ -816,7 +816,7 @@ textarea {
     justify-self: end;
   }
 
-  button,
+  button:not([role="switch"]),
   a,
   input,
   select {

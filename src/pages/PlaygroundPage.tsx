@@ -1284,16 +1284,30 @@ export function PlaygroundPage({
                   setAutoTopUpEnabled(next);
                   void handleSaveAutoTopUp(next);
                 }}
-                className={`relative inline-flex !h-[31px] !w-[51px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none ${
+                style={{
+                  width: 51,
+                  height: 31,
+                  minWidth: 51,
+                  minHeight: 31,
+                  maxWidth: 51,
+                  maxHeight: 31,
+                  padding: 2,
+                }}
+                className={`relative inline-flex shrink-0 cursor-pointer items-center rounded-full border-0 transition-colors duration-200 ease-in-out focus:outline-none ${
                   autoTopUpEnabled
-                    ? "!bg-[#34C759]"
-                    : "!bg-[#E9E9EA] dark:!bg-[#39393D]"
+                    ? "bg-[#34C759]"
+                    : "bg-[#E9E9EA] dark:bg-[#39393D]"
                 }`}
               >
                 <span
-                  className={`pointer-events-none inline-block !h-[27px] !w-[27px] rounded-full bg-white shadow-[0_3px_8px_rgba(0,0,0,0.15),0_1px_1px_rgba(0,0,0,0.16)] transition-transform duration-200 ease-in-out ${
-                    autoTopUpEnabled ? "translate-x-[22px]" : "translate-x-[2px]"
-                  }`}
+                  style={{
+                    width: 27,
+                    height: 27,
+                    minWidth: 27,
+                    minHeight: 27,
+                    transform: autoTopUpEnabled ? "translateX(20px)" : "translateX(0px)",
+                  }}
+                  className="pointer-events-none block rounded-full bg-white shadow-[0_3px_8px_rgba(0,0,0,0.15),0_1px_1px_rgba(0,0,0,0.16)] transition-transform duration-200 ease-in-out"
                 />
               </button>
             </div>
