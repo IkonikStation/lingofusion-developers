@@ -2034,7 +2034,7 @@ export function PlaygroundPage({
           <div className="flex flex-col bg-neutral-50/40 p-4 dark:bg-white/[0.01] sm:p-5">
             <div className="mb-2.5 flex items-center justify-between">
               <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">
-                Text output
+                {toLanguage}
               </span>
 
               {translatedOutput && (
