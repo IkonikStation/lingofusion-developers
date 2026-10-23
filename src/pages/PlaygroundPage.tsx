@@ -44,6 +44,7 @@ import {
   recordBrowserStreamUsage,
   shouldUseBrowserApi,
   streamChatCompletionBrowser,
+  syncCloudBalance,
 } from "../data/browserApi";
 import type { ModelPricingRecord } from "../data/browserApi";
 import { playgroundLanguages } from "../data/playgroundLanguages";
@@ -317,7 +318,18 @@ export function PlaygroundPage({
       if (dash.user?.id) {
         setActiveUserId(dash.user.id);
       }
-      const bal = dash.user?.balance_usd ?? dash.account.paidBalance;
+      let bal = dash.user?.balance_usd ?? dash.account.paidBalance;
+      const currentUser = getCurrentUser();
+      if (currentUser.email && currentUser.email !== "developer@lingofusion.dev") {
+        try {
+          const cloudBal = await syncCloudBalance(currentUser.email, currentUser.id);
+          if (typeof cloudBal === "number") {
+            bal = cloudBal;
+          }
+        } catch {
+          // Keep local cache if offline
+        }
+      }
       updateBalance(bal);
       if (dash.autoRecharge) {
         setAutoTopUpEnabled(Boolean(dash.autoRecharge.enabled));
@@ -338,9 +350,43 @@ export function PlaygroundPage({
     const unsub = subscribeAuth((user) => {
       setActiveUserId(user.id);
       setCurrentUserEmail(user.email);
+      if (typeof user.balance_usd === "number") {
+        updateBalance(user.balance_usd);
+      }
+      if (user.email && user.email !== "developer@lingofusion.dev") {
+        void syncCloudBalance(user.email, user.id).then((cloudBal) => {
+          if (typeof cloudBal === "number") {
+            updateBalance(cloudBal);
+          }
+        });
+      }
       void loadModelsAndState();
     });
-    return unsub;
+
+    // Auto-sync balance across devices when returning to or focusing this browser tab
+    const handleSyncOnFocus = () => {
+      const user = getCurrentUser();
+      if (user.email && user.email !== "developer@lingofusion.dev") {
+        void syncCloudBalance(user.email, user.id).then((cloudBal) => {
+          if (typeof cloudBal === "number") {
+            updateBalance(cloudBal);
+          }
+        });
+      }
+    };
+    window.addEventListener("focus", handleSyncOnFocus);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        handleSyncOnFocus();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      unsub();
+      window.removeEventListener("focus", handleSyncOnFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -1105,6 +1151,7 @@ export function PlaygroundPage({
         body: JSON.stringify({
           amount: depositAmount,
           userId: activeUserId,
+          userEmail: currentUserEmail !== "developer@lingofusion.dev" ? currentUserEmail : undefined,
           currency: "usd",
           isGift,
           recipientEmail: isGift ? giftRecipientEmail.trim().toLowerCase() : undefined,

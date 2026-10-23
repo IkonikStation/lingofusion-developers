@@ -145,13 +145,25 @@ async function verifyAppleIdToken(idToken, clientId) {
 
 async function issueSession(env, provider, identity, nameOverride) {
   const now = Math.floor(Date.now() / 1000);
+  const email = String(identity.email).toLowerCase();
   const user = {
     id: `usr_${provider}_${identity.sub}`,
     provider,
-    email: String(identity.email).toLowerCase(),
+    email,
     name: nameOverride || identity.name || String(identity.email).split("@")[0],
     avatar: identity.picture || null,
   };
+
+  // Sync latest cloud credit balance across devices
+  let balanceUsd = 0;
+  if (env.GIFTS) {
+    const rawBal = await env.GIFTS.get(`user_balance:${email}`);
+    if (rawBal !== null) {
+      balanceUsd = Number(rawBal);
+    }
+  }
+  user.balance_usd = balanceUsd;
+
   const token = await signSession({ ...user, iat: now, exp: now + SESSION_TTL_SECONDS }, env.SESSION_SECRET);
   return { user, sessionToken: token, expiresAt: (now + SESSION_TTL_SECONDS) * 1000 };
 }
@@ -209,6 +221,7 @@ export default {
         const { netDepositedUsd, grossAmountCents, grossChargedUsd, estimatedStripeFeeUsd } =
           calculateGrossDeposit(depositAmount);
         const userId = String(body.userId || "00000000-0000-4000-8000-000000000001");
+        const userEmail = String(body.userEmail || body.email || "").trim().toLowerCase();
         const returnPlaygroundUrl = String(
           body.returnUrl || env.APP_URL || "https://ikonikstation.github.io/lingofusion-developers/playground"
         ).replace(/\/+$/, "");
@@ -228,6 +241,9 @@ export default {
         const params = new URLSearchParams();
         params.append("mode", "payment");
         params.append("payment_intent_data[setup_future_usage]", "off_session");
+        if (!isGift && userEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userEmail) && userEmail !== "developer@lingofusion.dev") {
+          params.append("customer_email", userEmail);
+        }
         params.append("line_items[0][price_data][currency]", currency);
         params.append("line_items[0][price_data][unit_amount]", String(grossAmountCents));
         params.append(
@@ -244,6 +260,9 @@ export default {
         );
         params.append("line_items[0][quantity]", "1");
         params.append("metadata[userId]", userId);
+        if (userEmail) {
+          params.append("metadata[userEmail]", userEmail);
+        }
         params.append("metadata[topUpAmount]", netDepositedUsd.toString());
         params.append("metadata[netDepositUsd]", netDepositedUsd.toString());
         params.append("metadata[currency]", currency);
@@ -431,12 +450,42 @@ export default {
           }
         }
 
+        // If this was a self-deposit that succeeded, persist and sync the user's cloud balance across all devices
+        let syncedBalanceUsd = undefined;
+        if (paid && !isGift && env.GIFTS) {
+          const userEmail = String(metadata.userEmail || stripeSession.customer_details?.email || "").trim().toLowerCase();
+          const userId = String(metadata.userId || "").trim();
+          const syncKey = userEmail ? `user_balance:${userEmail}` : (userId ? `user_balance:${userId}` : null);
+          if (syncKey) {
+            const sessionRecorded = await env.GIFTS.get(`stripe_session:${stripeSession.id}`);
+            if (!sessionRecorded) {
+              const currentBalRaw = await env.GIFTS.get(syncKey);
+              let currentBal = currentBalRaw !== null ? Number(currentBalRaw) : 0;
+              currentBal = Number((currentBal + netDepositUsd).toFixed(6));
+              await env.GIFTS.put(syncKey, currentBal.toString());
+              if (userEmail && userId && userId !== "00000000-0000-4000-8000-000000000001") {
+                await env.GIFTS.put(`user_balance:${userId}`, currentBal.toString());
+              }
+              await env.GIFTS.put(`stripe_session:${stripeSession.id}`, JSON.stringify({
+                paid: true,
+                netDepositUsd,
+                timestamp: new Date().toISOString(),
+              }));
+              syncedBalanceUsd = currentBal;
+            } else {
+              const currentBalRaw = await env.GIFTS.get(syncKey);
+              syncedBalanceUsd = currentBalRaw !== null ? Number(currentBalRaw) : undefined;
+            }
+          }
+        }
+
         return jsonResponse({
           verified: paid,
           sessionId: stripeSession.id,
           payment_status: stripeSession.payment_status,
           net_deposited_usd: netDepositUsd,
           gross_charged_usd: grossChargedUsd,
+          balance_usd: syncedBalanceUsd,
           isGift,
           recipientEmail: isGift ? recipientEmail : undefined,
           giftCode: giftCode || undefined,
@@ -671,7 +720,101 @@ export default {
         const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
         const session = await verifySession(token, env.SESSION_SECRET).catch(() => null);
         if (!session) return jsonResponse({ error: "invalid_session" }, 401, requestOrigin);
-        return jsonResponse({ user: { id: session.id, provider: session.provider, email: session.email, name: session.name, avatar: session.avatar } }, 200, requestOrigin);
+        let balanceUsd = 0;
+        if (env.GIFTS && session.email) {
+          const rawBal = await env.GIFTS.get(`user_balance:${session.email.toLowerCase()}`);
+          if (rawBal !== null) balanceUsd = Number(rawBal);
+        }
+        return jsonResponse({
+          user: {
+            id: session.id,
+            provider: session.provider,
+            email: session.email,
+            name: session.name,
+            avatar: session.avatar,
+            balance_usd: balanceUsd,
+          },
+        }, 200, requestOrigin);
+      }
+
+      // 8b. Cloud balance sync across devices (GET /api/user/balance)
+      if (request.method === "GET" && path === "/api/user/balance") {
+        if (!env.GIFTS) {
+          return jsonResponse({ balance_usd: 0 }, 200, requestOrigin);
+        }
+        let userEmail = "";
+        let userId = "";
+
+        const authHeader = request.headers.get("authorization") || "";
+        if (authHeader.startsWith("Bearer ") && env.SESSION_SECRET) {
+          const session = await verifySession(authHeader.slice(7), env.SESSION_SECRET).catch(() => null);
+          if (session?.email) userEmail = session.email.toLowerCase();
+          if (session?.id) userId = session.id;
+        }
+
+        if (!userEmail) userEmail = String(url.searchParams.get("email") || "").trim().toLowerCase();
+        if (!userId) userId = String(url.searchParams.get("userId") || "").trim();
+
+        if (!userEmail && (!userId || userId === "00000000-0000-4000-8000-000000000001")) {
+          return jsonResponse({ balance_usd: 0 }, 200, requestOrigin);
+        }
+
+        let rawBal = null;
+        if (userEmail) {
+          rawBal = await env.GIFTS.get(`user_balance:${userEmail}`);
+        }
+        if (rawBal === null && userId && userId !== "00000000-0000-4000-8000-000000000001") {
+          rawBal = await env.GIFTS.get(`user_balance:${userId}`);
+        }
+
+        const balanceUsd = rawBal !== null ? Number(rawBal) : 0;
+        return jsonResponse({
+          balance_usd: balanceUsd,
+          synced: true,
+          email: userEmail || undefined,
+        }, 200, requestOrigin);
+      }
+
+      // 8c. Cloud balance update/deduction sync across devices (POST /api/user/balance)
+      if (request.method === "POST" && path === "/api/user/balance") {
+        if (!env.GIFTS) {
+          return jsonResponse({ balance_usd: 0 }, 200, requestOrigin);
+        }
+        const body = await request.json().catch(() => ({}));
+        let userEmail = String(body.email || "").trim().toLowerCase();
+        let userId = String(body.userId || "").trim();
+
+        const authHeader = request.headers.get("authorization") || "";
+        if (authHeader.startsWith("Bearer ") && env.SESSION_SECRET) {
+          const session = await verifySession(authHeader.slice(7), env.SESSION_SECRET).catch(() => null);
+          if (session?.email) userEmail = session.email.toLowerCase();
+          if (session?.id) userId = session.id;
+        }
+
+        if (!userEmail && (!userId || userId === "00000000-0000-4000-8000-000000000001")) {
+          return jsonResponse({ error: "missing_user_identifier" }, 400, requestOrigin);
+        }
+
+        const key = userEmail ? `user_balance:${userEmail}` : `user_balance:${userId}`;
+        const currentBalRaw = await env.GIFTS.get(key);
+        let currentBal = currentBalRaw !== null ? Number(currentBalRaw) : 0;
+
+        if (typeof body.delta_usd === "number" && Number.isFinite(body.delta_usd)) {
+          currentBal = Math.max(0, Number((currentBal + body.delta_usd).toFixed(6)));
+        } else if (typeof body.balance_usd === "number" && Number.isFinite(body.balance_usd)) {
+          currentBal = Math.max(0, Number(body.balance_usd.toFixed(6)));
+        }
+
+        await env.GIFTS.put(key, currentBal.toString());
+        if (userEmail && userId && userId !== "00000000-0000-4000-8000-000000000001") {
+          await env.GIFTS.put(`user_balance:${userId}`, currentBal.toString());
+        }
+
+        return jsonResponse({
+          balance_usd: currentBal,
+          synced: true,
+          updated_at: new Date().toISOString(),
+        }, 200, requestOrigin);
       }
 
       // 9. Gifts: check available gifts for an email address
@@ -753,9 +896,22 @@ export default {
           await env.GIFTS.put(`gifts_for:${email}`, JSON.stringify(list));
         }
 
+        // Update recipient's cloud balance in KV so it syncs across all their devices immediately
+        let newBalance = undefined;
+        const recipientEmail = email || (claimedGifts[0]?.recipientEmail);
+        if (recipientEmail && env.GIFTS && claimedAmount > 0) {
+          const syncKey = `user_balance:${recipientEmail.toLowerCase()}`;
+          const currentBalRaw = await env.GIFTS.get(syncKey);
+          let currentBal = currentBalRaw !== null ? Number(currentBalRaw) : 0;
+          currentBal = Number((currentBal + claimedAmount).toFixed(6));
+          await env.GIFTS.put(syncKey, currentBal.toString());
+          newBalance = currentBal;
+        }
+
         return jsonResponse({
           success: true,
           claimedAmountUsd: Number(claimedAmount.toFixed(2)),
+          newBalance,
           claimedCount: claimedGifts.length,
           gifts: claimedGifts,
         }, 200, requestOrigin);

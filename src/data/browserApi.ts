@@ -544,6 +544,7 @@ function applyCharge(state: BrowserState, cost: number) {
   if (state.dashboard.user) {
     state.dashboard.user.balance_usd = account.paidBalance;
   }
+  syncCloudBalanceUpdate(account.paidBalance, -paidCharge);
 
   // Check Auto Top-Up trigger when balance drops to or below threshold
   const auto = state.dashboard.autoRecharge;
@@ -612,6 +613,52 @@ export const DEFAULT_EDGE_GATEWAY_URL = String(
     import.meta.env.VITE_LINGOFUSION_API_URL ||
     "https://lingofusion-gateway.lingofusion-api.workers.dev",
 ).replace(/\/$/, "");
+
+export async function syncCloudBalance(targetEmail?: string, targetUserId?: string): Promise<number | null> {
+  const currentUser = getCurrentUser();
+  const email = (targetEmail || currentUser.email || "").trim().toLowerCase();
+  const userId = targetUserId || currentUser.id;
+  if (!email || email === "developer@lingofusion.dev") return null;
+
+  try {
+    const res = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/user/balance?email=${encodeURIComponent(email)}&userId=${encodeURIComponent(userId)}`, {
+      headers: currentUser.sessionToken ? { Authorization: `Bearer ${currentUser.sessionToken}` } : {},
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (typeof data.balance_usd === "number") {
+      const state = loadState(userId);
+      state.dashboard.account.paidBalance = data.balance_usd;
+      if (state.dashboard.user) {
+        state.dashboard.user.balance_usd = data.balance_usd;
+      }
+      saveState(state, userId);
+      return data.balance_usd;
+    }
+  } catch {
+    // Offline fallback
+  }
+  return null;
+}
+
+export function syncCloudBalanceUpdate(newBalance: number, deltaUsd?: number) {
+  const currentUser = getCurrentUser();
+  const email = (currentUser.email || "").trim().toLowerCase();
+  if (!email || email === "developer@lingofusion.dev") return;
+  void fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/user/balance`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(currentUser.sessionToken ? { Authorization: `Bearer ${currentUser.sessionToken}` } : {}),
+    },
+    body: JSON.stringify({
+      email,
+      userId: currentUser.id,
+      balance_usd: newBalance,
+      delta_usd: deltaUsd,
+    }),
+  }).catch(() => {});
+}
 
 function decodeUpstreamGateway() {
   return {
@@ -1360,8 +1407,13 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
           body: JSON.stringify({
             amount: depositAmount,
             userId,
+            userEmail: body.userEmail || state.dashboard.user?.email || getCurrentUser().email,
             currency,
-            returnUrl: returnPlaygroundUrl,
+            isGift: body.isGift,
+            recipientEmail: body.recipientEmail,
+            giftMessage: body.giftMessage,
+            senderName: body.senderName,
+            returnUrl: body.returnUrl || returnPlaygroundUrl,
           }),
         });
         if (edgeRes.ok) {
@@ -1482,6 +1534,7 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
             payment_status?: string;
             net_deposited_usd?: number;
             gross_charged_usd?: number;
+            balance_usd?: number;
             isGift?: boolean;
             recipientEmail?: string;
             giftCode?: string;
@@ -1510,7 +1563,10 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
                   createdAt: new Date().toISOString(),
                 });
               } else {
-                state.dashboard.account.paidBalance = Number((state.dashboard.account.paidBalance + netDepositUsd).toFixed(6));
+                const updatedBalance = typeof verifiedData.balance_usd === "number" && Number.isFinite(verifiedData.balance_usd)
+                  ? verifiedData.balance_usd
+                  : Number((state.dashboard.account.paidBalance + netDepositUsd).toFixed(6));
+                state.dashboard.account.paidBalance = updatedBalance;
                 state.dashboard.account.totalPaidCreditPurchased = Number((state.dashboard.account.totalPaidCreditPurchased + netDepositUsd).toFixed(6));
                 if (state.dashboard.user) {
                   state.dashboard.user.balance_usd = state.dashboard.account.paidBalance;
@@ -1688,7 +1744,10 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
       // Credit this user's balance with the claimed gift amount!
       const claimedAmount = Number(claimData.claimedAmountUsd || 0);
       if (claimedAmount > 0) {
-        state.dashboard.account.paidBalance = Number((state.dashboard.account.paidBalance + claimedAmount).toFixed(6));
+        const updatedBalance = typeof claimData.newBalance === "number" && Number.isFinite(claimData.newBalance)
+          ? claimData.newBalance
+          : Number((state.dashboard.account.paidBalance + claimedAmount).toFixed(6));
+        state.dashboard.account.paidBalance = updatedBalance;
         state.dashboard.account.totalPaidCreditPurchased = Number((state.dashboard.account.totalPaidCreditPurchased + claimedAmount).toFixed(6));
         if (state.dashboard.user) {
           state.dashboard.user.balance_usd = state.dashboard.account.paidBalance;

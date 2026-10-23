@@ -19,6 +19,7 @@ export type AuthUser = {
   createdAt: string;
   sessionToken?: string;
   expiresAt?: number;
+  balance_usd?: number;
 };
 
 export type AuthConfig = { googleClientId: string; appleClientId: string };
@@ -97,7 +98,14 @@ export function loadAuthConfig(): Promise<AuthConfig> {
 }
 
 type SessionResponse = {
-  user: { id: string; name: string; email: string; avatar?: string | null; provider: "google" | "apple" };
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    avatar?: string | null;
+    provider: "google" | "apple";
+    balance_usd?: number;
+  };
   sessionToken: string;
   expiresAt: number;
   message?: string;
@@ -121,6 +129,7 @@ async function exchange(path: string, body: Record<string, unknown>): Promise<Au
     createdAt: new Date().toISOString(),
     sessionToken: data.sessionToken,
     expiresAt: data.expiresAt,
+    balance_usd: typeof data.user.balance_usd === "number" ? data.user.balance_usd : undefined,
   };
   setCurrentUser(user);
   return user;
