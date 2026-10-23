@@ -1193,7 +1193,7 @@ export function PlaygroundPage({
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-neutral-500 dark:text-neutral-400">
-                      <span>Stripe fee (2.9% + $0.30)</span>
+                      <span>Processing fee</span>
                       <span className="font-sans tabular-nums">
                         ${depositBreakdown.estimatedStripeFeeUsd.toFixed(2)} USD
                       </span>

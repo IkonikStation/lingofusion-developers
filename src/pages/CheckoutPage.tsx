@@ -156,7 +156,7 @@ export function CheckoutPage({
                   </div>
                   <div className="flex items-center justify-between">
                     <dt className="text-neutral-500 dark:text-neutral-400">
-                      Processing fee (2.9% + $0.30)
+                      Processing fee
                     </dt>
                     <dd className="font-sans tabular-nums text-neutral-700 dark:text-neutral-300">
                       ${feeUsd.toFixed(2)} {currencyParam}

@@ -984,7 +984,7 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                                     </span>
                                   </div>
                                   <div className="flex items-center justify-between text-neutral-500 dark:text-neutral-400">
-                                    <span>Stripe fee (2.9% + $0.30)</span>
+                                    <span>Processing fee</span>
                                     <span className="font-sans tabular-nums">${breakdown.estimatedStripeFeeUsd.toFixed(2)} USD</span>
                                   </div>
                                   <div className="flex items-baseline justify-between border-t border-neutral-200 pt-2.5 text-sm font-semibold text-neutral-950 dark:border-white/10 dark:text-white">
