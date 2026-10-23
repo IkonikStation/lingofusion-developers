@@ -980,8 +980,19 @@ export function DashboardModal({
                     {/* User Account Scope Banner */}
                     <div className="mb-6 flex flex-col gap-3 rounded-xl border border-neutral-200 bg-neutral-50/70 p-4 dark:border-white/10 dark:bg-white/[0.02] sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-900 font-bold text-white dark:bg-white dark:text-neutral-950">
-                          {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : "D"}
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-neutral-900 font-bold text-white dark:bg-white dark:text-neutral-950">
+                          {currentUser?.avatar ? (
+                            <img
+                              src={currentUser.avatar}
+                              alt={currentUser.name}
+                              referrerPolicy="no-referrer"
+                              className="h-full w-full object-cover"
+                            />
+                          ) : currentUser?.name ? (
+                            currentUser.name.charAt(0).toUpperCase()
+                          ) : (
+                            "D"
+                          )}
                         </div>
                         <div>
                           <div className="flex items-center gap-2">

@@ -242,9 +242,20 @@ export function Sidebar({
           }`}
         >
           {/* Avatar circle */}
-          <div className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-neutral-900 font-semibold text-white dark:bg-white dark:text-neutral-950 text-xs">
-            {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : "D"}
-            {currentUser?.provider === "google" && (
+          <div className="relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-neutral-900 font-semibold text-white dark:bg-white dark:text-neutral-950 text-xs">
+            {currentUser?.avatar ? (
+              <img
+                src={currentUser.avatar}
+                alt={currentUser.name}
+                referrerPolicy="no-referrer"
+                className="h-full w-full object-cover"
+              />
+            ) : currentUser?.name ? (
+              currentUser.name.charAt(0).toUpperCase()
+            ) : (
+              "D"
+            )}
+            {currentUser?.provider === "google" && !currentUser.avatar && (
               <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-white ring-1 ring-neutral-200 dark:ring-neutral-800">
                 <span className="h-1.5 w-1.5 rounded-full bg-[#4285F4]" />
               </span>

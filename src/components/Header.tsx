@@ -249,9 +249,18 @@ export function Header({
                 onClick={() => setUserMenuOpen((prev) => !prev)}
                 className="inline-flex h-8 items-center gap-2 rounded-full border border-neutral-200 bg-neutral-50/80 pl-1.5 pr-2.5 text-xs font-semibold text-neutral-800 transition hover:bg-neutral-100 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
               >
-                <div className="relative flex h-5 w-5 items-center justify-center rounded-full bg-neutral-900 text-[10px] font-bold text-white dark:bg-white dark:text-neutral-950">
-                  {currentUser.name.charAt(0).toUpperCase()}
-                  {currentUser.provider === "google" && (
+                <div className="relative flex h-5 w-5 items-center justify-center overflow-hidden rounded-full bg-neutral-900 text-[10px] font-bold text-white dark:bg-white dark:text-neutral-950">
+                  {currentUser.avatar ? (
+                    <img
+                      src={currentUser.avatar}
+                      alt={currentUser.name}
+                      referrerPolicy="no-referrer"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    currentUser.name.charAt(0).toUpperCase()
+                  )}
+                  {currentUser.provider === "google" && !currentUser.avatar && (
                     <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-white ring-1 ring-neutral-200 dark:ring-neutral-800">
                       <span className="h-1.5 w-1.5 rounded-full bg-[#4285F4]" />
                     </span>
@@ -276,17 +285,28 @@ export function Header({
                   />
                   <div className="absolute right-0 top-10 z-50 w-64 rounded-2xl border border-neutral-200 bg-white p-2 shadow-xl dark:border-white/10 dark:bg-[#141414]">
                     <div className="border-b border-neutral-100 px-3 py-2.5 dark:border-white/10">
-                      <div className="flex items-center justify-between">
-                        <p className="truncate text-xs font-semibold text-neutral-900 dark:text-white">
-                          {currentUser.name}
-                        </p>
-                        <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-neutral-600 dark:bg-white/10 dark:text-neutral-300">
-                          {currentUser.provider}
-                        </span>
+                      <div className="mb-2 flex items-center gap-2.5">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-neutral-900 font-bold text-white dark:bg-white dark:text-neutral-950">
+                          {currentUser.avatar ? (
+                            <img
+                              src={currentUser.avatar}
+                              alt={currentUser.name}
+                              referrerPolicy="no-referrer"
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            currentUser.name.charAt(0).toUpperCase()
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-semibold text-neutral-900 dark:text-white">
+                            {currentUser.name}
+                          </p>
+                          <p className="truncate text-[11px] text-neutral-400">
+                            {currentUser.email}
+                          </p>
+                        </div>
                       </div>
-                      <p className="mt-0.5 truncate text-[11px] text-neutral-400">
-                        {currentUser.email}
-                      </p>
                       <div className="mt-2.5 flex items-center justify-between rounded-lg bg-neutral-50 px-2.5 py-1.5 text-xs dark:bg-white/[0.04]">
                         <span className="text-neutral-500">Balance</span>
                         <span className="font-sans font-bold text-emerald-600 dark:text-emerald-400">
