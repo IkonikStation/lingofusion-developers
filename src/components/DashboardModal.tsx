@@ -325,7 +325,7 @@ export function DashboardModal({
   });
   const [playgroundMode, setPlaygroundMode] = useState<"text" | "music">("text");
   const [tryModel, setTryModel] = useState(playgroundPricingMode === "fast" ? "LingoFusion" : "LingoFusion Pro");
-  const [tryInput, setTryInput] = useState("Hello, how are you?");
+  const [tryInput, setTryInput] = useState("");
   const [tryFromLanguage, setTryFromLanguage] = useState("English");
   const [tryToLanguage, setTryToLanguage] = useState("French");
   const [tryStream, setTryStream] = useState(true);
@@ -696,7 +696,7 @@ export function DashboardModal({
                             onClick={() => {
                               setPlaygroundMode(mode);
                               setTryModel(mode === "music" ? musicModels[0].model : "LingoFusion Pro");
-                              setTryInput(mode === "music" ? "Warm cinematic piano with a hopeful, gentle build." : "Hello, how are you?");
+                              setTryInput("");
                             }}
                             className={`pressable rounded px-3 py-1.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-950 focus-visible:ring-offset-2 dark:focus-visible:ring-white dark:focus-visible:ring-offset-[#0d0d0d] ${
                               selected

@@ -147,7 +147,7 @@ export function PlaygroundPage({
 
   const [fromLanguage, setFromLanguage] = useState<string>("English");
   const [toLanguage, setToLanguage] = useState<string>("French");
-  const [userInput, setUserInput] = useState<string>("Hello, how are you?");
+  const [userInput, setUserInput] = useState<string>("");
   const [translatedOutput, setTranslatedOutput] = useState<string>("");
   const [latestRun, setLatestRun] = useState<TranslationRun | null>(null);
 
@@ -1831,10 +1831,12 @@ export function PlaygroundPage({
                         onChange={(e) => setMusicDurationSeconds(Number(e.target.value))}
                         className="h-8 rounded-lg border border-neutral-200 bg-white px-2 text-xs font-semibold text-neutral-900 outline-none dark:border-white/15 dark:bg-neutral-950 dark:text-white"
                       >
-                        <option value={15}>15 sec ($0.125)</option>
-                        <option value={30}>30 sec ($0.25)</option>
-                        <option value={60}>60 sec ($0.50)</option>
-                        <option value={120}>2 min ($1.00)</option>
+                        <option value={30}>30 sec</option>
+                        <option value={60}>1 min</option>
+                        <option value={120}>2 min</option>
+                        <option value={180}>3 min</option>
+                        <option value={240}>4 min</option>
+                        <option value={300}>5 min</option>
                       </select>
                     </div>
 
@@ -2023,7 +2025,7 @@ export function PlaygroundPage({
               value={userInput}
               onChange={setUserInput}
               onSubmit={handleRunTranslation}
-              placeholder="Enter text to translate (supports Live Markdown & HTML)..."
+              placeholder="Enter text here"
               className="w-full flex-1 text-base leading-7 text-neutral-950 dark:text-white"
             />
           </div>
@@ -2300,7 +2302,7 @@ export function PlaygroundPage({
                     value={userInput}
                     onChange={setUserInput}
                     onSubmit={handleRunMusicGeneration}
-                    placeholder="Describe the track: 'Upbeat summer indie pop song with catchy vocal melodies, driving acoustic drums and bright synths'..."
+                    placeholder="Describe your track"
                     className="w-full flex-1 text-base leading-7 text-neutral-950 dark:text-white"
                   />
                 </div>
