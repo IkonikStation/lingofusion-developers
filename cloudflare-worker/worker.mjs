@@ -358,6 +358,52 @@ export default {
             recipientGifts.unshift(giftRecord);
             await env.GIFTS.put(`gifts_for:${recipientEmail}`, JSON.stringify(recipientGifts));
             await env.GIFTS.put(`gift:${giftCode}`, JSON.stringify(giftRecord));
+
+            // If Resend API key is configured, dispatch automated gift notification email directly to recipient
+            if (env.RESEND_API_KEY) {
+              const appBase = String(env.APP_URL || "https://ikonikstation.github.io/lingofusion-developers").replace(/\/+$/, "");
+              const claimUrl = `${appBase}/playground?claim_gift=${giftCode}&gift_email=${encodeURIComponent(recipientEmail)}`;
+              try {
+                await fetch("https://api.resend.com/emails", {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${env.RESEND_API_KEY}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    from: env.EMAIL_FROM || "LingoFusion Gifts <gifts@lingofusion.dev>",
+                    to: [recipientEmail],
+                    subject: `${senderName || "A friend"} sent you $${netDepositUsd.toFixed(2)} USD in LingoFusion credits!`,
+                    html: `
+                      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 40px 24px; background-color: #ffffff; color: #18181b;">
+                        <div style="text-align: center; margin-bottom: 28px;">
+                          <div style="display: inline-block; width: 52px; height: 52px; line-height: 52px; border-radius: 14px; background: #faf5ff; font-size: 26px;">🎁</div>
+                          <h1 style="font-size: 22px; font-weight: 700; color: #09090b; margin: 16px 0 6px;">You've received a LingoFusion Gift!</h1>
+                          <p style="font-size: 14px; color: #71717a; margin: 0;">${senderName ? `<strong>${senderName}</strong> has sent you` : "Someone sent you"} translation credits to use on LingoFusion.</p>
+                        </div>
+
+                        <div style="background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%); border: 1px solid #e9d5ff; border-radius: 16px; padding: 24px; text-align: center; margin: 24px 0;">
+                          <div style="font-size: 38px; font-weight: 800; color: #7e22ce; letter-spacing: -0.02em;">+$${netDepositUsd.toFixed(2)} USD</div>
+                          <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #9333ea; margin-top: 4px;">Gift Credit Balance</div>
+                          ${giftMessage ? `<div style="margin-top: 18px; padding: 14px 18px; background: rgba(255, 255, 255, 0.9); border-radius: 12px; font-style: italic; font-size: 13px; line-height: 1.5; color: #3f3f46; border: 1px solid #f3e8ff;">&ldquo;${giftMessage.replace(/</g, "&lt;").replace(/>/g, "&gt;")}&rdquo;</div>` : ""}
+                        </div>
+
+                        <div style="text-align: center; margin: 32px 0;">
+                          <a href="${claimUrl}" style="display: inline-block; background: #9333ea; color: #ffffff; padding: 14px 32px; border-radius: 12px; font-size: 14px; font-weight: 600; text-decoration: none; box-shadow: 0 4px 14px rgba(147, 51, 234, 0.35);">Claim Gift Credits</a>
+                        </div>
+
+                        <div style="border-top: 1px solid #f4f4f5; padding-top: 24px; text-align: center; font-size: 12px; color: #a1a1aa; line-height: 1.6;">
+                          <p style="margin: 0 0 8px;">Gift Code: <code style="background: #f4f4f5; padding: 3px 8px; border-radius: 6px; font-family: monospace; font-size: 12px; color: #52525b;">${giftCode}</code></p>
+                          <p style="margin: 0;">Or claim directly in your browser: <br /><a href="${claimUrl}" style="color: #9333ea; word-break: break-all;">${claimUrl}</a></p>
+                        </div>
+                      </div>
+                    `,
+                  }),
+                });
+              } catch (emailErr) {
+                console.error("Resend automated email dispatch failed:", emailErr);
+              }
+            }
           } else {
             giftCode = alreadyStored.code;
           }
