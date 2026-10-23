@@ -1284,15 +1284,15 @@ export function PlaygroundPage({
                   setAutoTopUpEnabled(next);
                   void handleSaveAutoTopUp(next);
                 }}
-                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full p-0.5 transition-colors ${
+                className={`relative inline-flex !h-[31px] !w-[51px] shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none ${
                   autoTopUpEnabled
-                    ? "bg-emerald-600 dark:bg-emerald-500"
-                    : "bg-neutral-300 dark:bg-white/20"
+                    ? "!bg-[#34C759]"
+                    : "!bg-[#E9E9EA] dark:!bg-[#39393D]"
                 }`}
               >
                 <span
-                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-xs transition-transform ${
-                    autoTopUpEnabled ? "translate-x-5" : "translate-x-0"
+                  className={`pointer-events-none inline-block !h-[27px] !w-[27px] rounded-full bg-white shadow-[0_3px_8px_rgba(0,0,0,0.15),0_1px_1px_rgba(0,0,0,0.16)] transition-transform duration-200 ease-in-out ${
+                    autoTopUpEnabled ? "translate-x-[22px]" : "translate-x-[2px]"
                   }`}
                 />
               </button>
