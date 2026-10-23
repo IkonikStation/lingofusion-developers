@@ -1477,6 +1477,9 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
             payment_status?: string;
             net_deposited_usd?: number;
             gross_charged_usd?: number;
+            isGift?: boolean;
+            recipientEmail?: string;
+            giftCode?: string;
           };
           if (verifiedData.verified && verifiedData.payment_status === "paid") {
             const userId = String(state.dashboard.user?.id || "00000000-0000-4000-8000-000000000001");
@@ -1484,34 +1487,47 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
             const grossChargedUsd = Number(
               verifiedData.gross_charged_usd ?? calculateGrossDeposit(netDepositUsd).grossChargedUsd,
             );
+            const isGift = Boolean(verifiedData.isGift);
 
             const alreadyProcessed = state.dashboard.depositLedger?.some(
               (entry) => entry.stripe_session_id === sessionId,
             );
 
             if (!alreadyProcessed && Number.isFinite(netDepositUsd) && netDepositUsd > 0) {
-              state.dashboard.account.paidBalance = Number((state.dashboard.account.paidBalance + netDepositUsd).toFixed(6));
-              state.dashboard.account.totalPaidCreditPurchased = Number((state.dashboard.account.totalPaidCreditPurchased + netDepositUsd).toFixed(6));
-              if (state.dashboard.user) {
-                state.dashboard.user.balance_usd = state.dashboard.account.paidBalance;
+              if (isGift) {
+                // The purchaser does NOT get the credits; they gifted it!
+                state.dashboard.ledger.unshift({
+                  id: randomId("gft"),
+                  type: "stripe_deposit",
+                  amount: 0,
+                  description: `Gifted +$${netDepositUsd.toFixed(2)} USD in credits to ${verifiedData.recipientEmail || "recipient"}`,
+                  status: "completed",
+                  createdAt: new Date().toISOString(),
+                });
+              } else {
+                state.dashboard.account.paidBalance = Number((state.dashboard.account.paidBalance + netDepositUsd).toFixed(6));
+                state.dashboard.account.totalPaidCreditPurchased = Number((state.dashboard.account.totalPaidCreditPurchased + netDepositUsd).toFixed(6));
+                if (state.dashboard.user) {
+                  state.dashboard.user.balance_usd = state.dashboard.account.paidBalance;
+                }
+                state.dashboard.depositLedger?.unshift({
+                  id: randomId("dep"),
+                  user_id: userId,
+                  stripe_session_id: sessionId,
+                  net_deposited_usd: netDepositUsd,
+                  gross_charged_usd: grossChargedUsd,
+                  status: "completed",
+                  created_at: new Date().toISOString(),
+                });
+                state.dashboard.ledger.unshift({
+                  id: randomId("dep"),
+                  type: "stripe_deposit",
+                  amount: netDepositUsd,
+                  description: `Stripe Deposit (Net $${netDepositUsd.toFixed(2)} / Gross charged $${grossChargedUsd.toFixed(2)})`,
+                  status: "completed",
+                  createdAt: new Date().toISOString(),
+                });
               }
-              state.dashboard.depositLedger?.unshift({
-                id: randomId("dep"),
-                user_id: userId,
-                stripe_session_id: sessionId,
-                net_deposited_usd: netDepositUsd,
-                gross_charged_usd: grossChargedUsd,
-                status: "completed",
-                created_at: new Date().toISOString(),
-              });
-              state.dashboard.ledger.unshift({
-                id: randomId("dep"),
-                type: "stripe_deposit",
-                amount: netDepositUsd,
-                description: `Stripe Deposit (Net $${netDepositUsd.toFixed(2)} / Gross charged $${grossChargedUsd.toFixed(2)})`,
-                status: "completed",
-                createdAt: new Date().toISOString(),
-              });
             }
 
             result = {
@@ -1521,6 +1537,9 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
               balance_usd: state.dashboard.account.paidBalance,
               net_deposited_usd: netDepositUsd,
               gross_charged_usd: grossChargedUsd,
+              isGift,
+              recipientEmail: verifiedData.recipientEmail,
+              giftCode: verifiedData.giftCode,
             };
           } else {
             result = {
@@ -1645,6 +1664,63 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
       paymentMethod: String(body.paymentMethod ?? "Stripe Checkout"),
     };
     result = state.dashboard;
+  } else if (method === "POST" && path === "/api/gifts/claim") {
+    const body = requestBody(options);
+    const email = String(body.email || "").trim().toLowerCase();
+    const code = String(body.code || "").trim();
+
+    if (DEFAULT_EDGE_GATEWAY_URL) {
+      const claimRes = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/gifts/claim`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, code }),
+      });
+      const claimData = await claimRes.json();
+      if (!claimRes.ok) {
+        throw new Error(claimData?.message || "Failed to claim gift");
+      }
+
+      // Credit this user's balance with the claimed gift amount!
+      const claimedAmount = Number(claimData.claimedAmountUsd || 0);
+      if (claimedAmount > 0) {
+        state.dashboard.account.paidBalance = Number((state.dashboard.account.paidBalance + claimedAmount).toFixed(6));
+        state.dashboard.account.totalPaidCreditPurchased = Number((state.dashboard.account.totalPaidCreditPurchased + claimedAmount).toFixed(6));
+        if (state.dashboard.user) {
+          state.dashboard.user.balance_usd = state.dashboard.account.paidBalance;
+        }
+        for (const g of claimData.gifts || []) {
+          state.dashboard.ledger.unshift({
+            id: randomId("gft"),
+            type: "gift_received",
+            amount: Number(g.amountUsd) || claimedAmount,
+            description: `Gift redeemed: +$${(Number(g.amountUsd) || claimedAmount).toFixed(2)} USD from ${g.senderName || "a friend"}${g.giftMessage ? ` ("${g.giftMessage}")` : ""}`,
+            status: "completed",
+            createdAt: new Date().toISOString(),
+          });
+        }
+      }
+      result = {
+        success: true,
+        claimedAmountUsd: claimedAmount,
+        newBalance: state.dashboard.account.paidBalance,
+        gifts: claimData.gifts,
+      };
+    } else {
+      fail("Edge gateway required for gifts");
+    }
+  } else if (method === "POST" && path === "/api/gifts/check") {
+    const body = requestBody(options);
+    const email = String(body.email || "").trim().toLowerCase();
+    if (DEFAULT_EDGE_GATEWAY_URL) {
+      const checkRes = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/gifts/check`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      result = await checkRes.json();
+    } else {
+      result = { email, gifts: [], totalAvailableUsd: 0 };
+    }
   } else if (method === "POST" && path === "/v1/translate") {
     result = runTranslation(state, options);
   } else if (method === "POST" && (path === "/v1/music" || path === "/api/playground/music")) {

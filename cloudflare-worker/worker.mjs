@@ -213,6 +213,18 @@ export default {
           body.returnUrl || env.APP_URL || "https://ikonikstation.github.io/lingofusion-developers/playground"
         ).replace(/\/+$/, "");
 
+        const isGift = Boolean(body.isGift);
+        const recipientEmail = String(body.recipientEmail || "").trim().toLowerCase();
+        const giftMessage = String(body.giftMessage || "").slice(0, 500);
+        const senderName = String(body.senderName || "").trim();
+
+        if (isGift && (!recipientEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail))) {
+          return jsonResponse({
+            error: "invalid_recipient_email",
+            message: "Please enter a valid recipient email address for the gift.",
+          }, 400);
+        }
+
         const params = new URLSearchParams();
         params.append("mode", "payment");
         params.append("payment_intent_data[setup_future_usage]", "off_session");
@@ -220,19 +232,29 @@ export default {
         params.append("line_items[0][price_data][unit_amount]", String(grossAmountCents));
         params.append(
           "line_items[0][price_data][product_data][name]",
-          `LingoFusion Credits — $${netDepositedUsd.toFixed(2)} USD`,
+          isGift
+            ? `Gift LingoFusion Credits to ${recipientEmail} — $${netDepositedUsd.toFixed(2)} USD`
+            : `LingoFusion Credits — $${netDepositedUsd.toFixed(2)} USD`,
         );
         params.append(
           "line_items[0][price_data][product_data][description]",
-          `Adds +$${netDepositedUsd.toFixed(2)} USD to your LingoFusion balance (includes $${estimatedStripeFeeUsd.toFixed(2)} processing fee)`,
+          isGift
+            ? `Gifts +$${netDepositedUsd.toFixed(2)} USD in LingoFusion credits to ${recipientEmail}. The recipient can claim these credits instantly with their email.`
+            : `Adds +$${netDepositedUsd.toFixed(2)} USD to your LingoFusion balance (includes $${estimatedStripeFeeUsd.toFixed(2)} processing fee)`,
         );
         params.append("line_items[0][quantity]", "1");
         params.append("metadata[userId]", userId);
         params.append("metadata[topUpAmount]", netDepositedUsd.toString());
         params.append("metadata[netDepositUsd]", netDepositedUsd.toString());
         params.append("metadata[currency]", currency);
-        params.append("success_url", `${returnPlaygroundUrl}?payment=success&session_id={CHECKOUT_SESSION_ID}`);
-        params.append("cancel_url", `${returnPlaygroundUrl}?payment=cancelled`);
+        params.append("metadata[isGift]", isGift ? "true" : "false");
+        if (isGift) {
+          params.append("metadata[recipientEmail]", recipientEmail);
+          if (giftMessage) params.append("metadata[giftMessage]", giftMessage);
+          if (senderName) params.append("metadata[senderName]", senderName);
+        }
+        params.append("success_url", `${returnPlaygroundUrl}?payment=success&session_id={CHECKOUT_SESSION_ID}${isGift ? "&gift=true" : ""}`);
+        params.append("cancel_url", `${returnPlaygroundUrl}?payment=cancelled${isGift ? "&gift=cancelled" : ""}`);
 
         const stripeRes = await fetch("https://api.stripe.com/v1/checkout/sessions", {
           method: "POST",
@@ -308,12 +330,48 @@ export default {
           ? Number((stripeSession.amount_total / 100).toFixed(2))
           : calculateGrossDeposit(netDepositUsd).grossChargedUsd;
 
+        const isGift = metadata.isGift === "true";
+        const recipientEmail = String(metadata.recipientEmail || "").trim().toLowerCase();
+        const giftMessage = String(metadata.giftMessage || "").trim();
+        const senderName = String(metadata.senderName || "").trim();
+
+        // If this was a gift payment that succeeded, persist it into KV so the recipient can claim it!
+        let giftCode = "";
+        if (paid && isGift && recipientEmail && env.GIFTS) {
+          giftCode = `gft_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+          const existingGiftsRaw = await env.GIFTS.get(`gifts_for:${recipientEmail}`);
+          const recipientGifts = existingGiftsRaw ? JSON.parse(existingGiftsRaw) : [];
+          
+          // Check if already stored for this stripe session
+          const alreadyStored = recipientGifts.find((g) => g.stripeSessionId === stripeSession.id);
+          if (!alreadyStored) {
+            const giftRecord = {
+              code: giftCode,
+              stripeSessionId: stripeSession.id,
+              recipientEmail,
+              amountUsd: netDepositUsd,
+              giftMessage,
+              senderName: senderName || "A generous friend",
+              claimed: false,
+              createdAt: new Date().toISOString(),
+            };
+            recipientGifts.unshift(giftRecord);
+            await env.GIFTS.put(`gifts_for:${recipientEmail}`, JSON.stringify(recipientGifts));
+            await env.GIFTS.put(`gift:${giftCode}`, JSON.stringify(giftRecord));
+          } else {
+            giftCode = alreadyStored.code;
+          }
+        }
+
         return jsonResponse({
           verified: paid,
           sessionId: stripeSession.id,
           payment_status: stripeSession.payment_status,
           net_deposited_usd: netDepositUsd,
           gross_charged_usd: grossChargedUsd,
+          isGift,
+          recipientEmail: isGift ? recipientEmail : undefined,
+          giftCode: giftCode || undefined,
         });
       }
 
@@ -546,6 +604,93 @@ export default {
         const session = await verifySession(token, env.SESSION_SECRET).catch(() => null);
         if (!session) return jsonResponse({ error: "invalid_session" }, 401, requestOrigin);
         return jsonResponse({ user: { id: session.id, provider: session.provider, email: session.email, name: session.name, avatar: session.avatar } }, 200, requestOrigin);
+      }
+
+      // 9. Gifts: check available gifts for an email address
+      if (request.method === "POST" && path === "/api/gifts/check") {
+        const body = await request.json().catch(() => ({}));
+        const email = String(body.email || "").trim().toLowerCase();
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          return jsonResponse({ gifts: [], totalAvailableUsd: 0 }, 200, requestOrigin);
+        }
+        if (!env.GIFTS) {
+          return jsonResponse({ gifts: [], totalAvailableUsd: 0 }, 200, requestOrigin);
+        }
+        const existingGiftsRaw = await env.GIFTS.get(`gifts_for:${email}`);
+        const allGifts = existingGiftsRaw ? JSON.parse(existingGiftsRaw) : [];
+        const unclaimed = allGifts.filter((g) => !g.claimed);
+        const total = unclaimed.reduce((sum, g) => sum + (Number(g.amountUsd) || 0), 0);
+        return jsonResponse({
+          email,
+          gifts: unclaimed,
+          totalAvailableUsd: Number(total.toFixed(2)),
+        }, 200, requestOrigin);
+      }
+
+      // 10. Gifts: claim a specific gift or all gifts for an email
+      if (request.method === "POST" && path === "/api/gifts/claim") {
+        const body = await request.json().catch(() => ({}));
+        const email = String(body.email || "").trim().toLowerCase();
+        const code = String(body.code || "").trim();
+        if (!email && !code) {
+          return jsonResponse({ error: "missing_identifier", message: "Email or gift code is required." }, 400, requestOrigin);
+        }
+        if (!env.GIFTS) {
+          return jsonResponse({ error: "not_available", message: "Gift vault is not connected." }, 503, requestOrigin);
+        }
+
+        let claimedAmount = 0;
+        const claimedGifts = [];
+
+        if (code) {
+          const giftRaw = await env.GIFTS.get(`gift:${code}`);
+          if (!giftRaw) {
+            return jsonResponse({ error: "invalid_gift_code", message: "Gift code not found or already redeemed." }, 404, requestOrigin);
+          }
+          const gift = JSON.parse(giftRaw);
+          if (gift.claimed) {
+            return jsonResponse({ error: "already_claimed", message: "This gift has already been claimed." }, 400, requestOrigin);
+          }
+          gift.claimed = true;
+          gift.claimedAt = new Date().toISOString();
+          await env.GIFTS.put(`gift:${code}`, JSON.stringify(gift));
+
+          // Also update in gifts_for list
+          const existingGiftsRaw = await env.GIFTS.get(`gifts_for:${gift.recipientEmail}`);
+          if (existingGiftsRaw) {
+            const list = JSON.parse(existingGiftsRaw).map((g) => g.code === code ? { ...g, claimed: true, claimedAt: gift.claimedAt } : g);
+            await env.GIFTS.put(`gifts_for:${gift.recipientEmail}`, JSON.stringify(list));
+          }
+          claimedAmount = Number(gift.amountUsd) || 0;
+          claimedGifts.push(gift);
+        } else if (email) {
+          const existingGiftsRaw = await env.GIFTS.get(`gifts_for:${email}`);
+          if (!existingGiftsRaw) {
+            return jsonResponse({ error: "no_gifts_found", message: `No unclaimed gifts found for ${email}.` }, 404, requestOrigin);
+          }
+          const list = JSON.parse(existingGiftsRaw);
+          const nowIso = new Date().toISOString();
+          for (const g of list) {
+            if (!g.claimed) {
+              g.claimed = true;
+              g.claimedAt = nowIso;
+              claimedAmount += Number(g.amountUsd) || 0;
+              claimedGifts.push(g);
+              await env.GIFTS.put(`gift:${g.code}`, JSON.stringify(g));
+            }
+          }
+          if (claimedGifts.length === 0) {
+            return jsonResponse({ error: "no_unclaimed_gifts", message: `All gifts for ${email} have already been claimed.` }, 400, requestOrigin);
+          }
+          await env.GIFTS.put(`gifts_for:${email}`, JSON.stringify(list));
+        }
+
+        return jsonResponse({
+          success: true,
+          claimedAmountUsd: Number(claimedAmount.toFixed(2)),
+          claimedCount: claimedGifts.length,
+          gifts: claimedGifts,
+        }, 200, requestOrigin);
       }
 
       return jsonResponse({ error: "not_found" }, 404);

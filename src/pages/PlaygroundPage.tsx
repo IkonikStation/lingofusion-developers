@@ -7,6 +7,7 @@ import {
   CreditCard,
   Download,
   Gauge,
+  Gift,
   Globe,
   Image as ImageIcon,
   Link2,
@@ -166,8 +167,22 @@ export function PlaygroundPage({
   const [liveBalance, setLiveBalance] = useState<number>(balanceUsd ?? 0.0);
   const [activeUserId, setActiveUserId] = useState<string>("00000000-0000-4000-8000-000000000001");
 
-  // Deposit Drawer / Popover state
+  // Deposit & Gift Drawer state
   const [depositModalOpen, setDepositModalOpen] = useState<boolean>(false);
+  const [depositTab, setDepositTab] = useState<"self" | "gift">("self");
+  const [giftRecipientEmail, setGiftRecipientEmail] = useState<string>("");
+  const [giftSenderName, setGiftSenderName] = useState<string>("");
+  const [giftMessage, setGiftMessage] = useState<string>("");
+
+  // Claim Gift Modal state
+  const [claimModalOpen, setClaimModalOpen] = useState<boolean>(false);
+  const [claimEmail, setClaimEmail] = useState<string>("");
+  const [claimCode, setClaimCode] = useState<string>("");
+  const [claimBusy, setClaimBusy] = useState<boolean>(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const [claimSuccess, setClaimSuccess] = useState<string | null>(null);
+  const [pendingGifts, setPendingGifts] = useState<Array<any>>([]);
+  const [checkingGifts, setCheckingGifts] = useState<boolean>(false);
   const [insufficientModalOpen, setInsufficientModalOpen] = useState<boolean>(false);
   const [depositAmount, setDepositAmount] = useState<number>(10);
   const [depositBusy, setDepositBusy] = useState<boolean>(false);
@@ -335,18 +350,28 @@ export function PlaygroundPage({
                 verified?: boolean;
                 balance_usd?: number;
                 net_deposited_usd?: number;
+                isGift?: boolean;
+                recipientEmail?: string;
+                giftCode?: string;
               }>("/api/verify-checkout-session", {
                 method: "POST",
                 body: JSON.stringify({ sessionId }),
               });
-              if (typeof verified.balance_usd === "number") {
-                updateBalance(verified.balance_usd);
-              }
-              if (verified.verified && typeof verified.net_deposited_usd === "number") {
+              if (verified.isGift) {
                 setPaymentNotice({
                   type: "success",
-                  message: `Payment received! +$${formatUsd(verified.net_deposited_usd)} USD added to your credit balance.`,
+                  message: `Gift payment successful! +$${formatUsd(verified.net_deposited_usd || 0)} USD in credits was sent to ${verified.recipientEmail}. They can claim it anytime with their email!`,
                 });
+              } else {
+                if (typeof verified.balance_usd === "number") {
+                  updateBalance(verified.balance_usd);
+                }
+                if (verified.verified && typeof verified.net_deposited_usd === "number") {
+                  setPaymentNotice({
+                    type: "success",
+                    message: `Payment received! +$${formatUsd(verified.net_deposited_usd)} USD added to your credit balance.`,
+                  });
+                }
               }
             } catch {
               // Fall back to dashboard balance refresh
@@ -1014,11 +1039,19 @@ export function PlaygroundPage({
     setDepositStatusMessage(null);
     setPaymentNotice(null);
     if (!Number.isFinite(depositAmount) || depositAmount < 1 || depositAmount > 50000) {
-      setErrorBanner("Top-up amount must be between $1.00 and $50,000.00 USD.");
+      setErrorBanner("Amount must be between $1.00 and $50,000.00 USD.");
       return;
+    }
+    if (depositTab === "gift") {
+      const email = giftRecipientEmail.trim().toLowerCase();
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setErrorBanner("Please enter a valid recipient email address for the gift.");
+        return;
+      }
     }
     setDepositBusy(true);
     try {
+      const isGift = depositTab === "gift";
       const data = await callApi<{
         url?: string;
         checkoutUrl?: string;
@@ -1033,6 +1066,10 @@ export function PlaygroundPage({
           amount: depositAmount,
           userId: activeUserId,
           currency: "usd",
+          isGift,
+          recipientEmail: isGift ? giftRecipientEmail.trim().toLowerCase() : undefined,
+          senderName: isGift ? giftSenderName.trim() : undefined,
+          giftMessage: isGift ? giftMessage.trim() : undefined,
         }),
       });
 
@@ -1045,6 +1082,79 @@ export function PlaygroundPage({
       setErrorBanner(err instanceof Error ? err.message : "Failed to create Stripe Checkout session");
     } finally {
       setDepositBusy(false);
+    }
+  };
+
+  const handleCheckGifts = async (emailToCheck: string) => {
+    const email = emailToCheck.trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+    setCheckingGifts(true);
+    setClaimError(null);
+    try {
+      const res = await callApi<{
+        email: string;
+        gifts: Array<{
+          code: string;
+          amountUsd: number;
+          senderName: string;
+          giftMessage: string;
+          createdAt: string;
+        }>;
+        totalAvailableUsd: number;
+      }>("/api/gifts/check", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+      setPendingGifts(res.gifts || []);
+    } catch {
+      setPendingGifts([]);
+    } finally {
+      setCheckingGifts(false);
+    }
+  };
+
+  const handleClaimGift = async () => {
+    setClaimError(null);
+    setClaimSuccess(null);
+    const email = claimEmail.trim().toLowerCase();
+    const code = claimCode.trim();
+
+    if (!email && !code) {
+      setClaimError("Please enter your email or gift code.");
+      return;
+    }
+
+    setClaimBusy(true);
+    try {
+      const res = await callApi<{
+        success: boolean;
+        claimedAmountUsd: number;
+        newBalance?: number;
+        gifts: Array<{
+          amountUsd: number;
+          senderName: string;
+          giftMessage: string;
+        }>;
+      }>("/api/gifts/claim", {
+        method: "POST",
+        body: JSON.stringify({ email, code }),
+      });
+
+      if (res.success && typeof res.claimedAmountUsd === "number") {
+        if (typeof res.newBalance === "number") {
+          updateBalance(res.newBalance);
+        } else {
+          updateBalance(liveBalance + res.claimedAmountUsd);
+        }
+        setClaimSuccess(`Successfully claimed +$${formatUsd(res.claimedAmountUsd)} USD in gifted credits!`);
+        setPendingGifts([]);
+        setClaimCode("");
+        await loadModelsAndState();
+      }
+    } catch (err) {
+      setClaimError(err instanceof Error ? err.message : "Failed to claim gift");
+    } finally {
+      setClaimBusy(false);
     }
   };
 
@@ -1138,9 +1248,29 @@ export function PlaygroundPage({
 
           <button
             type="button"
+            data-testid="playground-gift-btn"
+            onClick={() => {
+              setClaimError(null);
+              setClaimSuccess(null);
+              const currentUser = getCurrentUser();
+              if (currentUser.email && currentUser.email !== "guest@lingofusion.dev") {
+                setClaimEmail(currentUser.email);
+                void handleCheckGifts(currentUser.email);
+              }
+              setClaimModalOpen(true);
+            }}
+            className="pressable inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3.5 text-xs font-semibold text-neutral-800 shadow-2xs transition hover:bg-neutral-50 dark:border-white/15 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-white/5 sm:flex-none"
+          >
+            <Gift className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+            Claim Gift
+          </button>
+
+          <button
+            type="button"
             data-testid="playground-topup-btn"
             onClick={() => {
               setDepositStatusMessage(null);
+              setDepositTab("self");
               setDepositModalOpen((v) => !v);
             }}
             className="pressable inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-neutral-950 px-3.5 text-xs font-semibold text-white shadow-2xs transition hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200 sm:flex-none"
@@ -1200,38 +1330,117 @@ export function PlaygroundPage({
               className="relative z-10 my-auto max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-neutral-200/90 bg-white font-sans shadow-2xl transition-all animate-in fade-in zoom-in-95 duration-150 dark:border-white/10 dark:bg-neutral-900"
             >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-neutral-200/80 px-6 py-4 dark:border-white/10 sm:px-7">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-neutral-100 text-neutral-900 dark:bg-white/10 dark:text-white">
-                <Wallet className="h-4 w-4" />
+          <div className="border-b border-neutral-200/80 px-6 py-4 dark:border-white/10 sm:px-7">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-neutral-100 text-neutral-900 dark:bg-white/10 dark:text-white">
+                  {depositTab === "gift" ? (
+                    <Gift className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                  ) : (
+                    <Wallet className="h-4 w-4" />
+                  )}
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold tracking-tight text-neutral-950 dark:text-white">
+                    {depositTab === "gift" ? "Gift LingoFusion Credits" : "Add Funds"}
+                  </h2>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                    {depositTab === "gift"
+                      ? "Send credits directly to any email address"
+                      : "Top up your LingoFusion credit balance ($1 – $50,000 USD)"}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-base font-semibold tracking-tight text-neutral-950 dark:text-white">
-                  Add Funds
-                </h2>
-                <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                  Top up your LingoFusion credit balance ($1 – $50,000 USD)
-                </p>
-              </div>
+              <button
+                type="button"
+                disabled={depositBusy}
+                onClick={() => setDepositModalOpen(false)}
+                className="rounded-lg p-1.5 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-white/10 dark:hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
-            <button
-              type="button"
-              disabled={depositBusy}
-              onClick={() => setDepositModalOpen(false)}
-              className="rounded-lg p-1.5 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-white/10 dark:hover:text-white"
-            >
-              <X className="h-4 w-4" />
-            </button>
+
+            {/* Mode Switcher: Top-Up Myself vs Gift to Someone Else */}
+            <div className="mt-3.5 inline-flex rounded-xl border border-neutral-200 bg-neutral-100/70 p-0.5 dark:border-white/10 dark:bg-neutral-950">
+              <button
+                type="button"
+                onClick={() => setDepositTab("self")}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition ${
+                  depositTab === "self"
+                    ? "bg-white text-neutral-950 shadow-xs dark:bg-neutral-800 dark:text-white"
+                    : "text-neutral-500 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white"
+                }`}
+              >
+                <Wallet className="h-3 w-3" />
+                <span>My Balance</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDepositTab("gift")}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition ${
+                  depositTab === "gift"
+                    ? "bg-purple-600 text-white shadow-xs"
+                    : "text-neutral-500 hover:text-purple-600 dark:text-neutral-400 dark:hover:text-purple-400"
+                }`}
+              >
+                <Gift className="h-3 w-3" />
+                <span>Gift to Someone</span>
+              </button>
+            </div>
           </div>
 
           {/* Body: Two-Column Layout on Mac/PC Web */}
             <div className="grid divide-y divide-neutral-200/80 dark:divide-white/10 md:grid-cols-[1.15fr_0.85fr] md:divide-x md:divide-y-0">
-              {/* Left Column: Presets + Custom Input */}
-              <div className="space-y-5 p-6 sm:p-7">
+              {/* Left Column: Presets + Custom Input + Gift fields */}
+              <div className="space-y-4 p-6 sm:p-7">
+                {depositTab === "gift" && (
+                  <div className="space-y-3 rounded-xl border border-purple-200/80 bg-purple-50/50 p-3.5 dark:border-purple-500/20 dark:bg-purple-500/[0.05]">
+                    <div>
+                      <label className="block text-xs font-semibold text-purple-950 dark:text-purple-200">
+                        Recipient Email <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        placeholder="friend@example.com"
+                        value={giftRecipientEmail}
+                        onChange={(e) => setGiftRecipientEmail(e.target.value)}
+                        className="mt-1 h-9 w-full rounded-lg border border-purple-200 bg-white px-3 text-xs text-neutral-900 outline-none focus:border-purple-500 dark:border-white/15 dark:bg-neutral-950 dark:text-white"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-medium text-purple-900 dark:text-purple-300">
+                          Your Name (optional)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Your name"
+                          value={giftSenderName}
+                          onChange={(e) => setGiftSenderName(e.target.value)}
+                          className="mt-1 h-8 w-full rounded-lg border border-purple-200 bg-white px-2.5 text-xs text-neutral-900 outline-none focus:border-purple-500 dark:border-white/15 dark:bg-neutral-950 dark:text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium text-purple-900 dark:text-purple-300">
+                          Gift Message (optional)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Enjoy the translations!"
+                          value={giftMessage}
+                          onChange={(e) => setGiftMessage(e.target.value)}
+                          className="mt-1 h-8 w-full rounded-lg border border-purple-200 bg-white px-2.5 text-xs text-neutral-900 outline-none focus:border-purple-500 dark:border-white/15 dark:bg-neutral-950 dark:text-white"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div>
                   <div className="mb-2.5 flex items-center justify-between">
                     <label className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                      Select Credit Tier
+                      {depositTab === "gift" ? "Gift Amount" : "Select Credit Tier"}
                     </label>
                     <span className="font-sans text-[11px] font-medium text-neutral-400">USD</span>
                   </div>
@@ -1245,7 +1454,9 @@ export function PlaygroundPage({
                           onClick={() => setDepositAmount(preset)}
                           className={`flex h-12 flex-col items-center justify-center rounded-xl border font-sans tabular-nums text-sm font-semibold transition ${
                             selected
-                              ? "border-neutral-950 bg-neutral-950 text-white shadow-xs dark:border-white dark:bg-white dark:text-neutral-950"
+                              ? depositTab === "gift"
+                                ? "border-purple-600 bg-purple-600 text-white shadow-xs"
+                                : "border-neutral-950 bg-neutral-950 text-white shadow-xs dark:border-white dark:bg-white dark:text-neutral-950"
                               : "border-neutral-200 bg-neutral-50/50 text-neutral-800 hover:border-neutral-300 hover:bg-neutral-100/80 dark:border-white/10 dark:bg-white/[0.02] dark:text-neutral-200 dark:hover:bg-white/[0.06]"
                           }`}
                         >
@@ -1277,7 +1488,7 @@ export function PlaygroundPage({
                       min={1}
                       max={50000}
                       step={1}
-                      aria-label="Custom top-up amount in USD"
+                      aria-label="Custom amount in USD"
                       data-testid="deposit-amount-input"
                       value={depositAmount || ""}
                       onChange={(e) => {
@@ -1292,17 +1503,26 @@ export function PlaygroundPage({
                   </div>
                 </div>
 
-                {/* Current vs Updated Balance Preview */}
-                <div className="flex items-center justify-between rounded-xl border border-neutral-200/70 bg-neutral-50/50 px-4 py-3 text-xs dark:border-white/10 dark:bg-white/[0.02]">
-                  <span className="text-neutral-500 dark:text-neutral-400">Balance after top-up</span>
-                  <div className="flex items-center gap-2 font-sans tabular-nums">
-                    <span className="text-neutral-400">${formatUsd(liveBalance)}</span>
-                    <span className="text-neutral-400">→</span>
-                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                      ${formatUsd(liveBalance + depositBreakdown.netDepositedUsd)}
-                    </span>
+                {/* Balance Preview or Gift Notice */}
+                {depositTab === "self" ? (
+                  <div className="flex items-center justify-between rounded-xl border border-neutral-200/70 bg-neutral-50/50 px-4 py-3 text-xs dark:border-white/10 dark:bg-white/[0.02]">
+                    <span className="text-neutral-500 dark:text-neutral-400">Balance after top-up</span>
+                    <div className="flex items-center gap-2 font-sans tabular-nums">
+                      <span className="text-neutral-400">${formatUsd(liveBalance)}</span>
+                      <span className="text-neutral-400">→</span>
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                        ${formatUsd(liveBalance + depositBreakdown.netDepositedUsd)}
+                      </span>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="rounded-xl border border-purple-200/70 bg-purple-50/40 p-3 text-xs text-purple-900 dark:border-purple-500/20 dark:bg-purple-500/[0.04] dark:text-purple-200">
+                    <p className="font-semibold">🎁 Recipient receives 100% of the credits</p>
+                    <p className="mt-0.5 text-[11px] opacity-80">
+                      You won't receive credits on your account. The recipient can claim them anytime using their email address.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Right Column: Order Summary & Checkout CTA */}
@@ -1317,11 +1537,19 @@ export function PlaygroundPage({
                     className="mt-4 space-y-3 text-xs"
                   >
                     <div className="flex items-center justify-between text-neutral-600 dark:text-neutral-300">
-                      <span>Net credit added</span>
+                      <span>{depositTab === "gift" ? "Gift credit" : "Net credit added"}</span>
                       <span className="font-sans tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
                         +${formatUsd(depositBreakdown.netDepositedUsd)} USD
                       </span>
                     </div>
+                    {depositTab === "gift" && giftRecipientEmail && (
+                      <div className="flex items-center justify-between text-neutral-500 dark:text-neutral-400">
+                        <span>Recipient</span>
+                        <span className="max-w-[130px] truncate font-medium text-neutral-800 dark:text-neutral-200">
+                          {giftRecipientEmail}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between text-neutral-500 dark:text-neutral-400">
                       <span>Processing fee</span>
                       <span className="font-sans tabular-nums">
@@ -1351,10 +1579,20 @@ export function PlaygroundPage({
 
                   <button
                     type="button"
-                    disabled={depositBusy || !Number.isFinite(depositAmount) || depositAmount < 1 || depositAmount > 50000}
+                    disabled={
+                      depositBusy ||
+                      !Number.isFinite(depositAmount) ||
+                      depositAmount < 1 ||
+                      depositAmount > 50000 ||
+                      (depositTab === "gift" && !giftRecipientEmail)
+                    }
                     data-testid="simulate-webhook-btn"
                     onClick={handleDepositCredit}
-                    className="pressable inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-neutral-950 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+                    className={`pressable inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold text-white shadow-sm transition disabled:opacity-50 ${
+                      depositTab === "gift"
+                        ? "bg-purple-600 hover:bg-purple-700"
+                        : "bg-neutral-950 hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+                    }`}
                   >
                     {depositBusy ? (
                       <>
@@ -1363,8 +1601,17 @@ export function PlaygroundPage({
                       </>
                     ) : (
                       <>
-                        <CreditCard className="h-4 w-4" />
-                        Continue to Checkout
+                        {depositTab === "gift" ? (
+                          <>
+                            <Gift className="h-4 w-4" />
+                            Send Gift with Stripe
+                          </>
+                        ) : (
+                          <>
+                            <CreditCard className="h-4 w-4" />
+                            Continue to Checkout
+                          </>
+                        )}
                       </>
                     )}
                   </button>
@@ -1377,11 +1624,12 @@ export function PlaygroundPage({
               </div>
             </div>
 
-          {/* Auto Top-Up Section */}
-          <div
-            data-testid="auto-topup-section"
-            className="border-t border-neutral-200/80 bg-neutral-50/30 px-6 py-5 dark:border-white/10 dark:bg-white/[0.01] sm:px-7"
-          >
+          {/* Auto Top-Up Section (Shown when funding own balance) */}
+          {depositTab === "self" && (
+            <div
+              data-testid="auto-topup-section"
+              className="border-t border-neutral-200/80 bg-neutral-50/30 px-6 py-5 dark:border-white/10 dark:bg-white/[0.01] sm:px-7"
+            >
             <div className="flex items-center justify-between gap-4">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
@@ -1565,6 +1813,169 @@ export function PlaygroundPage({
               </p>
             )}
           </div>
+          )}
+            </div>
+          </div>,
+          document.body,
+        )}
+
+      {/* Claim Gift Modal Pop-up with Full-Screen Blurred Dark Backdrop (Portaled to document.body) */}
+      {claimModalOpen &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+            <div
+              className="fixed inset-0 bg-neutral-950/60 backdrop-blur-sm transition-opacity"
+              onClick={() => {
+                if (!claimBusy) setClaimModalOpen(false);
+              }}
+            />
+
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="relative z-10 my-auto max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-neutral-200/90 bg-white p-6 font-sans shadow-2xl transition-all animate-in fade-in zoom-in-95 duration-150 dark:border-white/10 dark:bg-neutral-900 sm:p-7"
+            >
+              <div className="flex items-center justify-between border-b border-neutral-200/80 pb-4 dark:border-white/10">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300">
+                    <Gift className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-semibold tracking-tight text-neutral-950 dark:text-white">
+                      Claim Gift Credits
+                    </h2>
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                      Redeem LingoFusion credits gifted to you
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={claimBusy}
+                  onClick={() => setClaimModalOpen(false)}
+                  className="rounded-lg p-1.5 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-white/10 dark:hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="mt-5 space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                    Your Email Address
+                  </label>
+                  <div className="mt-1 flex gap-2">
+                    <input
+                      type="email"
+                      placeholder="you@example.com"
+                      value={claimEmail}
+                      onChange={(e) => {
+                        setClaimEmail(e.target.value);
+                        setClaimError(null);
+                        setClaimSuccess(null);
+                      }}
+                      className="h-10 flex-1 rounded-xl border border-neutral-200 bg-white px-3 text-xs text-neutral-900 outline-none focus:border-neutral-900 dark:border-white/15 dark:bg-neutral-950 dark:text-white dark:focus:border-white"
+                    />
+                    <button
+                      type="button"
+                      disabled={checkingGifts || !claimEmail.trim()}
+                      onClick={() => void handleCheckGifts(claimEmail)}
+                      className="pressable inline-flex h-10 items-center justify-center rounded-xl border border-neutral-300 bg-white px-3.5 text-xs font-semibold text-neutral-800 transition hover:bg-neutral-50 disabled:opacity-50 dark:border-white/15 dark:bg-neutral-950 dark:text-neutral-200 dark:hover:bg-white/10"
+                    >
+                      {checkingGifts ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Check"}
+                    </button>
+                  </div>
+                  <p className="mt-1 text-[11px] text-neutral-400">
+                    Enter the email someone gifted credits to.
+                  </p>
+                </div>
+
+                {pendingGifts.length > 0 && (
+                  <div className="space-y-2 rounded-xl border border-purple-200 bg-purple-50/60 p-3.5 dark:border-purple-500/20 dark:bg-purple-500/[0.08]">
+                    <div className="flex items-center justify-between text-xs font-semibold text-purple-950 dark:text-purple-200">
+                      <span>Found {pendingGifts.length} gift{pendingGifts.length > 1 ? "s" : ""}!</span>
+                      <span className="font-bold">
+                        Total: +${formatUsd(pendingGifts.reduce((s, g) => s + (Number(g.amountUsd) || 0), 0))} USD
+                      </span>
+                    </div>
+                    <div className="max-h-40 divide-y divide-purple-200/60 overflow-y-auto text-xs dark:divide-purple-500/20">
+                      {pendingGifts.map((g, idx) => (
+                        <div key={idx} className="py-2 text-[11px]">
+                          <div className="flex items-center justify-between font-medium text-purple-900 dark:text-purple-300">
+                            <span>From: {g.senderName || "A friend"}</span>
+                            <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                              +${formatUsd(g.amountUsd)} USD
+                            </span>
+                          </div>
+                          {g.giftMessage && (
+                            <p className="mt-0.5 italic text-neutral-600 dark:text-neutral-400">
+                              "{g.giftMessage}"
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="relative flex items-center py-1">
+                  <div className="flex-grow border-t border-neutral-200 dark:border-white/10" />
+                  <span className="mx-3 text-[11px] font-medium uppercase tracking-wider text-neutral-400">
+                    Or enter gift code
+                  </span>
+                  <div className="flex-grow border-t border-neutral-200 dark:border-white/10" />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300">
+                    Gift Code (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="gft_..."
+                    value={claimCode}
+                    onChange={(e) => {
+                      setClaimCode(e.target.value);
+                      setClaimError(null);
+                      setClaimSuccess(null);
+                    }}
+                    className="mt-1 h-10 w-full rounded-xl border border-neutral-200 bg-white px-3 font-mono text-xs text-neutral-900 outline-none focus:border-neutral-900 dark:border-white/15 dark:bg-neutral-950 dark:text-white dark:focus:border-white"
+                  />
+                </div>
+
+                {claimError && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-900 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+                    {claimError}
+                  </div>
+                )}
+
+                {claimSuccess && (
+                  <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-medium text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+                    <Check className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                    <span>{claimSuccess}</span>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  disabled={claimBusy || (!claimEmail.trim() && !claimCode.trim())}
+                  onClick={handleClaimGift}
+                  className="pressable mt-2 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-purple-600 px-5 text-sm font-semibold text-white shadow-xs transition hover:bg-purple-700 disabled:opacity-50"
+                >
+                  {claimBusy ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Claiming credits...
+                    </>
+                  ) : (
+                    <>
+                      <Gift className="h-4 w-4" />
+                      Claim Gift Credits
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>,
           document.body,

@@ -4,3 +4,7 @@ compatibility_date = "2025-01-01"
 
 [vars]
 APP_URL = "https://ikonikstation.github.io/lingofusion-developers/playground"
+
+[[kv_namespaces]]
+binding = "GIFTS"
+id = "4f4c6238db9540f08168d10181296a37"
