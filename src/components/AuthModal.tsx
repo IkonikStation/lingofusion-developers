@@ -188,7 +188,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
                   </p>
                 )}
 
-                {appleReady ? (
+                {appleReady && (
                   <button
                     type="button"
                     disabled={busy}
@@ -198,10 +198,6 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
                     <Apple className="h-4 w-4 fill-current" />
                     <span>Continue with Apple</span>
                   </button>
-                ) : (
-                  <p className="rounded-xl border border-amber-300/70 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-100">
-                    Apple sign-in isn’t set up yet.
-                  </p>
                 )}
               </>
             )}
