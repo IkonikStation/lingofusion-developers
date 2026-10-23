@@ -1067,7 +1067,7 @@ export function PlaygroundPage({
             <div
               role="dialog"
               aria-modal="true"
-              className="relative z-10 max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-neutral-200/90 bg-white font-sans shadow-2xl transition-all animate-in fade-in zoom-in-95 duration-150 dark:border-white/10 dark:bg-neutral-900"
+              className="relative z-10 my-auto max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-neutral-200/90 bg-white font-sans shadow-2xl transition-all animate-in fade-in zoom-in-95 duration-150 dark:border-white/10 dark:bg-neutral-900"
             >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-neutral-200/80 px-6 py-4 dark:border-white/10 sm:px-7">
@@ -1678,7 +1678,7 @@ export function PlaygroundPage({
             </div>
 
             {/* Right: Text-mode options popover, or the run/stop action */}
-            <div className="flex items-center gap-2.5">
+            <div className="flex w-full items-center gap-2.5 sm:w-auto">
               {mode === "text" && (
                 <Popover
                   trigger={
