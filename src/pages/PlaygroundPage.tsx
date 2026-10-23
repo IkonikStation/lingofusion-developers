@@ -2650,20 +2650,6 @@ export function PlaygroundPage({
                   </span>
                 )}
               </div>
-
-              {/* Real-time token usage and cost breakdown badge */}
-              {latestRun && (
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-neutral-200/70 pt-3 dark:border-white/10">
-                  <span
-                    data-testid="response-usage-badge"
-                    className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-sans tabular-nums text-xs font-medium text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
-                  >
-                    <Activity className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                    Tokens: {latestRun.promptTokens} in / {latestRun.completionTokens} out • Cost: $
-                    {formatCostBadge(latestRun.costUsd)}
-                  </span>
-                </div>
-              )}
             </div>
           </div>
             </>
@@ -2828,19 +2814,6 @@ export function PlaygroundPage({
                       </span>
                     )}
                   </div>
-
-                  {imageRun && (
-                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-neutral-200/70 pt-3 dark:border-white/10">
-                      <span
-                        data-testid="image-response-usage-badge"
-                        className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-sans tabular-nums text-xs font-medium text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
-                      >
-                        <Activity className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                        Tokens: {imageRun.promptTokens} in / {imageRun.completionTokens} out • Cost: $
-                        {formatCostBadge(imageRun.costUsd)}
-                      </span>
-                    </div>
-                  )}
                 </div>
               </div>
             </>
