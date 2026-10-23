@@ -74,7 +74,7 @@ export function Header({
 
   return (
     <header className="sticky top-0 z-40 border-b border-neutral-200/80 bg-white/95 backdrop-blur-md dark:border-neutral-800/80 dark:bg-[#0d0d0d]/95">
-      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div className="flex h-14 w-full items-center justify-between px-3 sm:px-4 lg:px-6">
         {/* Left: Mobile hamburger + Brand logo */}
         <div className="flex items-center gap-3 sm:gap-6">
           {!isSubscriptionPage && (
@@ -91,20 +91,23 @@ export function Header({
           <button
             type="button"
             onClick={() => navigate("Overview")}
-            className="flex items-center gap-2.5 text-left"
+            className="group flex items-center gap-2.5 text-left transition"
           >
-            <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-md bg-black dark:bg-white">
-              <img
-                src={`${import.meta.env.BASE_URL}assets/lingofusion-logo-square.png`}
-                alt="LingoFusion"
-                width="28"
-                height="28"
-                className="h-full w-full object-cover"
-              />
-            </span>
-            <span className="text-sm font-semibold tracking-tight text-neutral-900 dark:text-white">
-              LingoFusion <span className="font-normal text-neutral-500">API</span>
-            </span>
+            <img
+              src={`${import.meta.env.BASE_URL}assets/lingofusion-logo-square.png`}
+              alt="LingoFusion"
+              width="32"
+              height="32"
+              className="h-8 w-8 shrink-0 object-contain drop-shadow-sm transition group-hover:scale-105"
+            />
+            <div className="flex flex-col leading-none">
+              <span className="text-[13.5px] font-bold tracking-tight text-neutral-900 dark:text-white">
+                LingoFusion
+              </span>
+              <span className="mt-0.5 text-[10px] font-semibold tracking-wider text-neutral-500 uppercase dark:text-neutral-400">
+                API
+              </span>
+            </div>
           </button>
 
           {/* Center/Left Nav links */}
