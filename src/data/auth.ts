@@ -1,7 +1,14 @@
-// LingoFusion Authentication System (Real Google, Apple, and Email Accounts)
-// Manages real user identity, isolated accounts, and reactive state updates.
+// LingoFusion Authentication (Google OAuth / Sign in with Apple)
+// The browser only ever holds a session token minted by the gateway after it
+// has verified the provider's ID token server-side.
 
-export type AuthProvider = "google" | "apple" | "email" | "guest";
+const DEFAULT_EDGE_GATEWAY_URL = String(
+  import.meta.env.VITE_LINGOFUSION_GATEWAY_URL ||
+    import.meta.env.VITE_LINGOFUSION_API_URL ||
+    "https://lingofusion-gateway.lingofusion-api.workers.dev",
+).replace(/\/$/, "");
+
+export type AuthProvider = "google" | "apple" | "guest";
 
 export type AuthUser = {
   id: string;
@@ -10,12 +17,15 @@ export type AuthUser = {
   avatar?: string;
   provider: AuthProvider;
   createdAt: string;
+  sessionToken?: string;
+  expiresAt?: number;
 };
 
-const AUTH_STORAGE_KEY = "lingofusion_auth_user_v1";
-const USERS_INDEX_KEY = "lingofusion_known_users_v1";
+export type AuthConfig = { googleClientId: string; appleClientId: string };
 
-const DEFAULT_GUEST_USER: AuthUser = {
+const AUTH_STORAGE_KEY = "lingofusion_auth_user_v2";
+
+const GUEST_USER: AuthUser = {
   id: "00000000-0000-4000-8000-000000000001",
   name: "Developer",
   email: "developer@lingofusion.dev",
@@ -46,167 +56,127 @@ function notifyAuth(user: AuthUser) {
 export function getCurrentUser(): AuthUser {
   try {
     const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
-    if (!raw) return DEFAULT_GUEST_USER;
+    if (!raw) return GUEST_USER;
     const parsed = JSON.parse(raw) as AuthUser;
-    if (parsed && typeof parsed.id === "string" && parsed.email) {
-      return parsed;
-    }
+    if (!parsed?.id || !parsed.email || !parsed.sessionToken) return GUEST_USER;
+    if (parsed.expiresAt && parsed.expiresAt < Date.now()) return GUEST_USER;
+    return parsed;
   } catch {
-    // fallback
-  }
-  return DEFAULT_GUEST_USER;
-}
-
-export function getKnownUsers(): AuthUser[] {
-  try {
-    const raw = window.localStorage.getItem(USERS_INDEX_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as AuthUser[];
-    if (Array.isArray(parsed)) {
-      return parsed.filter((u) => u.provider !== "guest");
-    }
-  } catch {
-    // fallback
-  }
-  return [];
-}
-
-function recordKnownUser(user: AuthUser) {
-  if (user.provider === "guest") return;
-  try {
-    const existing = getKnownUsers();
-    const updated = [user, ...existing.filter((u) => u.email.toLowerCase() !== user.email.toLowerCase())].slice(0, 8);
-    window.localStorage.setItem(USERS_INDEX_KEY, JSON.stringify(updated));
-  } catch {
-    // ignore
+    return GUEST_USER;
   }
 }
 
-export function setCurrentUser(user: AuthUser) {
-  window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
-  recordKnownUser(user);
+function setCurrentUser(user: AuthUser) {
+  if (user.provider === "guest") {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  } else {
+    window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
+  }
   notifyAuth(user);
-  window.dispatchEvent(new Event("lingofusion-auth-changed"));
 }
 
-// Decode standard Google Identity Services JWT credential payload
-export function parseJwtPayload(token: string): Record<string, unknown> | null {
-  try {
-    const base64Url = token.split(".")[1];
-    if (!base64Url) return null;
-    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split("")
-        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
-    );
-    return JSON.parse(jsonPayload) as Record<string, unknown>;
-  } catch {
-    return null;
+let configPromise: Promise<AuthConfig> | null = null;
+
+export function loadAuthConfig(): Promise<AuthConfig> {
+  if (!configPromise) {
+    configPromise = fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/auth/config`)
+      .then((res) => (res.ok ? res.json() : { googleClientId: "", appleClientId: "" }))
+      .then((cfg) => ({
+        googleClientId: String(cfg.googleClientId || import.meta.env.VITE_GOOGLE_CLIENT_ID || ""),
+        appleClientId: String(cfg.appleClientId || import.meta.env.VITE_APPLE_CLIENT_ID || ""),
+      }))
+      .catch(() => {
+        configPromise = null;
+        return {
+          googleClientId: String(import.meta.env.VITE_GOOGLE_CLIENT_ID || ""),
+          appleClientId: String(import.meta.env.VITE_APPLE_CLIENT_ID || ""),
+        };
+      });
   }
+  return configPromise;
 }
 
-// Authenticate via real Google Identity Services credential response
-export function signInWithGoogleCredential(credentialToken: string): AuthUser {
-  const payload = parseJwtPayload(credentialToken);
-  if (!payload || !payload.email) {
-    throw new Error("Invalid Google credential token");
-  }
+type SessionResponse = {
+  user: { id: string; name: string; email: string; avatar?: string | null; provider: "google" | "apple" };
+  sessionToken: string;
+  expiresAt: number;
+  message?: string;
+};
 
-  const email = String(payload.email).toLowerCase();
-  const name = String(payload.name || payload.given_name || email.split("@")[0]);
-  const avatar = typeof payload.picture === "string" ? payload.picture : undefined;
-  const sub = String(payload.sub || btoa(email).slice(0, 16));
-  const id = `usr_google_${sub}`;
+async function exchange(path: string, body: Record<string, unknown>): Promise<AuthUser> {
+  const res = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = (await res.json().catch(() => ({}))) as SessionResponse;
+  if (!res.ok) throw new Error(data.message || "Sign-in failed. Please try again.");
 
   const user: AuthUser = {
-    id,
-    name,
-    email,
-    avatar,
-    provider: "google",
+    id: data.user.id,
+    name: data.user.name,
+    email: data.user.email,
+    avatar: data.user.avatar || undefined,
+    provider: data.user.provider,
     createdAt: new Date().toISOString(),
+    sessionToken: data.sessionToken,
+    expiresAt: data.expiresAt,
   };
-
   setCurrentUser(user);
   return user;
 }
 
-// Sign in with user's actual Google Account
-export function signInWithGoogleAccount(emailInput: string, nameInput?: string, avatarUrl?: string): AuthUser {
-  const email = emailInput.trim().toLowerCase();
-  if (!email || !email.includes("@")) {
-    throw new Error("Valid Google Account email is required");
-  }
-
-  const rawName = nameInput?.trim() || email.split("@")[0].replace(/[._]/g, " ");
-  const name = rawName.charAt(0).toUpperCase() + rawName.slice(1);
-  const hash = btoa(email).replace(/[^a-zA-Z0-9]/g, "").slice(0, 16);
-  const id = `usr_google_${hash}`;
-
-  const user: AuthUser = {
-    id,
-    name,
-    email,
-    avatar: avatarUrl,
-    provider: "google",
-    createdAt: new Date().toISOString(),
-  };
-
-  setCurrentUser(user);
-  return user;
+/** Called with the ID token (credential) from Google Identity Services. */
+export function signInWithGoogleCredential(credential: string) {
+  return exchange("/api/auth/google", { credential });
 }
 
-// Sign in with user's actual Apple ID
-export function signInWithAppleAccount(emailInput: string, nameInput?: string): AuthUser {
-  const email = emailInput.trim().toLowerCase();
-  if (!email || !email.includes("@")) {
-    throw new Error("Valid Apple ID email is required");
+type AppleSignInResponse = {
+  authorization: { id_token: string };
+  user?: { name?: { firstName?: string; lastName?: string } };
+};
+
+declare global {
+  interface Window {
+    AppleID?: {
+      auth: {
+        init: (config: Record<string, unknown>) => void;
+        signIn: () => Promise<AppleSignInResponse>;
+      };
+    };
   }
-
-  const rawName = nameInput?.trim() || email.split("@")[0].replace(/[._]/g, " ");
-  const name = rawName.charAt(0).toUpperCase() + rawName.slice(1);
-  const hash = btoa(email).replace(/[^a-zA-Z0-9]/g, "").slice(0, 16);
-  const id = `usr_apple_${hash}`;
-
-  const user: AuthUser = {
-    id,
-    name,
-    email,
-    provider: "apple",
-    createdAt: new Date().toISOString(),
-  };
-
-  setCurrentUser(user);
-  return user;
 }
 
-// Sign in with user's actual Email
-export function signInWithEmail(emailInput: string, nameInput?: string): AuthUser {
-  const email = emailInput.trim().toLowerCase();
-  if (!email || !email.includes("@")) {
-    throw new Error("Valid email address is required");
-  }
+function loadAppleSdk(): Promise<void> {
+  if (window.AppleID) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js";
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Could not load Sign in with Apple."));
+    document.head.appendChild(script);
+  });
+}
 
-  const rawName = nameInput?.trim() || email.split("@")[0].replace(/[._]/g, " ");
-  const name = rawName.charAt(0).toUpperCase() + rawName.slice(1);
-  const hash = btoa(email).replace(/[^a-zA-Z0-9]/g, "").slice(0, 16);
-  const id = `usr_email_${hash}`;
-
-  const user: AuthUser = {
-    id,
-    name,
-    email,
-    provider: "email",
-    createdAt: new Date().toISOString(),
-  };
-
-  setCurrentUser(user);
-  return user;
+/** Opens Apple's official sign-in popup and exchanges the result for a session. */
+export async function signInWithApple(clientId: string): Promise<AuthUser> {
+  await loadAppleSdk();
+  const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+  window.AppleID!.auth.init({
+    clientId,
+    scope: "name email",
+    redirectURI: `${window.location.origin}${basePath}/`,
+    usePopup: true,
+  });
+  const result = await window.AppleID!.auth.signIn();
+  const first = result.user?.name?.firstName || "";
+  const last = result.user?.name?.lastName || "";
+  const name = `${first} ${last}`.trim();
+  return exchange("/api/auth/apple", { id_token: result.authorization.id_token, name });
 }
 
 export function signOut(): AuthUser {
-  setCurrentUser(DEFAULT_GUEST_USER);
-  return DEFAULT_GUEST_USER;
+  setCurrentUser(GUEST_USER);
+  return GUEST_USER;
 }

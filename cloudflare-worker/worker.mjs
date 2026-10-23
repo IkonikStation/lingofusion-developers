@@ -44,6 +44,118 @@ function calculateGrossDeposit(netDepositUsd) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// OAuth sign-in (Google Identity Services + Sign in with Apple)
+// ID tokens are verified server-side; the browser can never mint a session.
+// Config (Worker vars/secrets): GOOGLE_CLIENT_ID, APPLE_CLIENT_ID, SESSION_SECRET
+// ---------------------------------------------------------------------------
+const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
+
+function b64urlEncode(bytes) {
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function b64urlDecode(str) {
+  const pad = "=".repeat((4 - (str.length % 4)) % 4);
+  const bin = atob(str.replace(/-/g, "+").replace(/_/g, "/") + pad);
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+}
+
+function b64urlJson(str) {
+  return JSON.parse(new TextDecoder().decode(b64urlDecode(str)));
+}
+
+async function hmacKey(secret) {
+  return crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign", "verify"],
+  );
+}
+
+async function signSession(payload, secret) {
+  const body = b64urlEncode(new TextEncoder().encode(JSON.stringify(payload)));
+  const sig = await crypto.subtle.sign("HMAC", await hmacKey(secret), new TextEncoder().encode(body));
+  return `${body}.${b64urlEncode(new Uint8Array(sig))}`;
+}
+
+async function verifySession(token, secret) {
+  const [body, sig] = String(token || "").split(".");
+  if (!body || !sig) return null;
+  const ok = await crypto.subtle.verify(
+    "HMAC",
+    await hmacKey(secret),
+    b64urlDecode(sig),
+    new TextEncoder().encode(body),
+  );
+  if (!ok) return null;
+  const payload = b64urlJson(body);
+  if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) return null;
+  return payload;
+}
+
+async function verifyGoogleIdToken(idToken, clientId) {
+  const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+  if (!res.ok) throw new Error("Google rejected the sign-in token.");
+  const info = await res.json();
+  if (info.aud !== clientId) throw new Error("Google token was issued for a different app.");
+  if (!["accounts.google.com", "https://accounts.google.com"].includes(info.iss)) throw new Error("Invalid Google token issuer.");
+  if (Number(info.exp) < Math.floor(Date.now() / 1000)) throw new Error("Google token expired.");
+  if (String(info.email_verified) !== "true") throw new Error("Your Google email is not verified.");
+  return { sub: info.sub, email: info.email, name: info.name || info.given_name || info.email, picture: info.picture };
+}
+
+async function verifyAppleIdToken(idToken, clientId) {
+  const [h, p, s] = String(idToken || "").split(".");
+  if (!h || !p || !s) throw new Error("Malformed Apple token.");
+  let header;
+  let claims;
+  try {
+    header = b64urlJson(h);
+    claims = b64urlJson(p);
+  } catch {
+    throw new Error("Malformed Apple token.");
+  }
+  const jwks = await (await fetch("https://appleid.apple.com/auth/keys")).json();
+  const jwk = (jwks.keys || []).find((k) => k.kid === header.kid);
+  if (!jwk) throw new Error("Unknown Apple signing key.");
+  const key = await crypto.subtle.importKey(
+    "jwk",
+    jwk,
+    { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+    false,
+    ["verify"],
+  );
+  const valid = await crypto.subtle.verify(
+    "RSASSA-PKCS1-v1_5",
+    key,
+    b64urlDecode(s),
+    new TextEncoder().encode(`${h}.${p}`),
+  );
+  if (!valid) throw new Error("Apple token signature is invalid.");
+  if (claims.iss !== "https://appleid.apple.com") throw new Error("Invalid Apple token issuer.");
+  if (claims.aud !== clientId) throw new Error("Apple token was issued for a different app.");
+  if (Number(claims.exp) < Math.floor(Date.now() / 1000)) throw new Error("Apple token expired.");
+  return { sub: claims.sub, email: claims.email || `${claims.sub}@privaterelay.appleid.com` };
+}
+
+async function issueSession(env, provider, identity, nameOverride) {
+  const now = Math.floor(Date.now() / 1000);
+  const user = {
+    id: `usr_${provider}_${identity.sub}`,
+    provider,
+    email: String(identity.email).toLowerCase(),
+    name: nameOverride || identity.name || String(identity.email).split("@")[0],
+    avatar: identity.picture || null,
+  };
+  const token = await signSession({ ...user, iat: now, exp: now + SESSION_TTL_SECONDS }, env.SESSION_SECRET);
+  return { user, sessionToken: token, expiresAt: (now + SESSION_TTL_SECONDS) * 1000 };
+}
+
 export default {
   async fetch(request, env) {
     const requestOrigin = request.headers.get("origin") || "";
@@ -271,6 +383,53 @@ export default {
           audio_url: `data:audio/mpeg;base64,${base64}`,
           chars: input.length,
         });
+      }
+
+      // 5. OAuth: public client config (client IDs are public identifiers)
+      if (request.method === "GET" && path === "/api/auth/config") {
+        return jsonResponse({
+          googleClientId: env.GOOGLE_CLIENT_ID || "",
+          appleClientId: env.APPLE_CLIENT_ID || "",
+        }, 200, requestOrigin);
+      }
+
+      // 6. OAuth: exchange a Google ID token for a LingoFusion session
+      if (request.method === "POST" && path === "/api/auth/google") {
+        if (!env.GOOGLE_CLIENT_ID || !env.SESSION_SECRET) {
+          return jsonResponse({ error: "google_not_configured", message: "Google sign-in is not configured on the gateway yet." }, 503, requestOrigin);
+        }
+        const body = await request.json().catch(() => ({}));
+        try {
+          const identity = await verifyGoogleIdToken(String(body.credential || ""), env.GOOGLE_CLIENT_ID);
+          return jsonResponse(await issueSession(env, "google", identity), 200, requestOrigin);
+        } catch (err) {
+          return jsonResponse({ error: "google_auth_failed", message: err.message }, 401, requestOrigin);
+        }
+      }
+
+      // 7. OAuth: exchange an Apple ID token for a LingoFusion session
+      if (request.method === "POST" && path === "/api/auth/apple") {
+        if (!env.APPLE_CLIENT_ID || !env.SESSION_SECRET) {
+          return jsonResponse({ error: "apple_not_configured", message: "Apple sign-in is not configured on the gateway yet." }, 503, requestOrigin);
+        }
+        const body = await request.json().catch(() => ({}));
+        try {
+          const identity = await verifyAppleIdToken(String(body.id_token || ""), env.APPLE_CLIENT_ID);
+          // Apple only sends the user's name on the very first authorization.
+          const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : undefined;
+          return jsonResponse(await issueSession(env, "apple", identity, name), 200, requestOrigin);
+        } catch (err) {
+          return jsonResponse({ error: "apple_auth_failed", message: err.message }, 401, requestOrigin);
+        }
+      }
+
+      // 8. OAuth: validate an existing session
+      if (request.method === "GET" && path === "/api/auth/me") {
+        if (!env.SESSION_SECRET) return jsonResponse({ error: "not_configured" }, 503, requestOrigin);
+        const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+        const session = await verifySession(token, env.SESSION_SECRET).catch(() => null);
+        if (!session) return jsonResponse({ error: "invalid_session" }, 401, requestOrigin);
+        return jsonResponse({ user: { id: session.id, provider: session.provider, email: session.email, name: session.name, avatar: session.avatar } }, 200, requestOrigin);
       }
 
       return jsonResponse({ error: "not_found" }, 404);
