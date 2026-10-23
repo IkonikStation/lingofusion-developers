@@ -1050,9 +1050,25 @@ export function PlaygroundPage({
         </div>
       )}
 
-      {/* Desktop & Mobile Add Funds Inline Card (no blackout backdrop box) */}
-      {depositModalOpen && (
-        <div className="mt-5 overflow-hidden rounded-2xl border border-neutral-200/90 bg-white font-sans shadow-sm dark:border-white/10 dark:bg-neutral-900">
+      {/* Add Funds Modal Pop-up with Full-Screen Blurred Dark Backdrop (Portaled to document.body) */}
+      {depositModalOpen &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+            {/* Full viewport dark out-of-focus backdrop covering Header, Sidebar and entire browser page */}
+            <div
+              className="fixed inset-0 bg-neutral-950/60 backdrop-blur-sm transition-opacity"
+              onClick={() => {
+                if (!depositBusy) setDepositModalOpen(false);
+              }}
+            />
+
+            {/* Modal Box Centered in the Middle */}
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="relative z-10 max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-neutral-200/90 bg-white font-sans shadow-2xl transition-all animate-in fade-in zoom-in-95 duration-150 dark:border-white/10 dark:bg-neutral-900"
+            >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-neutral-200/80 px-6 py-4 dark:border-white/10 sm:px-7">
             <div className="flex items-center gap-3">
@@ -1405,8 +1421,10 @@ export function PlaygroundPage({
               </p>
             )}
           </div>
-        </div>
-      )}
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {/* Error Alert */}
       {errorBanner && (
