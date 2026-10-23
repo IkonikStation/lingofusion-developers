@@ -1467,41 +1467,6 @@ export function PlaygroundPage({
             >
               {/* Left Column: Presets + Custom Input + Info/Gift fields */}
               <div className="space-y-4 p-6 sm:p-7">
-                {depositTab === "self" && (
-                  <div className="space-y-3.5 rounded-2xl border border-neutral-200/90 bg-neutral-50/80 p-4 sm:p-5 dark:border-white/10 dark:bg-white/[0.03]">
-                    <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-                      <div>
-                        <label className="block text-xs font-semibold text-neutral-800 dark:text-neutral-200">
-                          Account Email
-                        </label>
-                        <div className="mt-1 flex h-10 w-full items-center rounded-xl border border-neutral-200 bg-white px-3 text-xs font-medium text-neutral-900 dark:border-white/15 dark:bg-neutral-950 dark:text-neutral-100">
-                          <span className="truncate">{currentUserEmail || "developer@lingofusion.dev"}</span>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-neutral-800 dark:text-neutral-200">
-                          Current Balance
-                        </label>
-                        <div className="mt-1 flex h-10 w-full items-center justify-between rounded-xl border border-neutral-200 bg-white px-3 text-xs font-semibold text-neutral-900 dark:border-white/15 dark:bg-neutral-950 dark:text-neutral-100">
-                          <span className="font-sans text-[11px] font-normal text-neutral-500 dark:text-neutral-400">Available</span>
-                          <span className="font-sans tabular-nums font-bold text-emerald-600 dark:text-emerald-400">
-                            ${formatUsd(liveBalance)} USD
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="rounded-xl border border-neutral-200/70 bg-white/70 p-3 text-xs text-neutral-600 dark:border-white/10 dark:bg-neutral-950/60 dark:text-neutral-300">
-                      <div className="flex items-center gap-1.5 font-semibold text-neutral-900 dark:text-white">
-                        <Sparkles className="h-3.5 w-3.5 text-neutral-700 dark:text-neutral-300" />
-                        <span>Pay-as-you-go Developer Credits</span>
-                      </div>
-                      <p className="mt-1 text-[11px] leading-relaxed text-neutral-500 dark:text-neutral-400">
-                        100% of deposited funds apply directly to your account with zero subscription requirements, zero monthly minimums, and no expiration date.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
                 {depositTab === "gift" && (
                   <div className="space-y-3.5 rounded-2xl border border-purple-200/80 bg-purple-50/50 p-4 sm:p-5 dark:border-purple-500/20 dark:bg-purple-500/[0.05]">
                     <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
@@ -1619,14 +1584,15 @@ export function PlaygroundPage({
 
                 {/* Balance Preview or Gift Notice */}
                 {depositTab === "self" ? (
-                  <div className="rounded-xl border border-neutral-200/80 bg-neutral-50/70 p-3 text-xs text-neutral-900 dark:border-white/10 dark:bg-white/[0.03] dark:text-neutral-200">
-                    <p className="flex items-center gap-1.5 font-semibold">
-                      <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                      <span>Instant balance top-up for your account</span>
-                    </p>
-                    <p className="mt-0.5 text-[11px] text-neutral-500 dark:text-neutral-400">
-                      Credits are deposited immediately upon successful Stripe checkout and can be used across all models in the Playground and API.
-                    </p>
+                  <div className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-neutral-50/80 px-4 py-3 text-xs dark:border-white/10 dark:bg-white/[0.03]">
+                    <span className="font-medium text-neutral-600 dark:text-neutral-400">Balance after deposit</span>
+                    <div className="flex items-center gap-2 font-sans tabular-nums">
+                      <span className="text-neutral-400 dark:text-neutral-500">${formatUsd(liveBalance)}</span>
+                      <span className="text-neutral-400">→</span>
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                        ${formatUsd(liveBalance + depositBreakdown.netDepositedUsd)} USD
+                      </span>
+                    </div>
                   </div>
                 ) : (
                   <div className="rounded-xl border border-purple-200/70 bg-purple-50/40 p-3 text-xs text-purple-900 dark:border-purple-500/20 dark:bg-purple-500/[0.04] dark:text-purple-200">
@@ -1641,53 +1607,6 @@ export function PlaygroundPage({
               {/* Right Column: Order Summary & Checkout CTA */}
               <div className="flex flex-col justify-between bg-neutral-50/60 p-6 dark:bg-white/[0.02] sm:p-7">
                 <div>
-                  {/* Account Balance Card Preview (for buying for yourself - NOT purple) */}
-                  {depositTab === "self" && (
-                    <div className="mb-5 overflow-hidden rounded-2xl border border-neutral-300/80 bg-gradient-to-br from-neutral-900 via-neutral-950 to-neutral-900 p-4 text-white shadow-lg dark:border-white/15">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 backdrop-blur-xs">
-                            <Wallet className="h-4 w-4 text-neutral-300" />
-                          </div>
-                          <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-300">
-                            Developer Credit Card
-                          </span>
-                        </div>
-                        <span className="rounded-full border border-emerald-500/30 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
-                          Active Account
-                        </span>
-                      </div>
-
-                      <div className="mt-3.5">
-                        <div className="flex items-baseline justify-between">
-                          <div className="font-sans text-2xl font-extrabold tracking-tight text-white">
-                            +${formatUsd(depositBreakdown.netDepositedUsd)} USD
-                          </div>
-                          <div className="text-right font-sans text-xs text-neutral-400">
-                            <span>New Balance: </span>
-                            <span className="font-bold text-emerald-400">
-                              ${formatUsd(liveBalance + depositBreakdown.netDepositedUsd)}
-                            </span>
-                          </div>
-                        </div>
-                        <p className="mt-1 text-[11px] text-neutral-400">
-                          Account: <span className="font-medium text-white">{currentUserEmail || "developer@lingofusion.dev"}</span>
-                        </p>
-                      </div>
-
-                      <div className="mt-3 rounded-xl bg-white/[0.07] p-2.5 text-[11px] leading-relaxed text-neutral-300 backdrop-blur-xs">
-                        <div className="flex items-center justify-between font-mono text-[10px] text-neutral-400">
-                          <span>TIER: INSTANT API & PLAYGROUND</span>
-                          <span>NO EXPIRATION</span>
-                        </div>
-                        <div className="mt-1 flex items-center justify-between text-neutral-200">
-                          <span>Nano • Lite • Luna • Sol • Pro • Ultra</span>
-                          <span className="font-semibold text-emerald-400">✓ Instant Access</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
                   {/* Gift Card Preview (for gifting someone - purple gradient) */}
                   {depositTab === "gift" && (
                     <div className="mb-5 overflow-hidden rounded-2xl border border-purple-200/90 bg-gradient-to-br from-purple-900 via-purple-950 to-neutral-950 p-4 text-white shadow-lg dark:border-purple-500/30">
