@@ -1794,54 +1794,25 @@ export function PlaygroundPage({
 
                 {mode === "text" && (
                   <>
-                    {/* Speed / Tier Toggle (Fast & Ultrafast) */}
+                    {/* Speed / Tier Dropdown (Standard, Fast & Ultrafast) */}
                     {activeModel.model_id !== "ExplainFusion" && activeModel.model_id !== "LingoFusion Explain" && (
-                      <div
-                        role="group"
-                        aria-label="Speed mode"
-                        className="inline-flex rounded-xl border border-neutral-200 bg-white p-0.5 dark:border-white/15 dark:bg-neutral-950"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => setSpeedMode("default")}
-                          className={`inline-flex h-8 items-center rounded-lg px-2.5 text-xs font-semibold transition ${
-                            speedMode === "default"
-                              ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
-                              : "text-neutral-500 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white"
-                          }`}
+                      <div className="flex items-center gap-1.5">
+                        <select
+                          value={
+                            speedMode === "ultrafast" && !["LingoFusion Pro", "LingoFusion Ultra"].includes(activeModel.model_id)
+                              ? "default"
+                              : speedMode
+                          }
+                          onChange={(e) => setSpeedMode(e.target.value as "default" | "fast" | "ultrafast")}
+                          aria-label="Processing speed"
+                          className="h-8 rounded-xl border border-neutral-200 bg-white px-2.5 text-xs font-semibold text-neutral-900 outline-none transition focus:border-neutral-400 dark:border-white/15 dark:bg-neutral-950 dark:text-white"
                         >
-                          Standard
-                        </button>
-
-                        <button
-                          type="button"
-                          title="1.5× speed for 1.5× price (Fast mode)"
-                          onClick={() => setSpeedMode("fast")}
-                          className={`inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs font-semibold transition ${
-                            speedMode === "fast"
-                              ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
-                              : "text-neutral-500 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white"
-                          }`}
-                        >
-                          <Zap className="h-3 w-3 text-amber-500" />
-                          <span>Fast (1.5×)</span>
-                        </button>
-
-                        {["LingoFusion Pro", "LingoFusion Ultra"].includes(activeModel.model_id) && (
-                          <button
-                            type="button"
-                            title="6× speed for 4× price (Ultrafast mode)"
-                            onClick={() => setSpeedMode("ultrafast")}
-                            className={`inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs font-semibold transition ${
-                              speedMode === "ultrafast"
-                                ? "bg-purple-600 text-white shadow-xs"
-                                : "text-neutral-500 hover:text-purple-600 dark:text-neutral-400 dark:hover:text-purple-400"
-                            }`}
-                          >
-                            <Gauge className="h-3 w-3 text-purple-400" />
-                            <span>Ultrafast (6×)</span>
-                          </button>
-                        )}
+                          <option value="default">Standard speed</option>
+                          <option value="fast">Fast (1.5× speed · 1.5× price)</option>
+                          {["LingoFusion Pro", "LingoFusion Ultra"].includes(activeModel.model_id) && (
+                            <option value="ultrafast">Ultrafast (6× speed · 4× price)</option>
+                          )}
+                        </select>
                       </div>
                     )}
 
