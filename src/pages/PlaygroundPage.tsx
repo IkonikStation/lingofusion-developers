@@ -151,7 +151,8 @@ export function PlaygroundPage({
   const [translatedOutput, setTranslatedOutput] = useState<string>("");
   const [latestRun, setLatestRun] = useState<TranslationRun | null>(null);
 
-  // Model-specific reasoning toggles (for LingoFusion Pro & LingoFusion Ultra) & Web Search
+  // Speed / pricing mode for text models: "default" | "fast" | "ultrafast"
+  const [speedMode, setSpeedMode] = useState<"default" | "fast" | "ultrafast">("default");
   const [proReasoningEnabled, setProReasoningEnabled] = useState<boolean>(false);
   const [ultraMaxEnabled, setUltraMaxEnabled] = useState<boolean>(false);
   const [allowWebSearch, setAllowWebSearch] = useState<boolean>(false);
@@ -455,6 +456,13 @@ export function PlaygroundPage({
 
     const webSearchFee = allowWebSearch ? getWebSearchCallRateUsd(activeModel.model_id) : 0;
 
+    const effectiveSpeedMode =
+      speedMode === "ultrafast" && ["LingoFusion Pro", "LingoFusion Ultra"].includes(activeModel.model_id)
+        ? "ultrafast"
+        : speedMode === "fast" && ["LingoFusion Nano", "LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(activeModel.model_id)
+        ? "fast"
+        : "default";
+
     const payload: Record<string, unknown> = {
       model: activeModel.model_id,
       from_language: fromLanguage,
@@ -462,6 +470,7 @@ export function PlaygroundPage({
       input: currentInput,
       messages: [{ role: "user", content: currentInput }],
       stream: streamToggle,
+      pricing_mode: effectiveSpeedMode,
       ...(allowWebSearch ? { allow_web_search: true } : {}),
       ...(activeModel.model_id === "LingoFusion Pro" && proReasoningEnabled
         ? { reasoning_enabled: true, reasoning_effort: "medium" }
@@ -599,11 +608,12 @@ export function PlaygroundPage({
               if (typeof deltaContent === "string" && deltaContent.length > 0) {
                 accumulatedText += deltaContent;
                 completionTokens += 1;
+                const speedMultiplier = effectiveSpeedMode === "ultrafast" ? 4 : effectiveSpeedMode === "fast" ? 1.5 : 1;
                 const liveCost = Number(
                   (
                     webSearchFee +
-                    promptTokens * (activeModel.input_per_million / 1_000_000) +
-                    completionTokens * (activeModel.output_per_million / 1_000_000)
+                    promptTokens * ((activeModel.input_per_million * speedMultiplier) / 1_000_000) +
+                    completionTokens * ((activeModel.output_per_million * speedMultiplier) / 1_000_000)
                   ).toFixed(6),
                 );
                 setTranslatedOutput(accumulatedText);
@@ -1783,10 +1793,63 @@ export function PlaygroundPage({
                 />
 
                 {mode === "text" && (
-                  <span className="hidden font-sans tabular-nums text-[11px] text-neutral-500 md:inline dark:text-neutral-400">
-                    ${activeModel.input_per_million.toFixed(2)}/M in · $
-                    {activeModel.output_per_million.toFixed(2)}/M out
-                  </span>
+                  <>
+                    {/* Speed / Tier Toggle (Fast & Ultrafast) */}
+                    {activeModel.model_id !== "ExplainFusion" && activeModel.model_id !== "LingoFusion Explain" && (
+                      <div
+                        role="group"
+                        aria-label="Speed mode"
+                        className="inline-flex rounded-xl border border-neutral-200 bg-white p-0.5 dark:border-white/15 dark:bg-neutral-950"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setSpeedMode("default")}
+                          className={`inline-flex h-8 items-center rounded-lg px-2.5 text-xs font-semibold transition ${
+                            speedMode === "default"
+                              ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
+                              : "text-neutral-500 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white"
+                          }`}
+                        >
+                          Standard
+                        </button>
+
+                        <button
+                          type="button"
+                          title="1.5× speed for 1.5× price (Fast mode)"
+                          onClick={() => setSpeedMode("fast")}
+                          className={`inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs font-semibold transition ${
+                            speedMode === "fast"
+                              ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
+                              : "text-neutral-500 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white"
+                          }`}
+                        >
+                          <Zap className="h-3 w-3 text-amber-500" />
+                          <span>Fast (1.5×)</span>
+                        </button>
+
+                        {["LingoFusion Pro", "LingoFusion Ultra"].includes(activeModel.model_id) && (
+                          <button
+                            type="button"
+                            title="6× speed for 4× price (Ultrafast mode)"
+                            onClick={() => setSpeedMode("ultrafast")}
+                            className={`inline-flex h-8 items-center gap-1 rounded-lg px-2.5 text-xs font-semibold transition ${
+                              speedMode === "ultrafast"
+                                ? "bg-purple-600 text-white shadow-xs"
+                                : "text-neutral-500 hover:text-purple-600 dark:text-neutral-400 dark:hover:text-purple-400"
+                            }`}
+                          >
+                            <Gauge className="h-3 w-3 text-purple-400" />
+                            <span>Ultrafast (6×)</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    <span className="hidden font-sans tabular-nums text-[11px] text-neutral-500 md:inline dark:text-neutral-400">
+                      ${(activeModel.input_per_million * (speedMode === "ultrafast" ? 4 : speedMode === "fast" ? 1.5 : 1)).toFixed(2)}/M in · $
+                      {(activeModel.output_per_million * (speedMode === "ultrafast" ? 4 : speedMode === "fast" ? 1.5 : 1)).toFixed(2)}/M out
+                    </span>
+                  </>
                 )}
                 {mode === "voice" && (
                   <>

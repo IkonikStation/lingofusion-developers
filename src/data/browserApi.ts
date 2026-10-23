@@ -669,6 +669,11 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
   try {
     const { endpoint } = decodeUpstreamGateway();
     const effort = routing.reasoningEffort === "max" ? "xhigh" : routing.reasoningEffort;
+    const pricingMode = String(body.pricing_mode || "default").toLowerCase();
+    const isUltrafast = pricingMode === "ultrafast" && ["LingoFusion Pro", "LingoFusion Ultra"].includes(modelPricing.model_id);
+    const isFast = pricingMode === "fast" && ["LingoFusion Nano", "LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(modelPricing.model_id);
+    const serviceTier = isUltrafast ? "ultrafast" : isFast ? "fast" : undefined;
+
     const upstreamRes = await fetch(endpoint, {
       method: "POST",
       headers: {
@@ -693,6 +698,7 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
           },
         ],
         ...(effort ? { reasoning_effort: effort } : {}),
+        ...(serviceTier ? { service_tier: serviceTier } : {}),
         stream: false,
       }),
     });
@@ -723,7 +729,9 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
     completionTokens = Math.max(1, tokenEstimate(replyText));
   }
 
-  const tokenCostUsd = calculateTokenCost(promptTokens, completionTokens, modelPricing.input_per_million, modelPricing.output_per_million);
+  const pricingMode = String(body.pricing_mode || "default").toLowerCase();
+  const priceMultiplier = pricingMode === "ultrafast" ? 4 : pricingMode === "fast" ? 1.5 : 1;
+  const tokenCostUsd = calculateTokenCost(promptTokens, completionTokens, modelPricing.input_per_million * priceMultiplier, modelPricing.output_per_million * priceMultiplier);
   const costUsd = Number((tokenCostUsd + (routing.webSearchCallFeeUsd || 0)).toFixed(6));
 
   applyCharge(state, costUsd);
@@ -889,6 +897,10 @@ export async function streamChatCompletionBrowser(
 
   const { endpoint } = decodeUpstreamGateway();
   const effort = routing.reasoningEffort === "max" ? "xhigh" : routing.reasoningEffort;
+  const pricingMode = String(body.pricing_mode || "default").toLowerCase();
+  const isUltrafast = pricingMode === "ultrafast" && ["LingoFusion Pro", "LingoFusion Ultra"].includes(modelPricing.model_id);
+  const isFast = pricingMode === "fast" && ["LingoFusion Nano", "LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(modelPricing.model_id);
+  const serviceTier = isUltrafast ? "ultrafast" : isFast ? "fast" : undefined;
 
   const upstreamRes = await fetch(endpoint, {
     method: "POST",
@@ -916,6 +928,7 @@ export async function streamChatCompletionBrowser(
       stream: true,
       stream_options: { include_usage: true },
       ...(effort ? { reasoning_effort: effort } : {}),
+      ...(serviceTier ? { service_tier: serviceTier } : {}),
     }),
     signal,
   });
