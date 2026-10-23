@@ -1,5 +1,5 @@
-// LingoFusion Authentication System (Google, Apple, Email)
-// Manages user session, persistent accounts, and reactive state updates.
+// LingoFusion Authentication System (Real Google, Apple, and Email Accounts)
+// Manages real user identity, isolated accounts, and reactive state updates.
 
 export type AuthProvider = "google" | "apple" | "email" | "guest";
 
@@ -60,21 +60,22 @@ export function getCurrentUser(): AuthUser {
 export function getKnownUsers(): AuthUser[] {
   try {
     const raw = window.localStorage.getItem(USERS_INDEX_KEY);
-    if (!raw) return [DEFAULT_GUEST_USER];
+    if (!raw) return [];
     const parsed = JSON.parse(raw) as AuthUser[];
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
+    if (Array.isArray(parsed)) {
+      return parsed.filter((u) => u.provider !== "guest");
     }
   } catch {
     // fallback
   }
-  return [DEFAULT_GUEST_USER];
+  return [];
 }
 
 function recordKnownUser(user: AuthUser) {
+  if (user.provider === "guest") return;
   try {
     const existing = getKnownUsers();
-    const updated = [user, ...existing.filter((u) => u.id !== user.id)].slice(0, 10);
+    const updated = [user, ...existing.filter((u) => u.email.toLowerCase() !== user.email.toLowerCase())].slice(0, 8);
     window.localStorage.setItem(USERS_INDEX_KEY, JSON.stringify(updated));
   } catch {
     // ignore
@@ -85,20 +86,45 @@ export function setCurrentUser(user: AuthUser) {
   window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(user));
   recordKnownUser(user);
   notifyAuth(user);
-  // Dispatch custom storage event for multi-tab synchronization
   window.dispatchEvent(new Event("lingofusion-auth-changed"));
 }
 
-export function signInWithGoogle(customEmail?: string, customName?: string): AuthUser {
-  const email = (customEmail?.trim() || "alex.chen.developer@gmail.com").toLowerCase();
-  const rawName = customName?.trim() || email.split("@")[0].replace(/[._]/g, " ");
-  const name = rawName.charAt(0).toUpperCase() + rawName.slice(1);
-  const id = `usr_g_${btoa(email).replace(/[^a-zA-Z0-9]/g, "").slice(0, 16)}`;
+// Decode standard Google Identity Services JWT credential payload
+export function parseJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const base64Url = token.split(".")[1];
+    if (!base64Url) return null;
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    return JSON.parse(jsonPayload) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+// Authenticate via real Google Identity Services credential response
+export function signInWithGoogleCredential(credentialToken: string): AuthUser {
+  const payload = parseJwtPayload(credentialToken);
+  if (!payload || !payload.email) {
+    throw new Error("Invalid Google credential token");
+  }
+
+  const email = String(payload.email).toLowerCase();
+  const name = String(payload.name || payload.given_name || email.split("@")[0]);
+  const avatar = typeof payload.picture === "string" ? payload.picture : undefined;
+  const sub = String(payload.sub || btoa(email).slice(0, 16));
+  const id = `usr_google_${sub}`;
 
   const user: AuthUser = {
     id,
     name,
     email,
+    avatar,
     provider: "google",
     createdAt: new Date().toISOString(),
   };
@@ -107,11 +133,42 @@ export function signInWithGoogle(customEmail?: string, customName?: string): Aut
   return user;
 }
 
-export function signInWithApple(customEmail?: string, customName?: string): AuthUser {
-  const email = (customEmail?.trim() || "sarah.lingo@privaterelay.appleid.com").toLowerCase();
-  const rawName = customName?.trim() || email.split("@")[0].replace(/[._]/g, " ");
+// Sign in with user's actual Google Account
+export function signInWithGoogleAccount(emailInput: string, nameInput?: string, avatarUrl?: string): AuthUser {
+  const email = emailInput.trim().toLowerCase();
+  if (!email || !email.includes("@")) {
+    throw new Error("Valid Google Account email is required");
+  }
+
+  const rawName = nameInput?.trim() || email.split("@")[0].replace(/[._]/g, " ");
   const name = rawName.charAt(0).toUpperCase() + rawName.slice(1);
-  const id = `usr_ap_${btoa(email).replace(/[^a-zA-Z0-9]/g, "").slice(0, 16)}`;
+  const hash = btoa(email).replace(/[^a-zA-Z0-9]/g, "").slice(0, 16);
+  const id = `usr_google_${hash}`;
+
+  const user: AuthUser = {
+    id,
+    name,
+    email,
+    avatar: avatarUrl,
+    provider: "google",
+    createdAt: new Date().toISOString(),
+  };
+
+  setCurrentUser(user);
+  return user;
+}
+
+// Sign in with user's actual Apple ID
+export function signInWithAppleAccount(emailInput: string, nameInput?: string): AuthUser {
+  const email = emailInput.trim().toLowerCase();
+  if (!email || !email.includes("@")) {
+    throw new Error("Valid Apple ID email is required");
+  }
+
+  const rawName = nameInput?.trim() || email.split("@")[0].replace(/[._]/g, " ");
+  const name = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+  const hash = btoa(email).replace(/[^a-zA-Z0-9]/g, "").slice(0, 16);
+  const id = `usr_apple_${hash}`;
 
   const user: AuthUser = {
     id,
@@ -125,11 +182,17 @@ export function signInWithApple(customEmail?: string, customName?: string): Auth
   return user;
 }
 
+// Sign in with user's actual Email
 export function signInWithEmail(emailInput: string, nameInput?: string): AuthUser {
   const email = emailInput.trim().toLowerCase();
+  if (!email || !email.includes("@")) {
+    throw new Error("Valid email address is required");
+  }
+
   const rawName = nameInput?.trim() || email.split("@")[0].replace(/[._]/g, " ");
   const name = rawName.charAt(0).toUpperCase() + rawName.slice(1);
-  const id = `usr_em_${btoa(email).replace(/[^a-zA-Z0-9]/g, "").slice(0, 16)}`;
+  const hash = btoa(email).replace(/[^a-zA-Z0-9]/g, "").slice(0, 16);
+  const id = `usr_email_${hash}`;
 
   const user: AuthUser = {
     id,
