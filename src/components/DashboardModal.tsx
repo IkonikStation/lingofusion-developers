@@ -1,18 +1,24 @@
 import {
   Activity,
+  ArrowDownRight,
+  ArrowUpRight,
+  BarChart3,
   Bell,
   ClipboardCopy,
   CreditCard,
   Download,
   FileText,
   KeyRound,
+  LogIn,
   Music,
   Plus,
   RefreshCw,
   ShieldCheck,
+  Wallet,
   X,
 } from "lucide-react";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import type { AuthUser } from "../data/auth";
 import { musicModels, textModelsByPricingMode, webSearchPricing } from "../data/pricing";
 import type { TextPricingMode } from "../data/pricing";
 import { playgroundLanguages } from "../data/playgroundLanguages";
@@ -26,6 +32,9 @@ type DashboardModalProps = {
   tc: (text: string) => string;
   onClose: () => void;
   onNotify: (message: string) => void;
+  initialTab?: string;
+  currentUser?: AuthUser;
+  onOpenAuth?: () => void;
 };
 
 const DashboardTextContext = createContext<(text: string) => string>((text) => text);
@@ -94,6 +103,22 @@ type TokenizerResult = {
 };
 
 type DashboardData = {
+  user?: {
+    id: string;
+    email: string;
+    balance_usd: number;
+    created_at: string;
+  };
+  usageLedger?: Array<{
+    id: string;
+    user_id: string;
+    model_id: string;
+    prompt_tokens: number;
+    completion_tokens: number;
+    cost_usd: number;
+    source: string;
+    created_at: string;
+  }>;
   account: {
     paidBalance: number;
     rewardBalance: number;
@@ -148,15 +173,16 @@ const permissionScopes = [
 
 const tabs = [
   "Overview",
-  "Playground",
-  "Tokenizer",
-  "Projects",
   "API Keys",
-  "Usage",
-  "Request Logs",
+  "Spend Tracking",
   "Billing",
+  "Usage",
+  "Playground",
+  "Request Logs",
   "Auto-Recharge",
   "Rewards",
+  "Tokenizer",
+  "Projects",
   "Documentation",
   "SDKs",
   "Notifications",
@@ -251,9 +277,16 @@ function downloadCsv(filename: string, rows: Record<string, string | number | bo
   URL.revokeObjectURL(url);
 }
 
-export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
+export function DashboardModal({
+  tc,
+  onClose,
+  onNotify,
+  initialTab,
+  currentUser,
+  onOpenAuth,
+}: DashboardModalProps) {
   const browserMode = shouldUseBrowserApi();
-  const [tab, setTab] = useState("Overview");
+  const [tab, setTab] = useState(initialTab || "Overview");
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [createdSecret, setCreatedSecret] = useState("");
@@ -373,6 +406,30 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
       progress: Math.min(100, (lifetimeSpend / next[0]) * 100),
     };
   }, [data?.account.lifetimeSpend]);
+
+  const modelSpendList = useMemo(() => {
+    const map = new Map<string, { modelId: string; requests: number; promptTokens: number; completionTokens: number; cost: number }>();
+    if (data?.usageLedger && data.usageLedger.length > 0) {
+      data.usageLedger.forEach((entry) => {
+        const item = map.get(entry.model_id) || { modelId: entry.model_id, requests: 0, promptTokens: 0, completionTokens: 0, cost: 0 };
+        item.requests += 1;
+        item.promptTokens += entry.prompt_tokens || 0;
+        item.completionTokens += entry.completion_tokens || 0;
+        item.cost += entry.cost_usd || 0;
+        map.set(entry.model_id, item);
+      });
+    } else if (data?.requestLogs && data.requestLogs.length > 0) {
+      data.requestLogs.forEach((log) => {
+        const item = map.get(log.model) || { modelId: log.model, requests: 0, promptTokens: 0, completionTokens: 0, cost: 0 };
+        item.requests += 1;
+        item.promptTokens += log.inputTokens || 0;
+        item.completionTokens += log.outputTokens || 0;
+        item.cost += log.cost || 0;
+        map.set(log.model, item);
+      });
+    }
+    return Array.from(map.values()).sort((a, b) => b.cost - a.cost);
+  }, [data?.usageLedger, data?.requestLogs]);
 
   const updateDashboard = (dashboard: DashboardData) => {
     setData(dashboard);
@@ -912,6 +969,228 @@ export function DashboardModal({ tc, onClose, onNotify }: DashboardModalProps) {
                     ) : (
                       <EmptyState title="No API keys yet" detail="Create a project, then create a scoped API key for it." />
                     )}
+                  </Panel>
+                )}
+
+                {tab === "Spend Tracking" && (
+                  <Panel
+                    title="Spend Tracking & Analytics"
+                    description="Real-time breakdown of your API consumption, model expenditures, and balance deductions."
+                  >
+                    {/* User Account Scope Banner */}
+                    <div className="mb-6 flex flex-col gap-3 rounded-xl border border-neutral-200 bg-neutral-50/70 p-4 dark:border-white/10 dark:bg-white/[0.02] sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-neutral-900 font-bold text-white dark:bg-white dark:text-neutral-950">
+                          {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : "D"}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-neutral-950 dark:text-white">
+                              {currentUser?.name || "Developer Account"}
+                            </span>
+                            <span className="rounded-full bg-neutral-200/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-neutral-700 dark:bg-white/10 dark:text-neutral-300">
+                              {currentUser?.provider === "guest" ? "Guest Mode" : `${currentUser?.provider} Account`}
+                            </span>
+                          </div>
+                          <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+                            {currentUser?.email || "developer@lingofusion.dev"} · Isolated Ledger & API Keys
+                          </p>
+                        </div>
+                      </div>
+
+                      {currentUser?.provider === "guest" ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onClose();
+                            onOpenAuth?.();
+                          }}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-neutral-950 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+                        >
+                          <LogIn className="h-3.5 w-3.5" />
+                          <span>Sign in with Google / Apple</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onClose();
+                            onOpenAuth?.();
+                          }}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 transition hover:bg-neutral-50 dark:border-white/15 dark:bg-white/5 dark:text-neutral-200 dark:hover:bg-white/10"
+                        >
+                          <span>Switch Account</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Spend Metrics Grid */}
+                    <MetricGrid
+                      items={[
+                        ["Available Balance", `$${formatUsd(data.account.paidBalance + data.account.rewardBalance)} USD`, "Prepaid balance available to run requests."],
+                        ["Lifetime Spend", `$${data.account.lifetimeSpend.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USD`, "Qualifying paid consumption across all models."],
+                        ["Total Deposited", `$${formatUsd(data.account.totalPaidCreditPurchased)} USD`, "Total lifetime credit added via Stripe Checkout."],
+                        ["Total Requests Run", data.usage.totalRequests.toLocaleString(), `${data.usage.successfulRequests.toLocaleString()} succeeded / ${data.usage.failedRequests.toLocaleString()} failed.`],
+                        ["Tokens Processed", data.usage.totalTokens.toLocaleString(), `${data.usage.inputTokens.toLocaleString()} input / ${data.usage.outputTokens.toLocaleString()} output.`],
+                        ["Average Cost / Request", data.usage.totalRequests > 0 ? `$${(data.account.lifetimeSpend / data.usage.totalRequests).toFixed(6)} USD` : "$0.00 USD", "Mean cost across logged requests."],
+                      ]}
+                    />
+
+                    {/* Model Spend Breakdown */}
+                    <div className="mt-7">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-sm font-semibold text-neutral-950 dark:text-white">
+                            Spend by Model & Service
+                          </h4>
+                          <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+                            Itemized cost and volume breakdown per AI model for this account.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-white/10 dark:bg-[#141414]">
+                        {modelSpendList.length > 0 ? (
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs">
+                              <thead className="border-b border-neutral-200 bg-neutral-50/75 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-neutral-400">
+                                <tr>
+                                  <th className="px-4 py-3">Model</th>
+                                  <th className="px-4 py-3 text-right">Invocations</th>
+                                  <th className="px-4 py-3 text-right">Prompt Tokens</th>
+                                  <th className="px-4 py-3 text-right">Completion Tokens</th>
+                                  <th className="px-4 py-3 text-right">Total Cost</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-neutral-200/80 dark:divide-white/10">
+                                {modelSpendList.map((item) => (
+                                  <tr key={item.modelId} className="hover:bg-neutral-50/80 dark:hover:bg-white/[0.02]">
+                                    <td className="px-4 py-3 font-medium text-neutral-900 dark:text-neutral-100">
+                                      {item.modelId}
+                                    </td>
+                                    <td className="px-4 py-3 text-right font-sans tabular-nums text-neutral-600 dark:text-neutral-400">
+                                      {item.requests.toLocaleString()}
+                                    </td>
+                                    <td className="px-4 py-3 text-right font-sans tabular-nums text-neutral-600 dark:text-neutral-400">
+                                      {item.promptTokens.toLocaleString()}
+                                    </td>
+                                    <td className="px-4 py-3 text-right font-sans tabular-nums text-neutral-600 dark:text-neutral-400">
+                                      {item.completionTokens.toLocaleString()}
+                                    </td>
+                                    <td className="px-4 py-3 text-right font-sans tabular-nums font-semibold text-neutral-950 dark:text-white">
+                                      ${item.cost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USD
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div className="p-6 text-center text-xs text-neutral-500 dark:text-neutral-400">
+                            No model requests recorded yet for this account. Run translations in Playground or via API.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Itemized Transaction & Deduction Ledger */}
+                    <div className="mt-8">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <h4 className="text-sm font-semibold text-neutral-950 dark:text-white">
+                            Itemized Spend & Deposit Ledger
+                          </h4>
+                          <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+                            Complete chronological transaction log (Stripe deposits and per-call API charges).
+                          </p>
+                        </div>
+                        {data.ledger && data.ledger.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              downloadCsv(
+                                "lingofusion-spend-ledger.csv",
+                                data.ledger.map((entry) => ({
+                                  id: entry.id,
+                                  date: entry.createdAt,
+                                  type: entry.type,
+                                  description: entry.description,
+                                  amountUsd: entry.amount,
+                                  status: entry.status,
+                                })),
+                              );
+                              onNotify(tc("Exported spend ledger CSV"));
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 transition hover:bg-neutral-50 dark:border-white/15 dark:bg-white/5 dark:text-neutral-200 dark:hover:bg-white/10"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            <span>Export Ledger CSV</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="mt-3 overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-white/10 dark:bg-[#141414]">
+                        {data.ledger && data.ledger.length > 0 ? (
+                          <div className="overflow-x-auto max-h-96">
+                            <table className="w-full text-left text-xs">
+                              <thead className="sticky top-0 border-b border-neutral-200 bg-neutral-50/95 backdrop-blur-xs text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:border-white/10 dark:bg-[#181818]/95 dark:text-neutral-400">
+                                <tr>
+                                  <th className="px-4 py-2.5">Date & Time</th>
+                                  <th className="px-4 py-2.5">Description</th>
+                                  <th className="px-4 py-2.5">Status</th>
+                                  <th className="px-4 py-2.5 text-right">Debit / Credit</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-neutral-200/80 dark:divide-white/10">
+                                {data.ledger.slice(0, 50).map((entry) => {
+                                  const isCredit = entry.amount > 0;
+                                  return (
+                                    <tr key={entry.id} className="hover:bg-neutral-50/80 dark:hover:bg-white/[0.02]">
+                                      <td className="whitespace-nowrap px-4 py-2.5 text-neutral-500 font-mono text-[11px]">
+                                        {new Date(entry.createdAt).toLocaleString(undefined, {
+                                          month: "short",
+                                          day: "numeric",
+                                          hour: "2-digit",
+                                          minute: "2-digit",
+                                          second: "2-digit",
+                                        })}
+                                      </td>
+                                      <td className="px-4 py-2.5 font-medium text-neutral-900 dark:text-neutral-100">
+                                        <div className="flex items-center gap-1.5">
+                                          {isCredit ? (
+                                            <ArrowDownRight className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                                          ) : (
+                                            <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
+                                          )}
+                                          <span className="truncate max-w-md">{entry.description}</span>
+                                        </div>
+                                      </td>
+                                      <td className="px-4 py-2.5">
+                                        <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-medium text-neutral-600 capitalize dark:bg-white/10 dark:text-neutral-300">
+                                          {entry.status}
+                                        </span>
+                                      </td>
+                                      <td className="whitespace-nowrap px-4 py-2.5 text-right font-sans tabular-nums font-semibold">
+                                        <span className={isCredit ? "text-emerald-600 dark:text-emerald-400" : "text-neutral-900 dark:text-neutral-200"}>
+                                          {isCredit ? "+" : ""}${Math.abs(entry.amount).toLocaleString("en-US", {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 6,
+                                          })} USD
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div className="p-8 text-center text-xs text-neutral-500 dark:text-neutral-400">
+                            No ledger transactions recorded yet. Add funds or run models to see your spend activity here.
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </Panel>
                 )}
 

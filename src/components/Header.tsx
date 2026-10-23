@@ -1,5 +1,21 @@
-import { ExternalLink, Menu, Moon, PlusCircle, Search, Sun, Wallet, X } from "lucide-react";
+import {
+  Apple,
+  BarChart3,
+  ChevronDown,
+  ExternalLink,
+  KeyRound,
+  LogOut,
+  Menu,
+  Moon,
+  PlusCircle,
+  Search,
+  Sun,
+  User,
+  Wallet,
+  X,
+} from "lucide-react";
 import { useMemo, useState } from "react";
+import type { AuthUser } from "../data/auth";
 import type { LanguageCode, TranslationKey } from "../data/i18n";
 import { languages } from "../data/i18n";
 import { formatUsd } from "../lib/utils";
@@ -12,6 +28,10 @@ type HeaderProps = {
   mobileOpen: boolean;
   searchItems: string[];
   balanceUsd?: number;
+  currentUser?: AuthUser;
+  onOpenAuth?: () => void;
+  onSignOut?: () => void;
+  onOpenSpendTracking?: () => void;
   t: (key: TranslationKey) => string;
   tc: (text: string) => string;
   onNavigate: (page: string) => void;
@@ -38,6 +58,10 @@ export function Header({
   mobileOpen,
   searchItems,
   balanceUsd = 0,
+  currentUser,
+  onOpenAuth,
+  onSignOut,
+  onOpenSpendTracking,
   t,
   tc,
   onNavigate,
@@ -48,6 +72,7 @@ export function Header({
 }: HeaderProps) {
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   const filteredSearch = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -215,6 +240,140 @@ export function Header({
           >
             {theme === "light" ? <Moon className="h-3.5 w-3.5" /> : <Sun className="h-3.5 w-3.5" />}
           </button>
+
+          {/* User Account / Sign In */}
+          {currentUser && currentUser.provider !== "guest" ? (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setUserMenuOpen((prev) => !prev)}
+                className="inline-flex h-8 items-center gap-2 rounded-full border border-neutral-200 bg-neutral-50/80 pl-1.5 pr-2.5 text-xs font-semibold text-neutral-800 transition hover:bg-neutral-100 dark:border-white/10 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
+              >
+                <div className="relative flex h-5 w-5 items-center justify-center rounded-full bg-neutral-900 text-[10px] font-bold text-white dark:bg-white dark:text-neutral-950">
+                  {currentUser.name.charAt(0).toUpperCase()}
+                  {currentUser.provider === "google" && (
+                    <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-white ring-1 ring-neutral-200 dark:ring-neutral-800">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#4285F4]" />
+                    </span>
+                  )}
+                  {currentUser.provider === "apple" && (
+                    <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-neutral-900 ring-1 ring-neutral-200 dark:bg-white dark:ring-neutral-800">
+                      <span className="h-1.5 w-1.5 rounded-full bg-white dark:bg-neutral-950" />
+                    </span>
+                  )}
+                </div>
+                <span className="hidden max-w-[90px] truncate sm:inline">
+                  {currentUser.name.split(" ")[0]}
+                </span>
+                <ChevronDown className="h-3 w-3 text-neutral-400" />
+              </button>
+
+              {userMenuOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setUserMenuOpen(false)}
+                  />
+                  <div className="absolute right-0 top-10 z-50 w-64 rounded-2xl border border-neutral-200 bg-white p-2 shadow-xl dark:border-white/10 dark:bg-[#141414]">
+                    <div className="border-b border-neutral-100 px-3 py-2.5 dark:border-white/10">
+                      <div className="flex items-center justify-between">
+                        <p className="truncate text-xs font-semibold text-neutral-900 dark:text-white">
+                          {currentUser.name}
+                        </p>
+                        <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-neutral-600 dark:bg-white/10 dark:text-neutral-300">
+                          {currentUser.provider}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 truncate text-[11px] text-neutral-400">
+                        {currentUser.email}
+                      </p>
+                      <div className="mt-2.5 flex items-center justify-between rounded-lg bg-neutral-50 px-2.5 py-1.5 text-xs dark:bg-white/[0.04]">
+                        <span className="text-neutral-500">Balance</span>
+                        <span className="font-sans font-bold text-emerald-600 dark:text-emerald-400">
+                          ${formatUsd(Number(balanceUsd) || 0)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="py-1 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserMenuOpen(false);
+                          onDashboard();
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-neutral-700 transition hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-white/10"
+                      >
+                        <KeyRound className="h-3.5 w-3.5 text-neutral-400" />
+                        <span>API Keys & Dashboard</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserMenuOpen(false);
+                          if (onOpenSpendTracking) {
+                            onOpenSpendTracking();
+                          } else {
+                            onDashboard();
+                          }
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-neutral-700 transition hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-white/10"
+                      >
+                        <BarChart3 className="h-3.5 w-3.5 text-neutral-400" />
+                        <span>Spend Tracking & Usage</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserMenuOpen(false);
+                          navigate("Playground");
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-neutral-700 transition hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-white/10"
+                      >
+                        <PlusCircle className="h-3.5 w-3.5 text-neutral-400" />
+                        <span>Add Prepaid Balance</span>
+                      </button>
+                    </div>
+
+                    <div className="border-t border-neutral-100 pt-1 text-xs dark:border-white/10">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserMenuOpen(false);
+                          onOpenAuth?.();
+                        }}
+                        className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-neutral-700 transition hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-white/10"
+                      >
+                        <span>Switch account</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUserMenuOpen(false);
+                          onSignOut?.();
+                        }}
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+                      >
+                        <LogOut className="h-3.5 w-3.5" />
+                        <span>Sign out</span>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpenAuth}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-neutral-300/80 bg-white px-3 text-xs font-semibold text-neutral-800 shadow-2xs transition hover:bg-neutral-50 hover:border-neutral-400 dark:border-white/15 dark:bg-white/5 dark:text-neutral-100 dark:hover:bg-white/10"
+            >
+              <User className="h-3.5 w-3.5 text-neutral-500" />
+              <span>Sign In</span>
+            </button>
+          )}
 
           {/* Dashboard Button */}
           <button

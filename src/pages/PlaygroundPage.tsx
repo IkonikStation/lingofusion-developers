@@ -44,6 +44,7 @@ import {
 import type { ModelPricingRecord } from "../data/browserApi";
 import { playgroundLanguages } from "../data/playgroundLanguages";
 import { imageModels, textModelPresentations, ttsModels } from "../data/pricing";
+import { getCurrentUser, subscribeAuth } from "../data/auth";
 import { formatUsd, pageQuery } from "../lib/utils";
 
 type TranslationRun = {
@@ -294,6 +295,11 @@ export function PlaygroundPage({
 
   useEffect(() => {
     loadModelsAndState();
+    const unsub = subscribeAuth((user) => {
+      setActiveUserId(user.id);
+      void loadModelsAndState();
+    });
+    return unsub;
   }, []);
 
   useEffect(() => {

@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AuthModal } from "./components/AuthModal";
 import { DashboardModal } from "./components/DashboardModal";
 import { Header } from "./components/Header";
 import { Sidebar } from "./components/Sidebar";
 import { SubscriptionPage } from "./components/SubscriptionPage";
+import type { AuthUser } from "./data/auth";
+import { getCurrentUser, signOut, subscribeAuth } from "./data/auth";
 import { createContentTranslator, createTranslator, getLanguage } from "./data/i18n";
 import type { LanguageCode } from "./data/i18n";
 import {
@@ -59,6 +62,9 @@ export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const [language, setLanguage] = useState<LanguageCode>("en");
   const [dashboardOpen, setDashboardOpen] = useState(false);
+  const [dashboardInitialTab, setDashboardInitialTab] = useState<string>("Overview");
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<AuthUser>(() => getCurrentUser());
   const [balanceUsd, setBalanceUsd] = useState<number>(0.0);
   const [proVariantKey, setProVariantKey] = useState<ProVariantKey>(() =>
     ["750k", "1m"].includes(window.localStorage.getItem("lingofusion-pro-variant") ?? "") ? "750k" : "350k",
@@ -88,8 +94,16 @@ export default function App() {
   };
 
   useEffect(() => {
+    const unsubscribe = subscribeAuth((user) => {
+      setCurrentUser(user);
+      void refreshLiveBalance();
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
     refreshLiveBalance();
-  }, [activePage, dashboardOpen]);
+  }, [activePage, dashboardOpen, currentUser.id]);
 
   const navigate = (page: string, query?: Record<string, string | number | undefined>) => {
     const nextPage = page === "API Prices" ? "Pricing" : page;
@@ -268,11 +282,25 @@ export default function App() {
         mobileOpen={mobileOpen}
         searchItems={searchItems}
         balanceUsd={balanceUsd}
+        currentUser={currentUser}
+        onOpenAuth={() => setAuthModalOpen(true)}
+        onSignOut={() => {
+          signOut();
+          void refreshLiveBalance();
+          setToast("Signed out successfully");
+        }}
+        onOpenSpendTracking={() => {
+          setDashboardInitialTab("Spend Tracking");
+          setDashboardOpen(true);
+        }}
         t={t}
         tc={tc}
         onNavigate={navigate}
         onLanguageChange={setLanguage}
-        onDashboard={() => setDashboardOpen(true)}
+        onDashboard={() => {
+          setDashboardInitialTab("Overview");
+          setDashboardOpen(true);
+        }}
         onToggleTheme={() => setTheme((value) => (value === "light" ? "dark" : "light"))}
         onToggleMobile={() => setMobileOpen((value) => !value)}
       />
@@ -283,12 +311,15 @@ export default function App() {
           collapsed={sidebarCollapsed}
           mobileOpen={mobileOpen}
           language={language}
+          currentUser={currentUser}
+          onOpenAuth={() => setAuthModalOpen(true)}
           t={t}
           tc={tc}
           onNavigate={navigate}
           onLanguageChange={setLanguage}
           onDashboard={() => {
             setMobileOpen(false);
+            setDashboardInitialTab("Overview");
             setDashboardOpen(true);
           }}
           onToggleCollapse={() => setSidebarCollapsed((value) => !value)}
@@ -387,8 +418,24 @@ export default function App() {
       </div>
 
       {dashboardOpen && (
-        <DashboardModal tc={tc} onClose={() => setDashboardOpen(false)} onNotify={notify} />
+        <DashboardModal
+          tc={tc}
+          initialTab={dashboardInitialTab}
+          currentUser={currentUser}
+          onOpenAuth={() => setAuthModalOpen(true)}
+          onClose={() => setDashboardOpen(false)}
+          onNotify={notify}
+        />
       )}
+
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onSuccess={(user) => {
+          void refreshLiveBalance();
+          setToast(`Signed in with ${user.provider.charAt(0).toUpperCase() + user.provider.slice(1)}: ${user.email}`);
+        }}
+      />
 
       {toast && (
         <div className="toast-enter fixed bottom-4 left-4 right-4 z-50 rounded-xl border border-neutral-200/90 bg-white/95 px-4 py-3 text-xs font-semibold text-neutral-950 shadow-lg backdrop-blur-md dark:border-white/10 dark:bg-[#141417]/95 dark:text-neutral-100 sm:bottom-5 sm:left-auto sm:right-5">

@@ -20,6 +20,7 @@ import {
   Video,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import type { AuthUser } from "../data/auth";
 import type { LanguageCode, TranslationKey } from "../data/i18n";
 
 type SidebarProps = {
@@ -27,6 +28,8 @@ type SidebarProps = {
   collapsed: boolean;
   mobileOpen: boolean;
   language: LanguageCode;
+  currentUser?: AuthUser;
+  onOpenAuth?: () => void;
   t: (key: TranslationKey) => string;
   tc: (text: string) => string;
   onNavigate: (page: string) => void;
@@ -49,6 +52,8 @@ export function Sidebar({
   activePage,
   collapsed,
   mobileOpen,
+  currentUser,
+  onOpenAuth,
   onNavigate,
   onDashboard,
   onToggleCollapse,
@@ -220,27 +225,45 @@ export function Sidebar({
         </nav>
       </div>
 
-      {/* Bottom Section: Raffi / Organization Account */}
+      {/* Bottom Section: Active User Account Profile */}
       <div className="border-t border-neutral-200/80 p-3 dark:border-neutral-800/80">
         <button
           type="button"
-          onClick={onDashboard}
-          title="Open Dashboard & Profile"
+          onClick={() => {
+            if (currentUser && currentUser.provider !== "guest") {
+              onDashboard();
+            } else {
+              onOpenAuth?.();
+            }
+          }}
+          title={currentUser && currentUser.provider !== "guest" ? "Open Account & Dashboard" : "Sign in to your account"}
           className={`flex w-full items-center gap-2.5 rounded-lg p-1.5 text-left transition hover:bg-neutral-100 dark:hover:bg-neutral-800/60 ${
             collapsed ? "justify-center" : ""
           }`}
         >
-          {/* Avatar circle with 'R' */}
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-neutral-900 font-semibold text-white dark:bg-white dark:text-neutral-950 text-xs">
-            R
+          {/* Avatar circle */}
+          <div className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-neutral-900 font-semibold text-white dark:bg-white dark:text-neutral-950 text-xs">
+            {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : "D"}
+            {currentUser?.provider === "google" && (
+              <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-white ring-1 ring-neutral-200 dark:ring-neutral-800">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#4285F4]" />
+              </span>
+            )}
+            {currentUser?.provider === "apple" && (
+              <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-neutral-900 ring-1 ring-neutral-200 dark:bg-white dark:ring-neutral-800">
+                <span className="h-1.5 w-1.5 rounded-full bg-white dark:bg-neutral-950" />
+              </span>
+            )}
           </div>
           {!collapsed && (
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-semibold text-neutral-900 dark:text-neutral-100">
-                Raffi
+                {currentUser?.name || "Sign In"}
               </p>
               <p className="truncate text-[10px] text-neutral-500">
-                Organization
+                {currentUser?.provider && currentUser.provider !== "guest"
+                  ? `${currentUser.provider.charAt(0).toUpperCase() + currentUser.provider.slice(1)} Account`
+                  : "Click to sign in"}
               </p>
             </div>
           )}

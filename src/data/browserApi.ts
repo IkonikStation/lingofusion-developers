@@ -1,6 +1,7 @@
 import { musicModels, resolveImageModel, textModelsByPricingMode } from "./pricing";
 import type { TextPricingMode } from "./pricing";
 import { buildImageTranslationInstruction, buildModelSystemPrompt } from "./systemPrompts";
+import { getCurrentUser } from "./auth";
 
 export type ModelPricingRecord = {
   id: string;
@@ -362,20 +363,39 @@ function createInitialState(): BrowserState {
   };
 }
 
-function loadState() {
+function getUserStorageKey(userId: string) {
+  if (!userId || userId === "00000000-0000-4000-8000-000000000001") {
+    return storageKey;
+  }
+  return `lingofusion-browser-api-user-${userId}`;
+}
+
+function loadState(targetUserId?: string): BrowserState {
+  const currentUser = getCurrentUser();
+  const userId = targetUserId || currentUser.id;
+  const key = getUserStorageKey(userId);
   try {
-    const stored = window.localStorage.getItem(storageKey);
-    if (!stored) return createInitialState();
+    const stored = window.localStorage.getItem(key);
+    if (!stored) {
+      const initial = createInitialState();
+      initial.dashboard.user = {
+        id: userId,
+        email: targetUserId ? (targetUserId === currentUser.id ? currentUser.email : "user@lingofusion.dev") : currentUser.email,
+        balance_usd: 0.0,
+        created_at: currentUser.createdAt || new Date().toISOString(),
+      };
+      return initial;
+    }
     const parsed = JSON.parse(stored) as BrowserState;
     parsed.dashboard.modelPricing = defaultBrowserModelPricing;
     if (!parsed.dashboard.usageLedger) parsed.dashboard.usageLedger = [];
     if (!parsed.dashboard.depositLedger) parsed.dashboard.depositLedger = [];
-    if (!parsed.dashboard.user) {
+    if (!parsed.dashboard.user || parsed.dashboard.user.id !== userId) {
       parsed.dashboard.user = {
-        id: "00000000-0000-4000-8000-000000000001",
-        email: "developer@lingofusion.dev",
-        balance_usd: parsed.dashboard.account.paidBalance,
-        created_at: new Date().toISOString(),
+        id: userId,
+        email: currentUser.email,
+        balance_usd: parsed.dashboard.account?.paidBalance ?? 0,
+        created_at: currentUser.createdAt || new Date().toISOString(),
       };
     }
     return parsed;
@@ -384,8 +404,10 @@ function loadState() {
   }
 }
 
-function saveState(state: BrowserState) {
-  window.localStorage.setItem(storageKey, JSON.stringify(state));
+function saveState(state: BrowserState, targetUserId?: string) {
+  const userId = targetUserId || state.dashboard.user?.id || getCurrentUser().id;
+  const key = getUserStorageKey(userId);
+  window.localStorage.setItem(key, JSON.stringify(state));
 }
 
 function randomId(prefix: string) {
