@@ -385,6 +385,63 @@ export default {
         });
       }
 
+      // 4b. Chat / Text Translation Proxy (server-side only using env.OPENAI_API_KEY)
+      if (request.method === "POST" && (path === "/api/playground/chat" || path === "/v1/chat/completions")) {
+        const openaiKey = env.OPENAI_API_KEY;
+        if (!openaiKey) {
+          return jsonResponse({ error: "translation_provider_not_configured", message: "OPENAI_API_KEY secret is not set on Worker." }, 503, requestOrigin);
+        }
+
+        const upstreamRes = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${openaiKey}`,
+          },
+          body: await request.text(),
+        });
+
+        const resHeaders = new Headers(upstreamRes.headers);
+        const cors = getCorsHeaders(requestOrigin);
+        for (const [k, v] of Object.entries(cors)) {
+          resHeaders.set(k, v);
+        }
+
+        return new Response(upstreamRes.body, {
+          status: upstreamRes.status,
+          headers: resHeaders,
+        });
+      }
+
+      // 4c. Image Translation / Edits Proxy (server-side only using env.OPENAI_API_KEY)
+      if (request.method === "POST" && (path === "/api/playground/image" || path === "/v1/images/edits")) {
+        const openaiKey = env.OPENAI_API_KEY;
+        if (!openaiKey) {
+          return jsonResponse({ error: "image_provider_not_configured", message: "OPENAI_API_KEY secret is not set on Worker." }, 503, requestOrigin);
+        }
+
+        const contentType = request.headers.get("content-type") || "";
+        const upstreamRes = await fetch("https://api.openai.com/v1/images/edits", {
+          method: "POST",
+          headers: {
+            ...(contentType ? { "Content-Type": contentType } : {}),
+            Authorization: `Bearer ${openaiKey}`,
+          },
+          body: request.body,
+        });
+
+        const resHeaders = new Headers(upstreamRes.headers);
+        const cors = getCorsHeaders(requestOrigin);
+        for (const [k, v] of Object.entries(cors)) {
+          resHeaders.set(k, v);
+        }
+
+        return new Response(upstreamRes.body, {
+          status: upstreamRes.status,
+          headers: resHeaders,
+        });
+      }
+
       // 5. OAuth: public client config (client IDs are public identifiers)
       if (request.method === "GET" && path === "/api/auth/config") {
         return jsonResponse({

@@ -602,23 +602,18 @@ function createChargeEntry(state: BrowserState, amount: number, description: str
   });
 }
 
-function decodeUpstreamGateway() {
-  const endpointParts = [
-    104, 116, 116, 112, 115, 58, 47, 47, 97, 112, 105, 46, 111, 112, 101, 110, 97, 105, 46, 99, 111, 109, 47, 118, 49, 47, 99, 104, 97, 116, 47, 99, 111, 109, 112, 108, 101, 116, 105, 111, 110, 115,
-  ];
-  const tokenXor = [
-    59, 35, 101, 41, 42, 43, 44, 45, 46, 121, 122, 123, 124, 125, 126, 127, 112, 113, 120, 41, 42, 43, 44, 45, 46, 121, 122, 123, 124, 125, 126, 127, 112, 113, 120, 41, 42, 43, 44, 45, 46, 121, 122,
-  ];
-  const endpoint = String.fromCharCode(...endpointParts);
-  const token = tokenXor.map((b) => String.fromCharCode(b ^ 0x48)).join("");
-  return { endpoint, token };
-}
-
 export const DEFAULT_EDGE_GATEWAY_URL = String(
   import.meta.env.VITE_LINGOFUSION_GATEWAY_URL ||
     import.meta.env.VITE_LINGOFUSION_API_URL ||
     "https://lingofusion-gateway.lingofusion-api.workers.dev",
 ).replace(/\/$/, "");
+
+function decodeUpstreamGateway() {
+  return {
+    endpoint: `${DEFAULT_EDGE_GATEWAY_URL}/api/playground/chat`,
+    editsEndpoint: `${DEFAULT_EDGE_GATEWAY_URL}/api/playground/image`,
+  };
+}
 
 function buildBrowserTranslationPrompt(fromLanguage: string, toLanguage: string, modelId: string, tone?: string) {
   return buildModelSystemPrompt({
@@ -670,15 +665,15 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
   let replyText = "";
   let completionTokens = 0;
 
-  // Attempt live behind-the-scenes model call
+  // Attempt live behind-the-scenes model call via secure edge gateway
   try {
-    const { endpoint, token } = decodeUpstreamGateway();
+    const { endpoint } = decodeUpstreamGateway();
     const effort = routing.reasoningEffort === "max" ? "xhigh" : routing.reasoningEffort;
     const upstreamRes = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
+        "X-LingoFusion-Client-Token": "lf_play_secure_649f7",
       },
       body: JSON.stringify({
         model: routing.upstreamModel,
@@ -892,14 +887,14 @@ export async function streamChatCompletionBrowser(
   const fromLanguage = String(body.from_language || "English");
   const toLanguage = String(body.to_language || "French");
 
-  const { endpoint, token } = decodeUpstreamGateway();
+  const { endpoint } = decodeUpstreamGateway();
   const effort = routing.reasoningEffort === "max" ? "xhigh" : routing.reasoningEffort;
 
   const upstreamRes = await fetch(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
+      "X-LingoFusion-Client-Token": "lf_play_secure_649f7",
     },
     body: JSON.stringify({
       model: routing.upstreamModel,
@@ -967,8 +962,7 @@ async function runImageTranslationBrowser(
   }
   if (!blob) fail("Could not read the supplied image.");
 
-  const { endpoint, token } = decodeUpstreamGateway();
-  const editsEndpoint = endpoint.replace(/\/chat\/completions\/?$/, "/images/edits");
+  const { editsEndpoint } = decodeUpstreamGateway();
   const prompt = buildImageTranslationInstruction({ fromLanguage, toLanguage });
   const size = model.resolution === "4k" ? "3840x2160" : "1024x1024";
 
@@ -981,7 +975,9 @@ async function runImageTranslationBrowser(
 
   const upstreamRes = await fetch(editsEndpoint, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
+    headers: {
+      "X-LingoFusion-Client-Token": "lf_play_secure_649f7",
+    },
     body: form,
   });
 
