@@ -26,6 +26,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { LiveMarkdownEditor } from "../components/LiveMarkdownEditor";
 import { MarkdownView } from "../components/MarkdownView";
 import { ModelThumb } from "../components/shared/FormFields";
@@ -1429,66 +1430,69 @@ export function PlaygroundPage({
         </div>
       )}
 
-      {/* Insufficient Balance Modal Dialog with Full-Screen Dark Out-of-Focus Backdrop */}
-      {insufficientModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          {/* Full-screen dark backdrop bringing page out of focus */}
-          <div
-            className="fixed inset-0 bg-neutral-950/60 backdrop-blur-sm transition-opacity"
-            onClick={() => setInsufficientModalOpen(false)}
-          />
+      {/* Insufficient Balance Modal Dialog with Full-Screen Dark Out-of-Focus Backdrop (Portaled to document.body) */}
+      {insufficientModalOpen &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+            {/* Full viewport dark out-of-focus backdrop covering Header, Sidebar and entire browser page */}
+            <div
+              className="fixed inset-0 bg-neutral-950/60 backdrop-blur-sm transition-opacity"
+              onClick={() => setInsufficientModalOpen(false)}
+            />
 
-          {/* Modal box in the middle */}
-          <div
-            role="dialog"
-            aria-modal="true"
-            className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-neutral-200/90 bg-white p-6 shadow-2xl transition-all animate-in fade-in zoom-in-95 duration-150 dark:border-white/10 dark:bg-neutral-900"
-          >
-            <div className="flex items-start gap-3.5">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400">
-                <AlertCircle className="h-5 w-5" />
+            {/* Modal box centered in the middle */}
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-neutral-200/90 bg-white p-6 shadow-2xl transition-all animate-in fade-in zoom-in-95 duration-150 dark:border-white/10 dark:bg-neutral-900"
+            >
+              <div className="flex items-start gap-3.5">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400">
+                  <AlertCircle className="h-5 w-5" />
+                </div>
+                <div className="flex-1 pr-2">
+                  <h3 className="text-base font-semibold text-neutral-950 dark:text-white">
+                    Insufficient balance
+                  </h3>
+                  <p className="mt-1 text-xs leading-relaxed text-neutral-600 dark:text-neutral-400">
+                    Please deposit credits to continue translating and using LingoFusion services.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setInsufficientModalOpen(false)}
+                  className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
-              <div className="flex-1 pr-2">
-                <h3 className="text-base font-semibold text-neutral-950 dark:text-white">
-                  Insufficient balance
-                </h3>
-                <p className="mt-1 text-xs leading-relaxed text-neutral-600 dark:text-neutral-400">
-                  Please deposit credits to continue translating and using LingoFusion services.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setInsufficientModalOpen(false)}
-                className="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
 
-            <div className="mt-6 flex items-center justify-end gap-2.5">
-              <button
-                type="button"
-                onClick={() => setInsufficientModalOpen(false)}
-                className="inline-flex h-9 items-center justify-center rounded-xl border border-neutral-200 px-4 text-xs font-semibold text-neutral-700 hover:bg-neutral-100 dark:border-white/10 dark:text-neutral-300 dark:hover:bg-neutral-800"
-              >
-                Dismiss
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setInsufficientModalOpen(false);
-                  setDepositStatusMessage(null);
-                  setDepositModalOpen(true);
-                }}
-                className="pressable inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-neutral-950 px-4 text-xs font-semibold text-white shadow-xs transition hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add Funds
-              </button>
+              <div className="mt-6 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setInsufficientModalOpen(false)}
+                  className="inline-flex h-9 items-center justify-center rounded-xl border border-neutral-200 px-4 text-xs font-semibold text-neutral-700 hover:bg-neutral-100 dark:border-white/10 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                >
+                  Dismiss
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setInsufficientModalOpen(false);
+                    setDepositStatusMessage(null);
+                    setDepositModalOpen(true);
+                  }}
+                  className="pressable inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-neutral-950 px-4 text-xs font-semibold text-white shadow-xs transition hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Funds
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
 
       {/* Main Minimal Translation Card */}
       <div className="mt-6 overflow-hidden rounded-2xl border border-neutral-200/90 bg-white shadow-xs dark:border-white/10 dark:bg-neutral-900/70">
