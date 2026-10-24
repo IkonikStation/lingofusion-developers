@@ -987,6 +987,7 @@ export function PlaygroundPage({
     const payload: Record<string, unknown> = {
       model: activeImageModel.label,
       resolution: activeImageModel.resolution,
+      quality: activeImageModel.quality,
       from_language: fromLanguage,
       to_language: toLanguage,
       ...(imageSource ? { image: imageSource } : { image_url: trimmedUrl }),

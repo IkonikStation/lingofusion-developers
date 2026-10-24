@@ -24,6 +24,7 @@ export type SimpleModel = {
 };
 
 export type ImageResolution = "standard" | "4k";
+export type ImageQuality = "high" | "max";
 
 export type ImageModel = {
   size: string;
@@ -31,6 +32,7 @@ export type ImageModel = {
   label: string;
   upstreamModel: string;
   resolution: ImageResolution;
+  quality: ImageQuality;
   inputUsd: number;
   outputUsd: number;
 };
@@ -176,6 +178,7 @@ export const imageModels: ImageModel[] = [
     label: "LingoFusion Image Translate",
     upstreamModel: "gpt-image-2.5-sunburst",
     resolution: "standard",
+    quality: "high",
     inputUsd: 12.00,
     outputUsd: 45.00,
   },
@@ -185,6 +188,7 @@ export const imageModels: ImageModel[] = [
     label: "LingoFusion Image Translate 4K",
     upstreamModel: "gpt-image-2.5-sunburst",
     resolution: "4k",
+    quality: "max",
     inputUsd: 15.00,
     outputUsd: 50.00,
   },

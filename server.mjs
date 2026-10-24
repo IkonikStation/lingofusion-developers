@@ -72,6 +72,7 @@ const imageModelCatalog = [
     label: "LingoFusion Image Translate",
     size: "Standard",
     resolution: "standard",
+    quality: "high",
     upstream_model_name: "gpt-image-2.5-sunburst",
     input_per_million: 12.0,
     output_per_million: 45.0,
@@ -82,6 +83,7 @@ const imageModelCatalog = [
     label: "LingoFusion Image Translate 4K",
     size: "4K",
     resolution: "4k",
+    quality: "max",
     upstream_model_name: "gpt-image-2.5-sunburst",
     input_per_million: 15.0,
     output_per_million: 50.0,
@@ -2107,6 +2109,7 @@ async function handleImageTranslation({ res, body, user, source = "playground", 
 
   const prompt = buildImageTranslationInstruction({ fromLanguage, toLanguage });
   const size = model.default_size;
+  const quality = String(body.quality || model.quality || (model.resolution === "4k" ? "max" : "high"));
 
   let upstreamRes;
   try {
@@ -2114,6 +2117,7 @@ async function handleImageTranslation({ res, body, user, source = "playground", 
     form.append("model", model.upstream_model_name);
     form.append("prompt", prompt);
     form.append("size", size);
+    form.append("quality", quality);
     form.append("n", "1");
     form.append("image", new Blob([sourceImage.buffer], { type: sourceImage.mime }), "source.png");
     upstreamRes = await fetch(upstream.url, {

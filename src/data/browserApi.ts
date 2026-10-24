@@ -1030,11 +1030,13 @@ async function runImageTranslationBrowser(
   const { editsEndpoint } = decodeUpstreamGateway();
   const prompt = buildImageTranslationInstruction({ fromLanguage, toLanguage });
   const size = model.resolution === "4k" ? "3840x2160" : "1024x1024";
+  const quality = model.quality || (model.resolution === "4k" ? "max" : "high");
 
   const form = new FormData();
   form.append("model", model.upstreamModel);
   form.append("prompt", prompt);
   form.append("size", size);
+  form.append("quality", quality);
   form.append("n", "1");
   form.append("image", blob, "source.png");
 
