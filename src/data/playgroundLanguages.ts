@@ -263,7 +263,6 @@ export const dubbingLanguagesWithFlags: DubbingLanguage[] = [
   { name: "Burmese", flag: "🇲🇲", code: "my" },
   { name: "Catalan", flag: "🇪🇸", code: "ca" },
   { name: "Cebuano", flag: "🇵🇭", code: "ceb" },
-  { name: "Chinese (Simplified)", flag: "🇨🇳", code: "zh-CN" },
   { name: "Chinese", flag: "🇨🇳", code: "zh" },
   { name: "Chinese (Taiwan)", flag: "🇹🇼", code: "zh-TW" },
   { name: "Croatian", flag: "🇭🇷", code: "hr" },
