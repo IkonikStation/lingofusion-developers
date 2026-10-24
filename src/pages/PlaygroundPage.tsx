@@ -3,10 +3,12 @@ import {
   AlertCircle,
   ArrowRightLeft,
   Check,
+  ChevronDown,
   ClipboardCopy,
   Copy,
   CreditCard,
   Download,
+  FileText,
   Gauge,
   Gift,
   Globe,
@@ -219,6 +221,35 @@ export function PlaygroundPage({
     if (q === "voice" || q === "tts") return "voice";
     return q === "image" ? "image" : "text";
   });
+  const [modeDropdownOpen, setModeDropdownOpen] = useState<boolean>(false);
+  const modeDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!modeDropdownOpen) return;
+    const handleClickOutside = (e: MouseEvent | PointerEvent) => {
+      if (!modeDropdownRef.current?.contains(e.target as Node)) {
+        setModeDropdownOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setModeDropdownOpen(false);
+    };
+    document.addEventListener("pointerdown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [modeDropdownOpen]);
+
+  const PLAYGROUND_MODES = [
+    { id: "text" as const, label: "Text", icon: FileText },
+    { id: "image" as const, label: "Image", icon: ImageIcon },
+    { id: "voice" as const, label: "Voice", icon: Volume2 },
+    { id: "music" as const, label: "Music", icon: Music },
+  ];
+  const activeModeItem = PLAYGROUND_MODES.find((m) => m.id === mode) ?? PLAYGROUND_MODES[0];
+  const ActiveModeIcon = activeModeItem.icon;
   const [selectedMusicModel, setSelectedMusicModel] = useState<string>("LingoFusion Music");
   const [musicDurationSeconds, setMusicDurationSeconds] = useState<number>(30);
   const [musicInstrumental, setMusicInstrumental] = useState<boolean>(false);
@@ -1312,13 +1343,73 @@ export function PlaygroundPage({
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
               {mode === "image"
                 ? "Upload an image or paste a URL, then translate the text inside it."
-                : "Choose a model, enter text, and translate instantly."}
+                : mode === "voice"
+                  ? "Select a voice model, enter text, and generate speech."
+                  : mode === "music"
+                    ? "Select a music model, enter a prompt, and compose tracks."
+                    : "Choose a model, enter text, and translate instantly."}
             </p>
           </div>
         </div>
 
-        {/* Right: Live Balance Pill + Add Credits Trigger */}
+        {/* Right: Modality Dropdown + Live Balance Pill + Add Credits Trigger */}
         <div className="flex flex-wrap items-center gap-2.5">
+          {/* Mode Dropdown (Text, Image, Voice, Music) */}
+          <div ref={modeDropdownRef} className="relative">
+            <button
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={modeDropdownOpen}
+              data-testid="playground-mode-dropdown-btn"
+              onClick={() => setModeDropdownOpen((prev) => !prev)}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 text-xs font-semibold text-neutral-950 shadow-2xs transition hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-950 dark:border-white/10 dark:bg-neutral-900 dark:text-white dark:hover:bg-neutral-800 dark:focus-visible:ring-white"
+            >
+              <ActiveModeIcon className="h-3.5 w-3.5 text-neutral-600 dark:text-neutral-300" />
+              <span>{activeModeItem.label}</span>
+              <ChevronDown
+                className={`h-3.5 w-3.5 text-neutral-400 transition-transform duration-150 ${
+                  modeDropdownOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
+
+            {modeDropdownOpen && (
+              <div
+                role="menu"
+                aria-label="Select mode"
+                className="absolute left-0 top-[calc(100%+6px)] z-40 w-44 rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl dark:border-white/15 dark:bg-neutral-900 sm:left-auto sm:right-0"
+              >
+                {PLAYGROUND_MODES.map((item) => {
+                  const isSelected = mode === item.id;
+                  const ItemIcon = item.icon;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      role="menuitem"
+                      data-testid={`playground-mode-${item.id}`}
+                      onClick={() => {
+                        setMode(item.id);
+                        setModeDropdownOpen(false);
+                      }}
+                      className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs transition ${
+                        isSelected
+                          ? "bg-neutral-100 font-semibold text-neutral-950 dark:bg-white/10 dark:text-white"
+                          : "text-neutral-700 hover:bg-neutral-100/70 dark:text-neutral-300 dark:hover:bg-white/5"
+                      }`}
+                    >
+                      <ItemIcon className="h-3.5 w-3.5 shrink-0 text-neutral-500 dark:text-neutral-400" />
+                      <span className="flex-1">{item.label}</span>
+                      {isSelected && (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           <div
             data-testid="playground-live-balance"
             className="inline-flex h-10 items-center gap-2.5 rounded-xl border border-neutral-200 bg-neutral-50/90 px-3.5 text-xs dark:border-white/10 dark:bg-neutral-900"
@@ -2290,40 +2381,8 @@ export function PlaygroundPage({
                 </div>
               )}
 
-              {/* Modality + model selector + live pricing */}
+              {/* Model selector + live pricing */}
               <div className="flex flex-wrap items-center gap-2.5">
-                {/* Modality Toggle: Text vs Image vs Voice vs Music */}
-                <div
-                  role="group"
-                  aria-label="Playground mode"
-                  className="inline-flex rounded-xl border border-neutral-200 bg-white p-0.5 dark:border-white/15 dark:bg-neutral-950"
-                >
-                  {([
-                    ["text", "Text"],
-                    ["image", "Image"],
-                    ["voice", "Voice"],
-                    ["music", "Music"],
-                  ] as const).map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      aria-pressed={mode === value}
-                      data-testid={`playground-mode-${value}`}
-                      onClick={() => setMode(value)}
-                      className={`inline-flex h-8 items-center gap-1 rounded-lg px-3 text-xs font-semibold transition ${
-                        mode === value
-                          ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
-                          : "text-neutral-500 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white"
-                      }`}
-                    >
-                      {value === "image" && <ImageIcon className="h-3.5 w-3.5" />}
-                      {value === "voice" && <Volume2 className="h-3.5 w-3.5" />}
-                      {value === "music" && <Music className="h-3.5 w-3.5" />}
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
                 {/* Model Picker (searchable, with icons + live pricing) */}
                 <Picker
                   className="w-full sm:w-56"
