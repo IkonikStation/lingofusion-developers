@@ -50,7 +50,7 @@ import {
   syncCloudBalance,
 } from "../data/browserApi";
 import type { ModelPricingRecord } from "../data/browserApi";
-import { playgroundLanguages } from "../data/playgroundLanguages";
+import { dubbingLanguages, playgroundLanguages } from "../data/playgroundLanguages";
 import { dubbingModels, imageModels, musicModels, textModelPresentations, ttsModels } from "../data/pricing";
 import { getCurrentUser, subscribeAuth } from "../data/auth";
 import { formatUsd, pageQuery } from "../lib/utils";
@@ -285,8 +285,7 @@ export function PlaygroundPage({
   const [dubbingDurationSeconds, setDubbingDurationSeconds] = useState<number>(0);
   const [dubbingMediaType, setDubbingMediaType] = useState<"video" | "audio">("video");
   const [dubbingPreviewUrl, setDubbingPreviewUrl] = useState<string | null>(null);
-  const [dubbingTargetLang, setDubbingTargetLang] = useState<string>("Spanish");
-  const [dubbingSourceLang, setDubbingSourceLang] = useState<string>("Auto-detect");
+  const [dubbingTargetLang, setDubbingTargetLang] = useState<string>("Spanish (Spain)");
   const [dubbingRunning, setDubbingRunning] = useState<boolean>(false);
   const [dubbingDragActive, setDubbingDragActive] = useState<boolean>(false);
   const [dubbingValidationError, setDubbingValidationError] = useState<string | null>(null);
@@ -1306,7 +1305,7 @@ export function PlaygroundPage({
       const payload = {
         model: selectedDubbingModel,
         target_lang: dubbingTargetLang,
-        source_lang: dubbingSourceLang === "Auto-detect" ? "auto" : dubbingSourceLang,
+        source_lang: "auto",
         duration_seconds: durationToUse,
         media_type: dubbingMediaType === "video" ? (dubbingFile.type || "video/mp4") : (dubbingFile.type || "audio/mpeg"),
         file_name: dubbingFileName || "media.mp4",
@@ -2701,31 +2700,19 @@ export function PlaygroundPage({
                 {mode === "dubbing" && (
                   <>
                     <div className="flex items-center gap-1.5">
-                      <label className="text-xs text-neutral-500 dark:text-neutral-400">Target:</label>
+                      <label htmlFor="playground-dubbing-target" className="text-xs text-neutral-500 dark:text-neutral-400">
+                        Dub into:
+                      </label>
                       <select
+                        id="playground-dubbing-target"
+                        data-testid="playground-dubbing-target-select"
                         value={dubbingTargetLang}
                         onChange={(e) => setDubbingTargetLang(e.target.value)}
-                        className="h-8 rounded-lg border border-neutral-200 bg-white px-2 text-xs font-semibold text-neutral-900 outline-none dark:border-white/15 dark:bg-neutral-950 dark:text-white"
+                        className="h-8 rounded-lg border border-neutral-200 bg-white px-2.5 text-xs font-semibold text-neutral-900 outline-none dark:border-white/15 dark:bg-neutral-950 dark:text-white"
                       >
-                        {playgroundLanguages.slice(0, 40).map((l) => (
-                          <option key={l.name} value={l.name}>
-                            {l.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <label className="text-xs text-neutral-500 dark:text-neutral-400">Source:</label>
-                      <select
-                        value={dubbingSourceLang}
-                        onChange={(e) => setDubbingSourceLang(e.target.value)}
-                        className="h-8 rounded-lg border border-neutral-200 bg-white px-2 text-xs font-semibold text-neutral-900 outline-none dark:border-white/15 dark:bg-neutral-950 dark:text-white"
-                      >
-                        <option value="Auto-detect">Auto-detect</option>
-                        {playgroundLanguages.slice(0, 30).map((l) => (
-                          <option key={l.name} value={l.name}>
-                            {l.name}
+                        {dubbingLanguages.map((lang) => (
+                          <option key={lang} value={lang}>
+                            {lang}
                           </option>
                         ))}
                       </select>
