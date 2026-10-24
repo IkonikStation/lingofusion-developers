@@ -3745,9 +3745,7 @@ export function PlaygroundPage({
                       <div className="text-center">
                         <Clapperboard className="mx-auto mb-2 h-7 w-7 text-neutral-300 dark:text-neutral-600" />
                         <span className="text-xs text-neutral-400 dark:text-neutral-500">
-                          {dubbingFile
-                            ? `Ready to dub ${dubbingFileName}. Click "Dub media" to process.`
-                            : "Upload an audio or video file to start dubbing."}
+                          Dubbed project will appear here
                         </span>
                       </div>
                     )}
