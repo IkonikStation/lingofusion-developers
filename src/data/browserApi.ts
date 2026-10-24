@@ -1439,6 +1439,7 @@ async function runDubbingBrowser(state: BrowserState, options?: RequestInit) {
   return {
     id: requestId,
     model: model.model,
+    upstream_model: "dubbing_v2",
     status: "dubbed",
     media_url: mediaUrl,
     file_name: fileName.startsWith("dubbed-") ? fileName : `dubbed-${targetLang.toLowerCase()}-${fileName}`,

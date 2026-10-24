@@ -725,7 +725,8 @@ export default {
 
         return jsonResponse({
           id: dubbingId,
-          model: "LingoFusion Dubbing Studio",
+          model: "LingoFusion Dubbing",
+          upstream_model: "dubbing_v2",
           status: "dubbed",
           media_url: outputMediaUrl,
           file_name: fileName.startsWith("dubbed-") ? fileName : `dubbed-${targetLang}-${fileName}`,

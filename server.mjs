@@ -3053,7 +3053,7 @@ async function route(req, res) {
         apiKeyId,
         endpoint: isPlayground ? "/api/playground/dubbing" : "/v1/dubbing",
         source: isPlayground ? "playground" : "api",
-        model: "LingoFusion Dubbing Studio",
+        model: "LingoFusion Dubbing",
         upstreamModel: "dubbing_v2",
         status: 200,
         inputTokens: 0,
@@ -3070,7 +3070,8 @@ async function route(req, res) {
 
       return send(res, 200, {
         id: requestId,
-        model: "LingoFusion Dubbing Studio",
+        model: "LingoFusion Dubbing",
+        upstream_model: "dubbing_v2",
         status: "dubbed",
         media_url: mediaUrl,
         file_name: fileName.startsWith("dubbed-") ? fileName : `dubbed-${targetLang}-${fileName}`,

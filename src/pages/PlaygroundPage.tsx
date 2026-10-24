@@ -278,7 +278,7 @@ export function PlaygroundPage({
   const ActiveModeIcon = activeModeItem.icon;
 
   // Dubbing studio state
-  const [selectedDubbingModel, setSelectedDubbingModel] = useState<string>("LingoFusion Dubbing Studio");
+  const [selectedDubbingModel, setSelectedDubbingModel] = useState<string>("LingoFusion Dubbing");
   const [dubbingFile, setDubbingFile] = useState<File | null>(null);
   const [dubbingFileName, setDubbingFileName] = useState<string>("");
   const [dubbingFileSize, setDubbingFileSize] = useState<number>(0);
