@@ -159,9 +159,8 @@ export const transcriptionModels: SimpleModel[] = [
 ];
 
 export const dubbingModels: SimpleModel[] = [
-  { model: "LingoFusion Dubbing Studio", priceUsd: 4.50, pricingUnit: "per_minute" },
+  { model: "LingoFusion Dubbing Studio", priceUsd: 3.50, pricingUnit: "per_minute" },
   { model: "LingoFusion Audio Dubbing", priceUsd: 3.50, pricingUnit: "per_minute" },
-  { model: "LingoFusion Video Dub (Advanced)", priceUsd: 7.99, pricingUnit: "per_minute" },
 ];
 
 export const musicModels: SimpleModel[] = [
@@ -231,9 +230,8 @@ export const latestModels = [
   "LingoFusion Transcribe",
   "LingoFusion Transcribe Mini",
   "LingoFusion Transcribe Live",
+  "LingoFusion Dubbing Studio",
   "LingoFusion Audio Dubbing",
-  "LingoFusion Video Dub (Basic)",
-  "LingoFusion Video Dub (Advanced)",
   "LingoFusion Music",
   "PDF text extraction",
   "PDF editing and translation",
@@ -350,12 +348,10 @@ export const modelDetails: Record<string, string> = {
     "Extract text from PDF files for translation, search, and document workflows.",
   "PDF editing and translation":
     "Edit and translate PDF documents while preserving document structure.",
+  "LingoFusion Dubbing Studio":
+    "Studio dubbing for localized speech and media with timing-aware output.",
   "LingoFusion Audio Dubbing":
     "Production audio dubbing for localized speech with timing-aware output.",
-  "LingoFusion Video Dub (Basic)":
-    "Cost-effective video dubbing for standard localization workflows.",
-  "LingoFusion Video Dub (Advanced)":
-    "Premium video dubbing with enhanced timing, voice, and localization quality.",
   "Image Translate":
     "Image localization pipeline for screenshots, product images, and documents.",
 };

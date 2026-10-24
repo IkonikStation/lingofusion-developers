@@ -686,8 +686,8 @@ export default {
         const fileName = String(body.file_name || (mediaType.startsWith("video") ? "dubbed_video.mp4" : "dubbed_audio.mp3"));
         const mediaBase64 = String(body.file_base64 || "");
 
-        // Dubbing rate: $4.50 per minute
-        const costUsd = Number(((durationSeconds / 60) * 4.50).toFixed(4));
+        // Dubbing rate: $3.50 per minute
+        const costUsd = Number(((durationSeconds / 60) * 3.50).toFixed(4));
         const dubbingId = `dub_${ crypto.randomUUID().replace(/-/g, "").slice(0, 16) }`;
         const voiceKey = env.VOICE_API_KEY;
 

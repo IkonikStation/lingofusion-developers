@@ -635,12 +635,14 @@ export function PlaygroundPage({
 
   const dubbingModelItems = useMemo(
     () =>
-      dubbingModels.map((model) => ({
-        id: model.model,
-        label: model.model,
-        icon: <Clapperboard className="h-3.5 w-3.5 shrink-0 text-neutral-400" />,
-        hint: `$${model.priceUsd?.toFixed(2)}/min`,
-      })),
+      dubbingModels
+        .filter((model) => !model.model.toLowerCase().includes("video dub"))
+        .map((model) => ({
+          id: model.model,
+          label: model.model,
+          icon: <Clapperboard className="h-3.5 w-3.5 shrink-0 text-neutral-400" />,
+          hint: `$${(model.priceUsd ?? 3.50).toFixed(2)}/min`,
+        })),
     [],
   );
 
@@ -1289,7 +1291,7 @@ export function PlaygroundPage({
     const runId = `dub-${Date.now()}`;
     const selectedModelRecord = dubbingModels.find((m) => m.model === selectedDubbingModel) ?? dubbingModels[0];
     const durationToUse = Math.max(15, dubbingDurationSeconds || 30);
-    const estimatedCostUsd = Number(((durationToUse / 60) * (selectedModelRecord.priceUsd ?? 4.50)).toFixed(4));
+    const estimatedCostUsd = Number(((durationToUse / 60) * (selectedModelRecord.priceUsd ?? 3.50)).toFixed(4));
 
     try {
       let fileBase64 = "";
@@ -2730,7 +2732,7 @@ export function PlaygroundPage({
                     </div>
 
                     <span className="hidden font-sans tabular-nums text-[11px] text-neutral-500 md:inline dark:text-neutral-400">
-                      .50 / min
+                      $3.50 / min
                     </span>
                   </>
                 )}
