@@ -87,7 +87,7 @@ export function Picker({
   useEffect(() => {
     if (!open) return;
     const frame = requestAnimationFrame(() => {
-      searchRef.current?.focus();
+      searchRef.current?.focus({ preventScroll: true });
       selectedRef.current?.scrollIntoView({ block: "nearest" });
     });
     return () => cancelAnimationFrame(frame);
@@ -127,7 +127,7 @@ export function Picker({
 
       {open && (
         <div className={`${panelBaseClass} ${panelPositionClass(align)} ${panelClassName ?? ""}`}>
-          <div className="flex items-center gap-2 rounded-lg bg-neutral-100 px-2.5 dark:bg-neutral-800">
+          <div className="flex items-center gap-2 rounded-lg bg-neutral-100 px-2.5 transition focus-within:ring-1 focus-within:ring-neutral-300 dark:bg-neutral-800 dark:focus-within:ring-neutral-700">
             <Search className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
             <input
               ref={searchRef}
@@ -135,7 +135,14 @@ export function Picker({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={searchPlaceholder}
-              className="h-9 w-full bg-transparent text-xs text-neutral-900 outline-none placeholder:text-neutral-400 dark:text-white"
+              className="picker-search-input h-9 w-full border-0 border-none bg-transparent text-xs text-neutral-900 shadow-none outline-none ring-0 placeholder:text-neutral-400 focus:border-0 focus:border-none focus:outline-none focus:ring-0 focus-visible:border-none focus-visible:outline-none focus-visible:ring-0 dark:text-white"
+              style={{
+                outline: "none",
+                outlineWidth: 0,
+                border: "none",
+                boxShadow: "none",
+                WebkitAppearance: "none",
+              }}
             />
           </div>
 

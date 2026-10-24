@@ -988,3 +988,16 @@ a {
   background: #f5f5f4;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14);
 }
+
+/* Remove browser default focus outline/box on picker search inputs */
+.picker-search-input,
+.picker-search-input:focus,
+.picker-search-input:focus-visible {
+  outline: none !important;
+  outline-width: 0 !important;
+  outline-color: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+  -webkit-appearance: none !important;
+}
+
