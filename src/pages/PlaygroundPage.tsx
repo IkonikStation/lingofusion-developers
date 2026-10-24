@@ -2550,8 +2550,10 @@ export function PlaygroundPage({
               className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-neutral-200/90 bg-white p-6 shadow-2xl transition-all animate-in fade-in zoom-in-95 duration-150 dark:border-white/10 dark:bg-neutral-900"
             >
               <div className="flex items-start gap-3.5">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400">
-                  <AlertCircle className="h-5 w-5" />
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400">
+                  <span className="text-2xl font-bold leading-none select-none">
+                    $
+                  </span>
                 </div>
                 <div className="flex-1 pr-2">
                   <h3 className="text-base font-semibold text-neutral-950 dark:text-white">
