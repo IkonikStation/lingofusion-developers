@@ -2560,7 +2560,7 @@ export function PlaygroundPage({
                     Insufficient balance
                   </h3>
                   <p className="mt-1 text-xs leading-relaxed text-neutral-600 dark:text-neutral-400">
-                    Please deposit credits to continue translating and using LingoFusion services.
+                    You don't have enough credits in your balance to complete this request. Please add funds to continue using LingoFusion services.
                   </p>
                 </div>
                 <button
