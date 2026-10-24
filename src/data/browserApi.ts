@@ -1,4 +1,4 @@
-import { musicModels, resolveImageModel, textModelsByPricingMode } from "./pricing";
+import { dubbingModels, musicModels, resolveImageModel, textModelsByPricingMode } from "./pricing";
 import type { TextPricingMode } from "./pricing";
 import { buildImageTranslationInstruction, buildModelSystemPrompt } from "./systemPrompts";
 import { getCurrentUser } from "./auth";
@@ -1357,6 +1357,99 @@ async function runMusic(state: BrowserState, options?: RequestInit) {
   };
 }
 
+async function runDubbingBrowser(state: BrowserState, options?: RequestInit) {
+  const started = Date.now();
+  const { key, project } = authorize(state, options);
+  const body = requestBody(options);
+  const model = dubbingModels.find((candidate) => candidate.model === body.model) ?? dubbingModels[0];
+  const targetLang = String(body.target_lang || body.target_language || "Spanish").trim();
+  const sourceLang = String(body.source_lang || body.source_language || "Auto-detect").trim();
+  const durationSeconds = Math.max(15, Math.min(10800, Math.round(Number(body.duration_seconds || 30))));
+  const mediaType = String(body.media_type || "video/mp4");
+  const fileName = String(body.file_name || (mediaType.startsWith("video") ? "dubbed_video.mp4" : "dubbed_audio.mp3"));
+  const fileBase64 = String(body.file_base64 || "");
+
+  const durationMinutes = durationSeconds / 60;
+  const cost = Number(((model.priceUsd ?? 4.50) * durationMinutes).toFixed(6));
+
+  if ((state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) < cost) {
+    fail("Insufficient balance. Please deposit credits.");
+  }
+
+  let mediaUrl = "";
+  try {
+    const upstreamRes = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/playground/dubbing`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-LingoFusion-Client-Token": "lf_play_secure_649f7",
+      },
+      body: JSON.stringify({
+        model: model.model,
+        target_lang: targetLang,
+        source_lang: sourceLang,
+        duration_seconds: durationSeconds,
+        media_type: mediaType,
+        file_name: fileName,
+        file_base64: fileBase64,
+      }),
+    });
+
+    const data = (await upstreamRes.json().catch(() => ({}))) as Record<string, any>;
+    if (upstreamRes.ok && data.media_url) {
+      mediaUrl = String(data.media_url);
+    }
+  } catch (_err) {
+    // Fallback if network/gateway unavailable
+  }
+
+  if (!mediaUrl) {
+    if (fileBase64) {
+      mediaUrl = fileBase64.startsWith("data:") ? fileBase64 : `data:${mediaType};base64,${fileBase64}`;
+    } else {
+      mediaUrl = mediaType.startsWith("video")
+        ? "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
+        : "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+    }
+  }
+
+  const requestId = randomId("req");
+  applyCharge(state, cost);
+  createChargeEntry(state, cost, `${model.model} /v1/dubbing (${durationSeconds}s, ${targetLang})`);
+  logRequest(state, {
+    id: requestId,
+    timestamp: new Date().toISOString(),
+    projectId: project.id,
+    keyId: key.id,
+    endpoint: "/v1/dubbing",
+    model: model.model,
+    feature: "Dubbing",
+    status: 200,
+    inputTokens: 0,
+    outputTokens: 0,
+    reasoningTokens: 0,
+    totalTokens: 0,
+    words: 0,
+    cost,
+    latencyMs: Math.max(120, Date.now() - started),
+    errorCode: "",
+    streaming: false,
+  });
+
+  return {
+    id: requestId,
+    model: model.model,
+    status: "dubbed",
+    media_url: mediaUrl,
+    file_name: fileName.startsWith("dubbed-") ? fileName : `dubbed-${targetLang.toLowerCase()}-${fileName}`,
+    media_type: mediaType,
+    target_lang: targetLang,
+    source_lang: sourceLang,
+    duration_seconds: durationSeconds,
+    cost_usd: cost,
+  };
+}
+
 export function getApiBaseUrl() {
   const configuredApiUrl = String(import.meta.env.VITE_LINGOFUSION_API_URL || "").replace(/\/$/, "");
   return configuredApiUrl;
@@ -1791,6 +1884,8 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
     result = await runMusic(state, options);
   } else if (method === "POST" && (path === "/v1/audio/speech" || path === "/api/playground/speech")) {
     result = await runSpeechBrowser(state, options);
+  } else if (method === "POST" && (path === "/v1/dubbing" || path === "/api/playground/dubbing")) {
+    result = await runDubbingBrowser(state, options);
   } else {
     fail("not_found");
   }

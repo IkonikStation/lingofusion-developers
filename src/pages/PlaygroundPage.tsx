@@ -4,6 +4,7 @@ import {
   ArrowRightLeft,
   Check,
   ChevronDown,
+  Clapperboard,
   ClipboardCopy,
   Copy,
   CreditCard,
@@ -50,7 +51,7 @@ import {
 } from "../data/browserApi";
 import type { ModelPricingRecord } from "../data/browserApi";
 import { playgroundLanguages } from "../data/playgroundLanguages";
-import { imageModels, musicModels, textModelPresentations, ttsModels } from "../data/pricing";
+import { dubbingModels, imageModels, musicModels, textModelPresentations, ttsModels } from "../data/pricing";
 import { getCurrentUser, subscribeAuth } from "../data/auth";
 import { formatUsd, pageQuery } from "../lib/utils";
 
@@ -131,6 +132,29 @@ function formatCostBadge(costUsd: number): string {
     return Number(costUsd || 0).toFixed(5);
   }
   return trimmed;
+}
+
+function formatDuration(seconds: number): string {
+  if (!seconds || !Number.isFinite(seconds)) return "0s";
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  if (m >= 60) {
+    const h = Math.floor(m / 60);
+    const remM = m % 60;
+    return `${h}h ${remM}m`;
+  }
+  return m > 0 ? `${m}m ${s.toString().padStart(2, "0")}s` : `${s}s`;
+}
+
+function formatFileSize(bytes: number): string {
+  if (!bytes || !Number.isFinite(bytes)) return "0 B";
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 export function PlaygroundPage({
@@ -214,9 +238,10 @@ export function PlaygroundPage({
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Playground modality: text translation vs in-image translation vs voice synthesis vs music generation
-  const [mode, setMode] = useState<"text" | "image" | "voice" | "music">(() => {
+  // Playground modality: text translation vs in-image translation vs voice synthesis vs music generation vs dubbing
+  const [mode, setMode] = useState<"text" | "image" | "voice" | "music" | "dubbing">(() => {
     const q = pageQuery().get("mode");
+    if (q === "dubbing" || q === "dub") return "dubbing";
     if (q === "music") return "music";
     if (q === "voice" || q === "tts") return "voice";
     return q === "image" ? "image" : "text";
@@ -247,9 +272,34 @@ export function PlaygroundPage({
     { id: "image" as const, label: "Image", icon: ImageIcon },
     { id: "voice" as const, label: "Voice", icon: Volume2 },
     { id: "music" as const, label: "Music", icon: Music },
+    { id: "dubbing" as const, label: "Dubbing", icon: Clapperboard },
   ];
   const activeModeItem = PLAYGROUND_MODES.find((m) => m.id === mode) ?? PLAYGROUND_MODES[0];
   const ActiveModeIcon = activeModeItem.icon;
+
+  // Dubbing studio state
+  const [selectedDubbingModel, setSelectedDubbingModel] = useState<string>("LingoFusion Dubbing Studio");
+  const [dubbingFile, setDubbingFile] = useState<File | null>(null);
+  const [dubbingFileName, setDubbingFileName] = useState<string>("");
+  const [dubbingFileSize, setDubbingFileSize] = useState<number>(0);
+  const [dubbingDurationSeconds, setDubbingDurationSeconds] = useState<number>(0);
+  const [dubbingMediaType, setDubbingMediaType] = useState<"video" | "audio">("video");
+  const [dubbingPreviewUrl, setDubbingPreviewUrl] = useState<string | null>(null);
+  const [dubbingTargetLang, setDubbingTargetLang] = useState<string>("Spanish");
+  const [dubbingSourceLang, setDubbingSourceLang] = useState<string>("Auto-detect");
+  const [dubbingRunning, setDubbingRunning] = useState<boolean>(false);
+  const [dubbingDragActive, setDubbingDragActive] = useState<boolean>(false);
+  const [dubbingValidationError, setDubbingValidationError] = useState<string | null>(null);
+  const [dubbedMediaUrl, setDubbedMediaUrl] = useState<string | null>(null);
+  const [dubbedRun, setDubbedRun] = useState<{
+    id: string;
+    model: string;
+    targetLang: string;
+    durationSeconds: number;
+    costUsd: number;
+    mediaType: "video" | "audio";
+    fileName: string;
+  } | null>(null);
   const [selectedMusicModel, setSelectedMusicModel] = useState<string>("LingoFusion Music");
   const [musicDurationSeconds, setMusicDurationSeconds] = useState<number>(30);
   const [musicInstrumental, setMusicInstrumental] = useState<boolean>(false);
@@ -578,6 +628,17 @@ export function PlaygroundPage({
         id: model.model,
         label: model.model,
         icon: <Music className="h-3.5 w-3.5 shrink-0 text-neutral-400" />,
+        hint: `$${model.priceUsd?.toFixed(2)}/min`,
+      })),
+    [],
+  );
+
+  const dubbingModelItems = useMemo(
+    () =>
+      dubbingModels.map((model) => ({
+        id: model.model,
+        label: model.model,
+        icon: <Clapperboard className="h-3.5 w-3.5 shrink-0 text-neutral-400" />,
         hint: `$${model.priceUsd?.toFixed(2)}/min`,
       })),
     [],
@@ -1142,6 +1203,184 @@ export function PlaygroundPage({
     }
   };
 
+  const handleDubbingFileSelect = async (file?: File | null) => {
+    if (!file) return;
+    setDubbingValidationError(null);
+    setErrorBanner(null);
+
+    // 1. Capacity limit: max 2 GB (2,147,483,648 bytes)
+    const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024;
+    if (file.size > MAX_FILE_SIZE) {
+      setDubbingValidationError(
+        `File capacity limit exceeded: selected file is ${(file.size / (1024 * 1024 * 1024)).toFixed(2)} GB (maximum allowed is 2 GB).`
+      );
+      return;
+    }
+
+    const isVideo = file.type.startsWith("video/") || /\.(mp4|mov|avi|mkv|webm|m4v)$/i.test(file.name);
+    const isAudio = file.type.startsWith("audio/") || /\.(mp3|wav|m4a|aac|flac|ogg|wma)$/i.test(file.name);
+
+    if (!isVideo && !isAudio) {
+      setDubbingValidationError("Please upload a valid audio or video file (.mp4, .mov, .mp3, .wav, .m4a, etc.).");
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+
+    // 2. Duration check: minimum 15 seconds, maximum 180 minutes (10,800 seconds)
+    try {
+      const durationSec = await new Promise<number>((resolve) => {
+        const media = document.createElement(isVideo ? "video" : "audio");
+        media.preload = "metadata";
+        media.src = objectUrl;
+        const timer = setTimeout(() => {
+          resolve(30);
+        }, 10000);
+        media.onloadedmetadata = () => {
+          clearTimeout(timer);
+          resolve(media.duration && Number.isFinite(media.duration) ? media.duration : 30);
+        };
+        media.onerror = () => {
+          clearTimeout(timer);
+          resolve(30);
+        };
+      });
+
+      if (durationSec < 15) {
+        setDubbingValidationError(
+          `File duration is too short (${Math.round(durationSec)}s). Minimum required duration is 15 seconds.`
+        );
+        URL.revokeObjectURL(objectUrl);
+        return;
+      }
+
+      if (durationSec > 180 * 60) {
+        setDubbingValidationError(
+          `File duration exceeds maximum limit (${Math.round(durationSec / 60)} minutes). Maximum allowed duration is 180 minutes.`
+        );
+        URL.revokeObjectURL(objectUrl);
+        return;
+      }
+
+      setDubbingFile(file);
+      setDubbingFileName(file.name);
+      setDubbingFileSize(file.size);
+      setDubbingDurationSeconds(Math.round(durationSec));
+      setDubbingMediaType(isVideo ? "video" : "audio");
+      setDubbingPreviewUrl(objectUrl);
+      setDubbedMediaUrl(null);
+      setDubbedRun(null);
+    } catch (_err) {
+      setDubbingValidationError("Could not parse media metadata. Please ensure the file is a playable audio or video.");
+    }
+  };
+
+  const handleRunDubbing = async () => {
+    if (!dubbingFile || dubbingRunning) return;
+    if (liveBalance <= 0) {
+      setInsufficientModalOpen(true);
+      return;
+    }
+    setErrorBanner(null);
+    setDubbingRunning(true);
+    setDubbedMediaUrl(null);
+    setDubbedRun(null);
+
+    const runId = `dub-${Date.now()}`;
+    const selectedModelRecord = dubbingModels.find((m) => m.model === selectedDubbingModel) ?? dubbingModels[0];
+    const durationToUse = Math.max(15, dubbingDurationSeconds || 30);
+    const estimatedCostUsd = Number(((durationToUse / 60) * (selectedModelRecord.priceUsd ?? 4.50)).toFixed(4));
+
+    try {
+      let fileBase64 = "";
+      if (dubbingFile.size < 25 * 1024 * 1024) {
+        try {
+          fileBase64 = await readFileAsDataUrl(dubbingFile);
+        } catch (_err) {
+          // ignore if base64 conversion fails
+        }
+      }
+
+      const payload = {
+        model: selectedDubbingModel,
+        target_lang: dubbingTargetLang,
+        source_lang: dubbingSourceLang === "Auto-detect" ? "auto" : dubbingSourceLang,
+        duration_seconds: durationToUse,
+        media_type: dubbingMediaType === "video" ? (dubbingFile.type || "video/mp4") : (dubbingFile.type || "audio/mpeg"),
+        file_name: dubbingFileName || "media.mp4",
+        file_base64: fileBase64,
+      };
+
+      if (shouldUseBrowserApi()) {
+        const response = await callApi<{
+          id: string;
+          model: string;
+          status: string;
+          media_url: string;
+          file_name?: string;
+          media_type?: string;
+          duration_seconds?: number;
+          cost_usd?: number;
+        }>("/api/playground/dubbing", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+
+        const resultUrl = response.media_url || dubbingPreviewUrl || fileBase64;
+        setDubbedMediaUrl(resultUrl);
+        setDubbedRun({
+          id: response.id || runId,
+          model: response.model || selectedDubbingModel,
+          targetLang: dubbingTargetLang,
+          durationSeconds: response.duration_seconds || durationToUse,
+          costUsd: response.cost_usd ?? estimatedCostUsd,
+          mediaType: dubbingMediaType,
+          fileName: response.file_name || `dubbed-${dubbingTargetLang.toLowerCase()}-${dubbingFileName}`,
+        });
+      } else {
+        const baseUrl = getApiBaseUrl();
+        const res = await fetch(`${baseUrl}/api/playground/dubbing`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          const msg =
+            typeof errData?.error === "object" && errData?.error?.message
+              ? errData.error.message
+              : errData?.message || `HTTP ${res.status}`;
+          throw new Error(msg);
+        }
+
+        const data = await res.json().catch(() => ({}));
+        const resultUrl = data.media_url || dubbingPreviewUrl || fileBase64;
+        setDubbedMediaUrl(resultUrl);
+        setDubbedRun({
+          id: data.id || runId,
+          model: data.model || selectedDubbingModel,
+          targetLang: dubbingTargetLang,
+          durationSeconds: data.duration_seconds || durationToUse,
+          costUsd: data.cost_usd ?? estimatedCostUsd,
+          mediaType: dubbingMediaType,
+          fileName: data.file_name || `dubbed-${dubbingTargetLang.toLowerCase()}-${dubbingFileName}`,
+        });
+      }
+
+      await loadModelsAndState();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Dubbing failed";
+      if (message.toLowerCase().includes("insufficient") || message.toLowerCase().includes("deposit")) {
+        setInsufficientModalOpen(true);
+      } else {
+        setErrorBanner(message);
+      }
+    } finally {
+      setDubbingRunning(false);
+    }
+  };
+
   const swapLanguages = () => {
     setFromLanguage(toLanguage);
     setToLanguage(fromLanguage);
@@ -1347,7 +1586,9 @@ export function PlaygroundPage({
                   ? "Select a voice model, enter text, and generate speech."
                   : mode === "music"
                     ? "Select a music model, enter a prompt, and compose tracks."
-                    : "Choose a model, enter text, and translate instantly."}
+                    : mode === "dubbing"
+                      ? "Upload an audio or video file, select a language, and generate studio-quality dubbed media."
+                      : "Choose a model, enter text, and translate instantly."}
             </p>
           </div>
         </div>
@@ -2387,61 +2628,112 @@ export function PlaygroundPage({
                 <Picker
                   className="w-full sm:w-56"
                   label={
-                    mode === "music"
-                      ? "Select music model"
-                      : mode === "voice"
-                        ? "Select voice model"
-                        : mode === "image"
-                          ? "Select image model"
-                          : "Select model"
+                    mode === "dubbing"
+                      ? "Select dubbing model"
+                      : mode === "music"
+                        ? "Select music model"
+                        : mode === "voice"
+                          ? "Select voice model"
+                          : mode === "image"
+                            ? "Select image model"
+                            : "Select model"
                   }
                   testId={
-                    mode === "music"
-                      ? "playground-music-model-select"
-                      : mode === "voice"
-                        ? "playground-voice-model-select"
-                        : mode === "image"
-                          ? "playground-image-model-select"
-                          : "playground-model-select"
+                    mode === "dubbing"
+                      ? "playground-dubbing-model-select"
+                      : mode === "music"
+                        ? "playground-music-model-select"
+                        : mode === "voice"
+                          ? "playground-voice-model-select"
+                          : mode === "image"
+                            ? "playground-image-model-select"
+                            : "playground-model-select"
                   }
                   searchPlaceholder={
-                    mode === "music"
-                      ? "Search music models…"
-                      : mode === "voice"
-                        ? "Search voice models…"
-                        : mode === "image"
-                          ? "Search image models…"
-                          : "Search models…"
+                    mode === "dubbing"
+                      ? "Search dubbing models…"
+                      : mode === "music"
+                        ? "Search music models…"
+                        : mode === "voice"
+                          ? "Search voice models…"
+                          : mode === "image"
+                            ? "Search image models…"
+                            : "Search models…"
                   }
                   items={
-                    mode === "music"
-                      ? musicModelItems
-                      : mode === "voice"
-                        ? voiceModelItems
-                        : mode === "image"
-                          ? imageModelItems
-                          : modelItems
+                    mode === "dubbing"
+                      ? dubbingModelItems
+                      : mode === "music"
+                        ? musicModelItems
+                        : mode === "voice"
+                          ? voiceModelItems
+                          : mode === "image"
+                            ? imageModelItems
+                            : modelItems
                   }
                   value={
-                    mode === "music"
-                      ? selectedMusicModel
-                      : mode === "voice"
-                        ? selectedVoiceModel
-                        : mode === "image"
-                          ? selectedImageModel
-                          : selectedModelId
+                    mode === "dubbing"
+                      ? selectedDubbingModel
+                      : mode === "music"
+                        ? selectedMusicModel
+                        : mode === "voice"
+                          ? selectedVoiceModel
+                          : mode === "image"
+                            ? selectedImageModel
+                            : selectedModelId
                   }
                   onChange={
-                    mode === "music"
-                      ? setSelectedMusicModel
-                      : mode === "voice"
-                        ? setSelectedVoiceModel
-                        : mode === "image"
-                          ? setSelectedImageModel
-                          : setSelectedModelId
+                    mode === "dubbing"
+                      ? setSelectedDubbingModel
+                      : mode === "music"
+                        ? setSelectedMusicModel
+                        : mode === "voice"
+                          ? setSelectedVoiceModel
+                          : mode === "image"
+                            ? setSelectedImageModel
+                            : setSelectedModelId
                   }
                   align="left"
                 />
+
+                {mode === "dubbing" && (
+                  <>
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-xs text-neutral-500 dark:text-neutral-400">Target:</label>
+                      <select
+                        value={dubbingTargetLang}
+                        onChange={(e) => setDubbingTargetLang(e.target.value)}
+                        className="h-8 rounded-lg border border-neutral-200 bg-white px-2 text-xs font-semibold text-neutral-900 outline-none dark:border-white/15 dark:bg-neutral-950 dark:text-white"
+                      >
+                        {playgroundLanguages.slice(0, 40).map((l) => (
+                          <option key={l.name} value={l.name}>
+                            {l.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-xs text-neutral-500 dark:text-neutral-400">Source:</label>
+                      <select
+                        value={dubbingSourceLang}
+                        onChange={(e) => setDubbingSourceLang(e.target.value)}
+                        className="h-8 rounded-lg border border-neutral-200 bg-white px-2 text-xs font-semibold text-neutral-900 outline-none dark:border-white/15 dark:bg-neutral-950 dark:text-white"
+                      >
+                        <option value="Auto-detect">Auto-detect</option>
+                        {playgroundLanguages.slice(0, 30).map((l) => (
+                          <option key={l.name} value={l.name}>
+                            {l.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <span className="hidden font-sans tabular-nums text-[11px] text-neutral-500 md:inline dark:text-neutral-400">
+                      .50 / min
+                    </span>
+                  </>
+                )}
 
                 {mode === "text" && (
                   <>
@@ -2598,7 +2890,22 @@ export function PlaygroundPage({
                 </Popover>
               )}
 
-              {mode === "music" ? (
+              {mode === "dubbing" ? (
+                <button
+                  type="button"
+                  disabled={dubbingRunning || !dubbingFile || !!dubbingValidationError}
+                  onClick={handleRunDubbing}
+                  data-testid="playground-dubbing-run-btn"
+                  className="pressable inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-neutral-950 px-5 text-xs font-semibold text-white shadow-xs transition hover:bg-neutral-800 disabled:opacity-50 sm:flex-none dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+                >
+                  {dubbingRunning ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Clapperboard className="h-3 w-3" />
+                  )}
+                  {dubbingRunning ? "Dubbing media..." : "Dub media"}
+                </button>
+              ) : mode === "music" ? (
                 <button
                   type="button"
                   disabled={musicRunning || (!userInput.trim() && !translatedOutput.trim())}
@@ -3070,7 +3377,7 @@ export function PlaygroundPage({
                 </div>
               </div>
             </>
-          ) : (
+          ) : mode === "voice" ? (
             /* Voice Synthesis Layout */
             <>
               {/* Left Pane: Text input for speech */}
@@ -3214,6 +3521,244 @@ export function PlaygroundPage({
                       >
                         <Activity className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
                         {voiceRun.chars} characters • Cost: ${formatCostBadge(voiceRun.costUsd)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            /* Dubbing Studio Layout */
+            <>
+              {/* Left Pane: Media Upload & Source Preview */}
+              <div className="flex flex-col border-b border-neutral-200/70 p-4 dark:border-white/10 sm:p-5 lg:border-r lg:border-b-0">
+                <div className="mb-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <label
+                      htmlFor="playground-dubbing-file"
+                      className="text-xs font-semibold text-neutral-600 dark:text-neutral-300"
+                    >
+                      Source Media
+                    </label>
+                    <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-mono text-[10px] text-neutral-500 dark:bg-white/10 dark:text-neutral-400">
+                      15s – 180m • Max 2 GB
+                    </span>
+                  </div>
+
+                  {dubbingFile && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (dubbingPreviewUrl) URL.revokeObjectURL(dubbingPreviewUrl);
+                        setDubbingFile(null);
+                        setDubbingFileName("");
+                        setDubbingFileSize(0);
+                        setDubbingDurationSeconds(0);
+                        setDubbingPreviewUrl(null);
+                        setDubbedMediaUrl(null);
+                        setDubbedRun(null);
+                        setDubbingValidationError(null);
+                      }}
+                      className="inline-flex items-center gap-1 text-[11px] text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      Remove
+                    </button>
+                  )}
+                </div>
+
+                {/* Dropzone or Preview */}
+                {dubbingPreviewUrl ? (
+                  <div className="flex flex-col gap-3 rounded-2xl border border-neutral-200 bg-white p-3.5 shadow-2xs dark:border-white/10 dark:bg-neutral-900">
+                    <div className="overflow-hidden rounded-xl bg-black">
+                      {dubbingMediaType === "video" ? (
+                        <video
+                          src={dubbingPreviewUrl}
+                          controls
+                          className="max-h-72 w-full object-contain"
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-6">
+                          <Volume2 className="mb-2 h-8 w-8 text-neutral-400" />
+                          <audio src={dubbingPreviewUrl} controls className="w-full max-w-sm" />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-neutral-100 pt-3 text-xs dark:border-white/5">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-neutral-900 dark:text-white">
+                          {dubbingFileName}
+                        </p>
+                        <p className="text-[11px] text-neutral-500">
+                          {formatFileSize(dubbingFileSize)} • {formatDuration(dubbingDurationSeconds)}
+                        </p>
+                      </div>
+
+                      <label
+                        htmlFor="playground-dubbing-file"
+                        className="cursor-pointer text-xs font-semibold text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white"
+                      >
+                        Change file
+                      </label>
+                    </div>
+                  </div>
+                ) : (
+                  <label
+                    htmlFor="playground-dubbing-file"
+                    data-testid="playground-dubbing-dropzone"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setDubbingDragActive(true);
+                    }}
+                    onDragLeave={() => setDubbingDragActive(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDubbingDragActive(false);
+                      void handleDubbingFileSelect(e.dataTransfer?.files?.[0]);
+                    }}
+                    className={`flex min-h-[16rem] flex-1 cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-6 text-center transition ${
+                      dubbingDragActive
+                        ? "border-neutral-950 bg-neutral-100/70 dark:border-white dark:bg-white/10"
+                        : "border-neutral-300 bg-neutral-50/60 hover:bg-neutral-100/50 dark:border-white/15 dark:bg-white/[0.02] dark:hover:bg-white/[0.04]"
+                    }`}
+                  >
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-xs dark:bg-neutral-800">
+                      <UploadCloud className="h-6 w-6 text-neutral-600 dark:text-neutral-300" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-neutral-800 dark:text-neutral-100">
+                        Click to upload or drag &amp; drop
+                      </p>
+                      <p className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400">
+                        Audio or video (MP4, MOV, WebM, MP3, WAV, M4A)
+                      </p>
+                      <p className="mt-1 font-mono text-[10px] text-neutral-400 dark:text-neutral-500">
+                        Duration: 15s – 180 min • Capacity: Up to 2 GB
+                      </p>
+                    </div>
+                  </label>
+                )}
+
+                <input
+                  id="playground-dubbing-file"
+                  data-testid="playground-dubbing-file-input"
+                  type="file"
+                  accept="audio/*,video/*,.mp4,.mov,.avi,.mkv,.webm,.m4v,.mp3,.wav,.m4a,.aac,.flac,.ogg"
+                  className="hidden"
+                  onChange={(e) => {
+                    void handleDubbingFileSelect(e.target.files?.[0]);
+                    e.target.value = "";
+                  }}
+                />
+
+                {/* Validation Error Alert */}
+                {dubbingValidationError && (
+                  <div
+                    role="alert"
+                    className="mt-3 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50/80 p-3 text-xs text-red-800 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-200"
+                  >
+                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-600 dark:text-red-400" />
+                    <span className="flex-1">{dubbingValidationError}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Right Pane: Dubbed Output & Download */}
+              <div className="flex flex-col bg-neutral-50/40 p-4 dark:bg-white/[0.01] sm:p-5">
+                <div className="mb-2.5 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">
+                    Dubbed Output
+                  </span>
+                  {dubbedMediaUrl && (
+                    <a
+                      href={dubbedMediaUrl}
+                      download={dubbedRun?.fileName || `dubbed-${dubbingTargetLang.toLowerCase()}-${dubbingFileName || "media"}`}
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-neutral-700 hover:text-neutral-950 dark:text-neutral-300 dark:hover:text-white"
+                    >
+                      <Download className="h-3 w-3" />
+                      Download
+                    </a>
+                  )}
+                </div>
+
+                <div
+                  data-testid="playground-dubbing-output"
+                  className="flex min-h-[16rem] flex-1 flex-col justify-between"
+                >
+                  <div className="flex flex-1 flex-col items-center justify-center gap-4 py-6">
+                    {dubbedMediaUrl ? (
+                      <div className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-5 shadow-xs dark:border-white/10 dark:bg-neutral-900">
+                        <div className="mb-3.5 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Clapperboard className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                            <span className="text-xs font-semibold text-neutral-900 dark:text-white">
+                              Dubbed {dubbingMediaType === "video" ? "Video" : "Audio"} • {dubbingTargetLang}
+                            </span>
+                          </div>
+                          {dubbedRun && (
+                            <span className="font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
+                              {formatDuration(dubbedRun.durationSeconds)}
+                            </span>
+                          )}
+                        </div>
+
+                        {dubbingMediaType === "video" ? (
+                          <div className="mb-4 overflow-hidden rounded-xl bg-black">
+                            <video
+                              src={dubbedMediaUrl}
+                              controls
+                              className="max-h-72 w-full object-contain"
+                            />
+                          </div>
+                        ) : (
+                          <div className="mb-4">
+                            <audio src={dubbedMediaUrl} controls className="w-full" />
+                          </div>
+                        )}
+
+                        <a
+                          href={dubbedMediaUrl}
+                          download={dubbedRun?.fileName || `dubbed-${dubbingTargetLang.toLowerCase()}-${dubbingFileName || "media"}`}
+                          data-testid="playground-dubbing-download-btn"
+                          className="pressable inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-neutral-950 px-5 text-xs font-semibold text-white shadow-xs transition hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+                        >
+                          <Download className="h-4 w-4" />
+                          Download Dubbed {dubbingMediaType === "video" ? "Video" : "Audio"}
+                        </a>
+                      </div>
+                    ) : dubbingRunning ? (
+                      <div className="flex flex-col items-center gap-3 text-center">
+                        <Loader2 className="h-8 w-8 animate-spin text-neutral-950 dark:text-white" />
+                        <div>
+                          <p className="text-xs font-semibold text-neutral-900 dark:text-white">
+                            Dubbing media to {dubbingTargetLang}…
+                          </p>
+                          <p className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400">
+                            Translating dialog, isolating acoustics, and synthesizing studio speech.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center">
+                        <Clapperboard className="mx-auto mb-2 h-7 w-7 text-neutral-300 dark:text-neutral-600" />
+                        <span className="text-xs text-neutral-400 dark:text-neutral-500">
+                          {dubbingFile
+                            ? `Ready to dub ${dubbingFileName}. Click "Dub media" to process.`
+                            : "Upload an audio or video file to start dubbing."}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {dubbedRun && (
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-neutral-200/70 pt-3 dark:border-white/10">
+                      <span
+                        data-testid="dubbing-response-usage-badge"
+                        className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 font-sans tabular-nums text-xs font-medium text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
+                      >
+                        <Activity className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                        {formatDuration(dubbedRun.durationSeconds)} • Dubbed to {dubbedRun.targetLang} • Cost: ${formatCostBadge(dubbedRun.costUsd)}
                       </span>
                     </div>
                   )}

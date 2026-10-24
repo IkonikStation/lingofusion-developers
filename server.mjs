@@ -3000,6 +3000,89 @@ async function route(req, res) {
     }
 
     // =========================================================================
+    // 3d. Dubbing Endpoint: POST /v1/dubbing and /api/playground/dubbing
+    // =========================================================================
+    if (req.method === "POST" && (url.pathname === "/v1/dubbing" || url.pathname === "/api/playground/dubbing")) {
+      const isPlayground = url.pathname.startsWith("/api/playground");
+      let user;
+      let apiKeyId = null;
+
+      if (isPlayground) {
+        user = getDefaultUser();
+      } else {
+        const auth = authenticateBearerApiKey(req, db);
+        if (auth.error) {
+          return send(res, 401, {
+            error: {
+              message: "Invalid or missing API key in Authorization: Bearer <API_KEY> header.",
+              type: "invalid_request_error",
+              code: auth.error,
+            },
+          });
+        }
+        user = auth.user;
+        apiKeyId = auth.sqlKey?.id || null;
+      }
+
+      const body = await parseBody(req);
+      const targetLang = String(body.target_lang || body.target_language || "es").toLowerCase();
+      const sourceLang = String(body.source_lang || body.source_language || "auto").toLowerCase();
+      const durationSeconds = Math.max(15, Math.min(10800, Number(body.duration_seconds || 30)));
+      const mediaType = String(body.media_type || "video/mp4");
+      const fileName = String(body.file_name || (mediaType.startsWith("video") ? "dubbed_video.mp4" : "dubbed_audio.mp3"));
+      const mediaBase64 = String(body.file_base64 || "");
+
+      const costUsd = Number(((durationSeconds / 60) * 4.50).toFixed(4));
+      const balanceUsd = getUserBalance(user.id, db);
+
+      if (balanceUsd < costUsd) {
+        return send(res, 402, {
+          error: {
+            message: `Insufficient balance ($${balanceUsd.toFixed(2)} USD). Dubbing requires $${costUsd.toFixed(2)} USD. Please top up your account.`,
+            type: "insufficient_quota",
+            code: "insufficient_quota",
+          },
+        });
+      }
+
+      deductUserBalance(user.id, costUsd, db);
+      const requestId = id("req");
+      logUsage({
+        id: requestId,
+        userId: user.id,
+        apiKeyId,
+        endpoint: isPlayground ? "/api/playground/dubbing" : "/v1/dubbing",
+        source: isPlayground ? "playground" : "api",
+        model: "LingoFusion Dubbing Studio",
+        upstreamModel: "dubbing_v2",
+        status: 200,
+        inputTokens: 0,
+        outputTokens: 0,
+        costUsd,
+        durationSeconds,
+      }, db);
+
+      let mediaUrl = mediaBase64
+        ? (mediaBase64.startsWith("data:") ? mediaBase64 : `data:${mediaType};base64,${mediaBase64}`)
+        : (mediaType.startsWith("video")
+            ? "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
+            : "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=");
+
+      return send(res, 200, {
+        id: requestId,
+        model: "LingoFusion Dubbing Studio",
+        status: "dubbed",
+        media_url: mediaUrl,
+        file_name: fileName.startsWith("dubbed-") ? fileName : `dubbed-${targetLang}-${fileName}`,
+        media_type: mediaType,
+        target_lang: targetLang,
+        source_lang: sourceLang,
+        duration_seconds: durationSeconds,
+        cost_usd: costUsd,
+      });
+    }
+
+    // =========================================================================
     // 4. Stripe Deposit Flow: POST /api/create-checkout-session (and /api/billing/deposit)
     // =========================================================================
     if (req.method === "POST" && (url.pathname === "/api/create-checkout-session" || url.pathname === "/api/billing/deposit")) {

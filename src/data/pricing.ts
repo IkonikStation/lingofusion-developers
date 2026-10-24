@@ -159,8 +159,8 @@ export const transcriptionModels: SimpleModel[] = [
 ];
 
 export const dubbingModels: SimpleModel[] = [
+  { model: "LingoFusion Dubbing Studio", priceUsd: 4.50, pricingUnit: "per_minute" },
   { model: "LingoFusion Audio Dubbing", priceUsd: 3.50, pricingUnit: "per_minute" },
-  { model: "LingoFusion Video Dub (Basic)", priceUsd: 4.99, pricingUnit: "per_minute" },
   { model: "LingoFusion Video Dub (Advanced)", priceUsd: 7.99, pricingUnit: "per_minute" },
 ];
 
