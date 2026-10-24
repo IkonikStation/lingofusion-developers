@@ -59,6 +59,7 @@ export function Picker({
   className,
   align = "left",
   searchPlaceholder = "Search…",
+  panelClassName,
 }: {
   label: string;
   items: PickerItem[];
@@ -68,6 +69,7 @@ export function Picker({
   className?: string;
   align?: PopoverAlign;
   searchPlaceholder?: string;
+  panelClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -124,7 +126,7 @@ export function Picker({
       </button>
 
       {open && (
-        <div className={`${panelBaseClass} ${panelPositionClass(align)}`}>
+        <div className={`${panelBaseClass} ${panelPositionClass(align)} ${panelClassName ?? ""}`}>
           <div className="flex items-center gap-2 rounded-lg bg-neutral-100 px-2.5 dark:bg-neutral-800">
             <Search className="h-3.5 w-3.5 shrink-0 text-neutral-400" />
             <input

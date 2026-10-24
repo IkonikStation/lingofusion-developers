@@ -50,7 +50,7 @@ import {
   syncCloudBalance,
 } from "../data/browserApi";
 import type { ModelPricingRecord } from "../data/browserApi";
-import { dubbingLanguages, playgroundLanguages } from "../data/playgroundLanguages";
+import { dubbingLanguageNameToCode, dubbingLanguagesWithFlags, playgroundLanguages } from "../data/playgroundLanguages";
 import { dubbingModels, imageModels, musicModels, textModelPresentations, ttsModels } from "../data/pricing";
 import { getCurrentUser, subscribeAuth } from "../data/auth";
 import { formatUsd, pageQuery } from "../lib/utils";
@@ -584,6 +584,20 @@ export function PlaygroundPage({
       playgroundLanguages.map((language) => ({
         id: language.name,
         label: language.name,
+      })),
+    [],
+  );
+
+  const dubbingLanguageItems = useMemo(
+    () =>
+      dubbingLanguagesWithFlags.map((item) => ({
+        id: item.name,
+        label: item.name,
+        icon: (
+          <span className="shrink-0 text-base leading-none select-none" role="img" aria-label={item.name}>
+            {item.flag}
+          </span>
+        ),
       })),
     [],
   );
@@ -1304,7 +1318,8 @@ export function PlaygroundPage({
 
       const payload = {
         model: selectedDubbingModel,
-        target_lang: dubbingTargetLang,
+        target_lang: dubbingLanguageNameToCode[dubbingTargetLang] || dubbingTargetLang,
+        target_language: dubbingTargetLang,
         source_lang: "auto",
         duration_seconds: durationToUse,
         media_type: dubbingMediaType === "video" ? (dubbingFile.type || "video/mp4") : (dubbingFile.type || "audio/mpeg"),
@@ -2589,7 +2604,7 @@ export function PlaygroundPage({
             {/* Left column: language pair on top (text/image only), mode + model below */}
             <div className="flex min-w-0 flex-col gap-3">
               {/* Language pair: source ⇄ target (only shown for text & image modes) */}
-              {mode !== "voice" && (
+              {(mode === "text" || mode === "image") && (
                 <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-1.5 lg:w-[24rem]">
                   <Picker
                     label="Source language"
@@ -2700,22 +2715,20 @@ export function PlaygroundPage({
                 {mode === "dubbing" && (
                   <>
                     <div className="flex items-center gap-1.5">
-                      <label htmlFor="playground-dubbing-target" className="text-xs text-neutral-500 dark:text-neutral-400">
+                      <span className="shrink-0 text-xs font-semibold text-neutral-500 dark:text-neutral-400">
                         Dub into:
-                      </label>
-                      <select
-                        id="playground-dubbing-target"
-                        data-testid="playground-dubbing-target-select"
+                      </span>
+                      <Picker
+                        className="w-56 sm:w-64"
+                        panelClassName="w-[min(20rem,calc(100vw-2.5rem))] sm:w-72"
+                        label="Dub into"
+                        testId="playground-dubbing-target-select"
+                        searchPlaceholder="Search languages..."
+                        items={dubbingLanguageItems}
                         value={dubbingTargetLang}
-                        onChange={(e) => setDubbingTargetLang(e.target.value)}
-                        className="h-8 rounded-lg border border-neutral-200 bg-white px-2.5 text-xs font-semibold text-neutral-900 outline-none dark:border-white/15 dark:bg-neutral-950 dark:text-white"
-                      >
-                        {dubbingLanguages.map((lang) => (
-                          <option key={lang} value={lang}>
-                            {lang}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={setDubbingTargetLang}
+                        align="left"
+                      />
                     </div>
 
                     <span className="hidden font-sans tabular-nums text-[11px] text-neutral-500 md:inline dark:text-neutral-400">
