@@ -162,8 +162,8 @@ export function CheckoutPage({
                       ${formatUsd(feeUsd)} {currencyParam}
                     </dd>
                   </div>
-                  <div className="flex items-baseline justify-between border-t border-neutral-200/80 pt-3 text-sm font-semibold text-neutral-950 dark:border-white/10 dark:text-white">
-                    <dt>Total due</dt>
+                  <div className="flex items-baseline justify-between border-t border-neutral-200/80 pt-3 text-neutral-950 dark:border-white/10 dark:text-white">
+                    <dt className="text-lg font-bold">Total</dt>
                     <dd className="font-sans tabular-nums text-lg font-bold">
                       ${formatUsd(grossUsd)}{" "}
                       <span className="text-xs font-medium text-neutral-500">{currencyParam}</span>

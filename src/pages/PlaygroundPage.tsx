@@ -2075,8 +2075,8 @@ export function PlaygroundPage({
                     </div>
                     <div className="border-t border-neutral-200/80 pt-3 dark:border-white/10">
                       <div className="flex items-baseline justify-between">
-                        <span className="text-xs font-semibold text-neutral-950 dark:text-white">
-                          Total due
+                        <span className="text-lg font-bold tracking-tight text-neutral-950 dark:text-white">
+                          Total
                         </span>
                         <span className="font-sans tabular-nums text-lg font-bold tracking-tight text-neutral-950 dark:text-white">
                           ${formatUsd(depositBreakdown.grossChargedUsd)}{" "}

@@ -1278,8 +1278,8 @@ export function DashboardModal({
                                     <span>Processing fee</span>
                                     <span className="font-sans tabular-nums">${formatUsd(breakdown.estimatedStripeFeeUsd)} USD</span>
                                   </div>
-                                  <div className="flex items-baseline justify-between border-t border-neutral-200 pt-2.5 text-sm font-semibold text-neutral-950 dark:border-white/10 dark:text-white">
-                                    <span>Total due</span>
+                                  <div className="flex items-baseline justify-between border-t border-neutral-200 pt-2.5 text-neutral-950 dark:border-white/10 dark:text-white">
+                                    <span className="text-base font-bold">Total</span>
                                     <span className="font-sans tabular-nums text-base font-bold">
                                       ${formatUsd(breakdown.grossChargedUsd)} USD
                                     </span>
