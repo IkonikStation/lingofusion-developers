@@ -2881,7 +2881,7 @@ export function PlaygroundPage({
                     </label>
 
                     <span className="hidden font-sans tabular-nums text-[11px] text-neutral-500 md:inline dark:text-neutral-400">
-                      $0.50 / min
+                      $0.10 / song
                     </span>
                   </>
                 )}
