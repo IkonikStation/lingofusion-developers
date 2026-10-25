@@ -1323,8 +1323,8 @@ async function runMusic(state: BrowserState, options?: RequestInit) {
     if (data.status === "processing" && (data.id || data.task_id)) {
       const taskId = String(data.id || data.task_id);
       const pollStart = Date.now();
-      while (!data.audio_url && Date.now() - pollStart < 300000) {
-        await new Promise((r) => setTimeout(r, 3000));
+      while (!data.audio_url && Date.now() - pollStart < 360000) {
+        await new Promise((r) => setTimeout(r, 2500));
         const pollRes = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/playground/music?id=${encodeURIComponent(taskId)}`, {
           headers: { "X-LingoFusion-Client-Token": "lf_play_secure_649f7" },
         });
@@ -1336,6 +1336,9 @@ async function runMusic(state: BrowserState, options?: RequestInit) {
           } else if (pollData.status === "failed") {
             throw new Error(pollData.error || "Music generation failed upstream");
           }
+        } else if (pollRes.status >= 400 && pollRes.status !== 404) {
+          const errData = (await pollRes.json().catch(() => ({}))) as Record<string, any>;
+          throw new Error(errData?.message || errData?.error || `Polling failed (HTTP ${pollRes.status})`);
         }
       }
     }

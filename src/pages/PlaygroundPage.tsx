@@ -42,6 +42,7 @@ import { ModelThumb } from "../components/shared/FormFields";
 import { Picker, Popover, SwitchRow } from "../components/shared/Picker";
 import {
   browserApi,
+  DEFAULT_EDGE_GATEWAY_URL,
   calculateGrossDeposit,
   defaultBrowserModelPricing,
   getApiBaseUrl,
@@ -308,6 +309,7 @@ export function PlaygroundPage({
   const [musicAudioUrl, setMusicAudioUrl] = useState<string | null>(null);
   const [musicRunning, setMusicRunning] = useState<boolean>(false);
   const [musicPlaying, setMusicPlaying] = useState<boolean>(false);
+  const [musicElapsedSeconds, setMusicElapsedSeconds] = useState<number>(0);
   const musicAudioRef = useRef<HTMLAudioElement | null>(null);
   const [musicRun, setMusicRun] = useState<{
     id: string;
@@ -315,6 +317,17 @@ export function PlaygroundPage({
     durationSeconds: number;
     costUsd: number;
   } | null>(null);
+
+  useEffect(() => {
+    if (!musicRunning) {
+      setMusicElapsedSeconds(0);
+      return;
+    }
+    const timer = setInterval(() => {
+      setMusicElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [musicRunning]);
   const [selectedVoiceModel, setSelectedVoiceModel] = useState<string>(() => {
     const requested = pageQuery().get("model");
     const match = ttsModels.find(
@@ -1180,8 +1193,8 @@ export function PlaygroundPage({
           costUsd: 0,
         });
       } else {
-        const baseUrl = getApiBaseUrl();
-        const res = await fetch(`${baseUrl}/api/playground/music`, {
+        const gatewayUrl = DEFAULT_EDGE_GATEWAY_URL || getApiBaseUrl();
+        const res = await fetch(`${gatewayUrl}/api/playground/music`, {
           method: "POST",
           headers: {
             "content-type": "application/json",
@@ -1205,9 +1218,9 @@ export function PlaygroundPage({
         if (data.status === "processing" && (data.id || data.task_id)) {
           const taskId = String(data.id || data.task_id);
           const pollStart = Date.now();
-          while (!data.audio_url && Date.now() - pollStart < 300000) {
-            await new Promise((r) => setTimeout(r, 3000));
-            const pollRes = await fetch(`${baseUrl}/api/playground/music?id=${encodeURIComponent(taskId)}`, {
+          while (!data.audio_url && Date.now() - pollStart < 360000) {
+            await new Promise((r) => setTimeout(r, 2500));
+            const pollRes = await fetch(`${gatewayUrl}/api/playground/music?id=${encodeURIComponent(taskId)}`, {
               headers: { "X-LingoFusion-Client-Token": "lf_play_secure_649f7" },
             });
             if (pollRes.ok) {
@@ -1218,6 +1231,9 @@ export function PlaygroundPage({
               } else if (pollData.status === "failed") {
                 throw new Error(pollData.error || "Music generation failed upstream");
               }
+            } else if (pollRes.status >= 400 && pollRes.status !== 404) {
+              const errData = await pollRes.json().catch(() => ({}));
+              throw new Error(errData?.message || errData?.error || `Polling failed (HTTP ${pollRes.status})`);
             }
           }
         }
@@ -3408,12 +3424,37 @@ export function PlaygroundPage({
                           />
                         </div>
                       </div>
+                    ) : musicRunning ? (
+                      <div className="flex flex-col items-center gap-3.5 text-center px-4 max-w-sm py-4">
+                        <div className="relative flex items-center justify-center">
+                          <Loader2 className="h-10 w-10 animate-spin text-purple-600 dark:text-purple-400" />
+                          <Music className="absolute h-4 w-4 text-purple-600 dark:text-purple-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-neutral-900 dark:text-white">
+                            Generating Music with Melodia v3… ({Math.floor(musicElapsedSeconds / 60)}:{(musicElapsedSeconds % 60).toString().padStart(2, "0")})
+                          </p>
+                          <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                            {musicElapsedSeconds < 15
+                              ? "Composing arrangement & harmonic structure…"
+                              : musicElapsedSeconds < 60
+                              ? "Synthesizing musical instruments and rhythm layers…"
+                              : musicElapsedSeconds < 120
+                              ? "Generating high-fidelity audio…"
+                              : "Mastering and rendering full audio track…"}
+                          </p>
+                          <p className="mt-2 text-[11px] text-neutral-400 dark:text-neutral-500">
+                            Treblo v3 generates full-length tracks (typically takes 2–3 minutes). Please keep this page open.
+                          </p>
+                        </div>
+                      </div>
                     ) : (
-                      <span className="text-sm text-neutral-400 dark:text-neutral-500">
-                        {musicRunning
-                          ? "Generating music..."
-                          : "Generated music will appear here."}
-                      </span>
+                      <div className="text-center">
+                        <Music className="mx-auto mb-2 h-7 w-7 text-neutral-300 dark:text-neutral-600" />
+                        <span className="text-xs text-neutral-400 dark:text-neutral-500">
+                          Generated music will appear here.
+                        </span>
+                      </div>
                     )}
                   </div>
 

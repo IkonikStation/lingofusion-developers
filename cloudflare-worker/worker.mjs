@@ -782,49 +782,7 @@ export default {
           return jsonResponse({ error: "invalid_upstream_response", message: "No task_id returned from music provider." }, 502, requestOrigin);
         }
 
-        // Poll for completion (up to ~36 seconds on the edge before letting client poll)
-        const maxPolls = 12;
-        const pollIntervalMs = 3000;
-        let songUrl = null;
-
-        for (let i = 0; i < maxPolls; i++) {
-          await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-          try {
-            const pollRes = await fetch(`https://api.treblo.com/v1/generations/${taskId}`, {
-              headers: {
-                "Authorization": `Bearer ${trebloKey}`,
-              },
-            });
-            if (pollRes.ok) {
-              const pollData = await pollRes.json();
-              if (pollData.status === "SUCCESS" && Array.isArray(pollData.song_paths) && pollData.song_paths.length > 0) {
-                songUrl = pollData.song_paths[0];
-                break;
-              } else if (pollData.status === "FAILURE") {
-                return jsonResponse({
-                  error: "generation_failed",
-                  message: pollData.error_message || "Music generation failed upstream.",
-                }, 500, requestOrigin);
-              }
-            }
-          } catch (_e) {
-            // continue polling
-          }
-        }
-
-        if (songUrl) {
-          return jsonResponse({
-            id: taskId,
-            model: "LingoFusion Music",
-            upstream_model: "treblo_v3",
-            status: "completed",
-            audio_url: songUrl,
-            duration_seconds: durationSeconds,
-            prompt,
-          }, 200, requestOrigin);
-        }
-
-        // If generation is taking longer than initial edge poll window, return processing status so client can poll
+        // Return immediately with task ID so client can poll with real-time UI progress updates
         return jsonResponse({
           id: taskId,
           model: "LingoFusion Music",
