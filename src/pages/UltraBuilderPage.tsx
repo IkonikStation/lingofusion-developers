@@ -1,4 +1,3 @@
-import { ArrowLeft, Sparkles } from "lucide-react";
 import { UltraSubscriptionBuilder } from "../components/UltraSubscriptionBuilder";
 import type { BillingInterval } from "../data/subscriptions";
 import type { UltraResourceConfig } from "../data/ultraConfig";
@@ -25,34 +24,11 @@ export function UltraBuilderPage({ onNavigate }: UltraBuilderPageProps) {
   if (imgC && !isNaN(Number(imgC))) initialConfig.imageCount = Number(imgC);
 
   return (
-    <section className="mx-auto max-w-6xl py-4 sm:py-8">
-      {/* Top Breadcrumb / Back button */}
-      <button
-        type="button"
-        onClick={() => onNavigate("Subscription Prices")}
-        className="pressable inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-neutral-500 transition hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" /> Back to Subscriptions
-      </button>
-
-      {/* Page Header */}
-      <div className="mt-4 mb-8">
-        <div className="inline-flex items-center gap-2 rounded-full border border-blue-200/80 bg-blue-50/80 px-3 py-1 text-xs font-bold text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300">
-          <Sparkles className="h-3.5 w-3.5" /> Ultra Plan Configuration
-        </div>
-        <h1 className="mt-3 text-3xl font-extrabold tracking-tight text-neutral-950 dark:text-white sm:text-4xl">
-          Customize your Ultra subscription.
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
-          Scale your monthly quotas for dubbing, speech, translation, transcription, and image synthesis with real-time pricing and automatic fallback.
-        </p>
-      </div>
-
+    <section className="mx-auto max-w-6xl py-2 sm:py-6">
       {/* Builder Component */}
       <UltraSubscriptionBuilder
         initialBilling={initialBilling}
         initialConfig={initialConfig}
-        isStandalone={true}
         onSubscribe={(cfg, breakdown, billing) => {
           onNavigate("Checkout", {
             plan: "ultra-custom",
