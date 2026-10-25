@@ -42,6 +42,9 @@ async function runTests() {
   assert.equal(ultraDefaultPrice.totalYearlyPrice, 2611.61, "Default Ultra yearly total must be $2611.61 (15% discount)");
   assert.equal(ultraDefaultPrice.effectiveMonthlyPriceYearly, 217.63, "Default Ultra effective monthly price must be $217.63");
   assert.equal(ultraDefaultPrice.isEnterpriseInvoice, false, "Default Ultra should not require enterprise invoice");
+  const emptyConfigPrice = calculateUltraPrice({});
+  assert.equal(emptyConfigPrice.baseFee, 29.00);
+  assert.equal(emptyConfigPrice.totalMonthlyPrice, 29.00);
   console.log("✓ Ultra subscription pricing engine verified: Monthly $" + ultraDefaultPrice.totalMonthlyPrice + " / Yearly $" + ultraDefaultPrice.totalYearlyPrice + " (Save 15%)");
 
   // Piecewise Dubbing Slider Tests:

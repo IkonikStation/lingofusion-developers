@@ -1,6 +1,7 @@
 import { ArrowLeft, Sparkles } from "lucide-react";
 import { UltraSubscriptionBuilder } from "../components/UltraSubscriptionBuilder";
 import type { BillingInterval } from "../data/subscriptions";
+import type { UltraResourceConfig } from "../data/ultraConfig";
 import { pageQuery } from "../lib/utils";
 
 interface UltraBuilderPageProps {
@@ -11,13 +12,17 @@ export function UltraBuilderPage({ onNavigate }: UltraBuilderPageProps) {
   const query = pageQuery();
   const initialBilling: BillingInterval = query.get("billing") === "yearly" ? "yearly" : "monthly";
 
-  const initialConfig = {
-    dubbingMins: query.get("dubbing_mins") ? Number(query.get("dubbing_mins")) : undefined,
-    voiceCredits: query.get("voice_credits") ? Number(query.get("voice_credits")) : undefined,
-    textChars: query.get("text_chars") ? Number(query.get("text_chars")) : undefined,
-    transcribeMins: query.get("transcribe_mins") ? Number(query.get("transcribe_mins")) : undefined,
-    imageCount: query.get("image_count") ? Number(query.get("image_count")) : undefined,
-  };
+  const initialConfig: Partial<UltraResourceConfig> = {};
+  const dubM = query.get("dubbing_mins");
+  if (dubM && !isNaN(Number(dubM))) initialConfig.dubbingMins = Number(dubM);
+  const voiceC = query.get("voice_credits");
+  if (voiceC && !isNaN(Number(voiceC))) initialConfig.voiceCredits = Number(voiceC);
+  const textC = query.get("text_chars");
+  if (textC && !isNaN(Number(textC))) initialConfig.textChars = Number(textC);
+  const transM = query.get("transcribe_mins");
+  if (transM && !isNaN(Number(transM))) initialConfig.transcribeMins = Number(transM);
+  const imgC = query.get("image_count");
+  if (imgC && !isNaN(Number(imgC))) initialConfig.imageCount = Number(imgC);
 
   return (
     <section className="mx-auto max-w-6xl py-4 sm:py-8">

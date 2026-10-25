@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AuthModal } from "./components/AuthModal";
 import { DashboardModal } from "./components/DashboardModal";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Header } from "./components/Header";
 import { Sidebar } from "./components/Sidebar";
 import { SubscriptionPage } from "./components/SubscriptionPage";
@@ -361,7 +362,9 @@ export default function App() {
                 {activePage === "Pricing" ? (
                   <PricingPage t={t} onDashboard={() => setDashboardOpen(true)} onOpenModel={navigate} />
                 ) : activePage === "Ultra Builder" ? (
-                  <UltraBuilderPage onNavigate={navigate} />
+                  <ErrorBoundary fallbackTitle="Ultra Plan Builder" onReset={() => navigate("Ultra Builder")}>
+                    <UltraBuilderPage onNavigate={navigate} />
+                  </ErrorBoundary>
                 ) : activePage === "Models" ? (
                   <ModelsPage onOpenModel={navigate} />
                 ) : activePage === "Playground" ? (

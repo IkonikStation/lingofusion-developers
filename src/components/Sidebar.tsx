@@ -94,7 +94,7 @@ export function Sidebar({
     if (entry.id === "home") return activePage === "Overview" || activePage === "Home";
     if (entry.id === "models") return activePage === "Models";
     if (entry.id === "pricing") return activePage === "Pricing" || activePage === "API Prices";
-    if (entry.id === "subscriptions") return activePage === "Subscription Prices";
+    if (entry.id === "subscriptions") return activePage === "Subscription Prices" || activePage === "Ultra Builder";
     if (entry.id === "playground") return activePage === "Playground";
     if (entry.id === "docs") return activePage === "Quickstart";
     return activePage === entry.targetPage;

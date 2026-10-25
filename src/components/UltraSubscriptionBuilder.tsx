@@ -47,16 +47,29 @@ export function UltraSubscriptionBuilder({
 }: UltraSubscriptionBuilderProps) {
   const [billing, setBilling] = useState<BillingInterval>(initialBilling);
   const [config, setConfig] = useState<UltraResourceConfig>(() => ({
-    ...ULTRA_DEFAULTS,
-    ...initialConfig,
+    dubbingMins: Number.isFinite(initialConfig?.dubbingMins)
+      ? Number(initialConfig!.dubbingMins)
+      : ULTRA_DEFAULTS.dubbingMins,
+    voiceCredits: Number.isFinite(initialConfig?.voiceCredits)
+      ? Number(initialConfig!.voiceCredits)
+      : ULTRA_DEFAULTS.voiceCredits,
+    textChars: Number.isFinite(initialConfig?.textChars)
+      ? Number(initialConfig!.textChars)
+      : ULTRA_DEFAULTS.textChars,
+    transcribeMins: Number.isFinite(initialConfig?.transcribeMins)
+      ? Number(initialConfig!.transcribeMins)
+      : ULTRA_DEFAULTS.transcribeMins,
+    imageCount: Number.isFinite(initialConfig?.imageCount)
+      ? Number(initialConfig!.imageCount)
+      : ULTRA_DEFAULTS.imageCount,
   }));
 
   // String buffers for numeric text inputs to support smooth natural typing
-  const [dubbingInputStr, setDubbingInputStr] = useState<string>(String(config.dubbingMins));
-  const [voiceInputStr, setVoiceInputStr] = useState<string>(String(config.voiceCredits));
-  const [textInputStr, setTextInputStr] = useState<string>(String(config.textChars));
-  const [transcribeInputStr, setTranscribeInputStr] = useState<string>(String(config.transcribeMins));
-  const [imageInputStr, setImageInputStr] = useState<string>(String(config.imageCount));
+  const [dubbingInputStr, setDubbingInputStr] = useState<string>(() => String(config.dubbingMins ?? ULTRA_DEFAULTS.dubbingMins));
+  const [voiceInputStr, setVoiceInputStr] = useState<string>(() => String(config.voiceCredits ?? ULTRA_DEFAULTS.voiceCredits));
+  const [textInputStr, setTextInputStr] = useState<string>(() => String(config.textChars ?? ULTRA_DEFAULTS.textChars));
+  const [transcribeInputStr, setTranscribeInputStr] = useState<string>(() => String(config.transcribeMins ?? ULTRA_DEFAULTS.transcribeMins));
+  const [imageInputStr, setImageInputStr] = useState<string>(() => String(config.imageCount ?? ULTRA_DEFAULTS.imageCount));
 
   const breakdown = useMemo(() => calculateUltraPrice(config), [config]);
 
