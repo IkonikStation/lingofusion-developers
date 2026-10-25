@@ -6,6 +6,15 @@ import {
   calculateTokenCostUsd,
   resolveBackendModelRouting,
 } from "../server.mjs";
+import {
+  calculateUltraPrice,
+  dubbingMinutesToSlider,
+  sliderToDubbingMinutes,
+  ULTRA_BASE_FEE,
+  ULTRA_DEFAULTS,
+  ULTRA_ENTERPRISE_THRESHOLD,
+  ULTRA_RATES,
+} from "../src/data/ultraConfig.ts";
 
 const TEST_PORT = 8799;
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
@@ -21,9 +30,48 @@ async function runTests() {
   assert.equal(exampleCost, 0.0062, "Token cost calculator must match exact example ($0.006200)");
   console.log("✓ Token cost formula verified: 1500 in @ $2/1M + 400 out @ $8/1M = $" + exampleCost.toFixed(6));
 
-  // Stripe Gross-Up Formula:
-  // Gross (in dollars) = (NetDeposit + 0.30) / (1 - 0.029)
-  // Convert to integer cents using Math.ceil(Gross * 100)
+  // Ultra Custom Subscription Engine & Piecewise Slider Tests
+  const ultraDefaultPrice = calculateUltraPrice(ULTRA_DEFAULTS);
+  assert.equal(ultraDefaultPrice.baseFee, 29.00, "Base fee must be exactly $29.00");
+  assert.equal(ultraDefaultPrice.dubbingCost, 105.00, "30m dubbing @ $3.50 must be $105.00");
+  assert.equal(ultraDefaultPrice.voiceCost, 84.00, "1.2M voice credits @ $0.00007 must be $84.00");
+  assert.equal(ultraDefaultPrice.textCost, 30.00, "5M text chars @ $0.000006 must be $30.00");
+  assert.equal(ultraDefaultPrice.transcribeCost, 2.04, "120m transcribe @ $0.017 must be $2.04");
+  assert.equal(ultraDefaultPrice.imagesCost, 6.00, "50 images @ $0.12 must be $6.00");
+  assert.equal(ultraDefaultPrice.totalMonthlyPrice, 256.04, "Default Ultra total must be $256.04");
+  assert.equal(ultraDefaultPrice.isEnterpriseInvoice, false, "Default Ultra should not require enterprise invoice");
+  console.log("✓ Ultra subscription pricing engine verified: Base $29 + Dubbing $105 + Voice $84 + Text $30 + Transcribe $2.04 + Images $6 = $" + ultraDefaultPrice.totalMonthlyPrice);
+
+  // Piecewise Dubbing Slider Tests:
+  // 0% -> 0 mins
+  // 2.5% -> 30 mins
+  // 50% -> 600 mins (10 hrs)
+  // 80% -> 6,000 mins (100 hrs)
+  // 100% -> 60,000 mins (1,000 hrs)
+  assert.equal(sliderToDubbingMinutes(0), 0);
+  assert.equal(sliderToDubbingMinutes(2.5), 30);
+  assert.equal(sliderToDubbingMinutes(50), 600);
+  assert.equal(sliderToDubbingMinutes(80), 6000);
+  assert.equal(sliderToDubbingMinutes(100), 60000);
+  assert.equal(dubbingMinutesToSlider(0), 0);
+  assert.equal(dubbingMinutesToSlider(30), 2.5);
+  assert.equal(dubbingMinutesToSlider(600), 50);
+  assert.equal(dubbingMinutesToSlider(6000), 80);
+  assert.equal(dubbingMinutesToSlider(60000), 100);
+  console.log("✓ Piecewise dubbing slider verified: 0-50% (0-10h @ 15m), 50-80% (10-100h @ 60m), 80-100% (100-1000h @ 300m)");
+
+  // $5,000 Enterprise Invoice Rule
+  const highTier = calculateUltraPrice({
+    dubbingMins: 2000,
+    voiceCredits: 10000000,
+    textChars: 10000000,
+    transcribeMins: 6000,
+    imageCount: 1000,
+  });
+  assert.ok(highTier.totalMonthlyPrice >= ULTRA_ENTERPRISE_THRESHOLD);
+  assert.equal(highTier.isEnterpriseInvoice, true, "Quotas totaling >= $5000 must flag isEnterpriseInvoice: true");
+  console.log(`✓ Ultra $5,000 Enterprise Rule verified: Total $${highTier.totalMonthlyPrice} -> isEnterpriseInvoice = true`);
+
   const deposit5 = calculateGrossDepositCents(5.0);
   assert.equal(deposit5.grossAmountCents, 546, "Gross cents for $5.00 net deposit must be 546 cents");
   assert.equal(deposit5.grossChargedUsd, 5.46);

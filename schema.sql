@@ -48,3 +48,26 @@ CREATE TABLE IF NOT EXISTS deposit_ledger (
   status TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS workspace_subscriptions (
+  id UUID PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  stripe_subscription_id TEXT UNIQUE,
+  plan_id TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  monthly_price_usd NUMERIC(10, 2) NOT NULL,
+  dubbing_mins_allocated INTEGER NOT NULL DEFAULT 0,
+  dubbing_mins_used INTEGER NOT NULL DEFAULT 0,
+  voice_credits_allocated INTEGER NOT NULL DEFAULT 0,
+  voice_credits_used INTEGER NOT NULL DEFAULT 0,
+  text_chars_allocated INTEGER NOT NULL DEFAULT 0,
+  text_chars_used INTEGER NOT NULL DEFAULT 0,
+  transcribe_mins_allocated INTEGER NOT NULL DEFAULT 0,
+  transcribe_mins_used INTEGER NOT NULL DEFAULT 0,
+  images_allocated INTEGER NOT NULL DEFAULT 0,
+  images_used INTEGER NOT NULL DEFAULT 0,
+  current_period_start TIMESTAMPTZ,
+  current_period_end TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

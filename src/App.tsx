@@ -330,12 +330,17 @@ export default function App() {
           {isSubscriptionPage ? (
             <SubscriptionPage
               onApiPrices={() => navigate("API Prices")}
-              onSelectPlan={(planId, billingInterval) =>
-                navigate("Checkout", { plan: planId, billing: billingInterval })
+              onSelectPlan={(planId, billingInterval, customParams) =>
+                navigate("Checkout", { plan: planId, billing: billingInterval, ...customParams })
               }
               onBuildTeam={(billingInterval) => navigate("Teams", { billing: billingInterval })}
-              onContactSales={(seatCount, seatPlanId, billingInterval) =>
-                navigate("Contact Sales", { seats: seatCount, plan: seatPlanId, billing: billingInterval })
+              onContactSales={(seatCount, seatPlanId, billingInterval, customMessage) =>
+                navigate("Contact Sales", {
+                  seats: seatCount,
+                  plan: seatPlanId,
+                  billing: billingInterval,
+                  ...(customMessage ? { message: customMessage } : {}),
+                })
               }
               proVariantKey={proVariantKey}
               onProVariantChange={selectProVariant}

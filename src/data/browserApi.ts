@@ -1762,6 +1762,47 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
     key.masked = maskSecret(secret);
     key.key_prefix = secret.slice(0, 14);
     result = { secret, dashboard: state.dashboard };
+  } else if (method === "POST" && path === "/api/billing/subscription-checkout") {
+    const body = requestBody(options);
+    const plan = String(body.plan || "ultra-custom");
+    const dubbingMins = Number(body.dubbing_mins || 30);
+    const voiceCredits = Number(body.voice_credits || 1200000);
+    const textChars = Number(body.text_chars || 5000000);
+    const transcribeMins = Number(body.transcribe_mins || 120);
+    const imageCount = Number(body.image_count || 50);
+    const monthlyPriceUsd = Number(body.monthly_price_usd || 256.04);
+
+    (state.dashboard as any).workspaceSubscription = {
+      id: randomId("sub"),
+      planId: plan,
+      status: "active",
+      monthlyPriceUsd,
+      dubbingMinsAllocated: dubbingMins,
+      dubbingMinsUsed: 0,
+      voiceCreditsAllocated: voiceCredits,
+      voiceCreditsUsed: 0,
+      textCharsAllocated: textChars,
+      textCharsUsed: 0,
+      transcribeMinsAllocated: transcribeMins,
+      transcribeMinsUsed: 0,
+      imagesAllocated: imageCount,
+      imagesUsed: 0,
+      currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    };
+
+    state.dashboard.ledger.unshift({
+      id: randomId("sub"),
+      type: "paid_credit_purchase",
+      amount: monthlyPriceUsd,
+      description: `Ultra Custom Subscription: ${dubbingMins}m dubbing, ${(voiceCredits / 1e6).toFixed(1)}M voice, ${(textChars / 1e6).toFixed(1)}M text, ${transcribeMins}m transcribe, ${imageCount} imgs`,
+      status: "succeeded",
+      createdAt: new Date().toISOString(),
+    });
+
+    result = {
+      success: true,
+      subscription: (state.dashboard as any).workspaceSubscription,
+    };
   } else if (method === "POST" && path === "/api/billing/recharge") {
     const body = requestBody(options);
     const amount = Number(body.amount);

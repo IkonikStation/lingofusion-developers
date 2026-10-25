@@ -1,7 +1,8 @@
-import { ArrowLeft, CheckCircle2, CreditCard, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowLeft, Building2, CheckCircle2, CreditCard, ShieldCheck, Sparkles, Zap } from "lucide-react";
 import { useState } from "react";
 import { browserApi, calculateGrossDeposit, getApiBaseUrl, shouldUseBrowserApi } from "../data/browserApi";
 import { formatUsd, humanizePlanId, pageQuery, withBasePath } from "../lib/utils";
+import { calculateUltraPrice, ULTRA_BASE_FEE, ULTRA_ENTERPRISE_THRESHOLD } from "../data/ultraConfig";
 
 export function CheckoutPage({
   onNavigate,
@@ -21,9 +22,67 @@ export function CheckoutPage({
   const billing = query.get("billing") === "yearly" ? "yearly" : "monthly";
   const seats = Math.max(1, Number(query.get("seats")) || 1);
 
+  const isUltraCustom = planId === "ultra-custom";
+  const customDubbing = Number(query.get("dubbing_mins") || 30);
+  const customVoice = Number(query.get("voice_credits") || 1200000);
+  const customText = Number(query.get("text_chars") || 5000000);
+  const customTranscribe = Number(query.get("transcribe_mins") || 120);
+  const customImages = Number(query.get("image_count") || 50);
+  const ultraBreakdown = calculateUltraPrice({
+    dubbingMins: customDubbing,
+    voiceCredits: customVoice,
+    textChars: customText,
+    transcribeMins: customTranscribe,
+    imageCount: customImages,
+  });
+  const ultraMonthlyPrice = Number(query.get("monthly_price_usd")) || ultraBreakdown.totalMonthlyPrice;
+
   const [busy, setBusy] = useState(false);
   const [settled, setSettled] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleUltraSubscribe = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      if (shouldUseBrowserApi()) {
+        await browserApi("/api/billing/subscription-checkout", {
+          method: "POST",
+          body: JSON.stringify({
+            plan: "ultra-custom",
+            dubbing_mins: customDubbing,
+            voice_credits: customVoice,
+            text_chars: customText,
+            transcribe_mins: customTranscribe,
+            image_count: customImages,
+            monthly_price_usd: ultraMonthlyPrice,
+            userId: userIdParam,
+          }),
+        });
+      } else {
+        await fetch(`${getApiBaseUrl()}/api/billing/subscription-checkout`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            plan: "ultra-custom",
+            dubbing_mins: customDubbing,
+            voice_credits: customVoice,
+            text_chars: customText,
+            transcribe_mins: customTranscribe,
+            image_count: customImages,
+            monthly_price_usd: ultraMonthlyPrice,
+            userId: userIdParam,
+          }),
+        });
+      }
+      setSettled(true);
+      window.location.href = withBasePath("/playground?subscription=active");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to activate subscription");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (stripeSessionId && netUsdParam) {
     const netUsd = Number(netUsdParam) || 5;
@@ -242,47 +301,156 @@ export function CheckoutPage({
         <dl className="divide-y divide-neutral-200/80 dark:divide-white/[0.08]">
           <div className="flex items-center justify-between p-5">
             <dt className="text-sm text-neutral-500 dark:text-neutral-400">Plan</dt>
-            <dd className="text-sm font-semibold text-neutral-950 dark:text-white">{humanizePlanId(planId)}</dd>
+            <dd className="text-sm font-semibold text-neutral-950 dark:text-white">
+              {isUltraCustom ? "LingoFusion Ultra (Custom Modular Tier)" : humanizePlanId(planId)}
+            </dd>
           </div>
           <div className="flex items-center justify-between p-5">
             <dt className="text-sm text-neutral-500 dark:text-neutral-400">Billing Interval</dt>
             <dd className="text-sm font-semibold capitalize text-neutral-950 dark:text-white">{billing}</dd>
           </div>
-          <div className="flex items-center justify-between p-5">
-            <dt className="text-sm text-neutral-500 dark:text-neutral-400">Seats</dt>
-            <dd className="font-sans tabular-nums text-sm font-semibold text-neutral-950 dark:text-white">
-              {seats.toLocaleString("en-US")}
-            </dd>
-          </div>
-          <div className="flex items-center justify-between p-5">
-            <dt className="text-sm text-neutral-500 dark:text-neutral-400">Access Type</dt>
-            <dd className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-              <CheckCircle2 className="h-4 w-4" /> Immediate API Activation
-            </dd>
-          </div>
+
+          {isUltraCustom ? (
+            <>
+              <div className="flex items-center justify-between p-5">
+                <dt className="text-sm text-neutral-500 dark:text-neutral-400">Platform Base Fee</dt>
+                <dd className="font-sans tabular-nums text-sm font-semibold text-neutral-950 dark:text-white">
+                  ${ULTRA_BASE_FEE.toFixed(2)} USD / month
+                </dd>
+              </div>
+              <div className="flex items-center justify-between p-5">
+                <dt className="text-sm text-neutral-500 dark:text-neutral-400">
+                  Video Dubbing ({customDubbing.toLocaleString()} mins)
+                </dt>
+                <dd className="font-sans tabular-nums text-sm font-semibold text-neutral-950 dark:text-white">
+                  +${formatUsd(ultraBreakdown.dubbingCost)} USD
+                </dd>
+              </div>
+              <div className="flex items-center justify-between p-5">
+                <dt className="text-sm text-neutral-500 dark:text-neutral-400">
+                  Voice Synthesis ({customVoice.toLocaleString()} credits)
+                </dt>
+                <dd className="font-sans tabular-nums text-sm font-semibold text-neutral-950 dark:text-white">
+                  +${formatUsd(ultraBreakdown.voiceCost)} USD
+                </dd>
+              </div>
+              <div className="flex items-center justify-between p-5">
+                <dt className="text-sm text-neutral-500 dark:text-neutral-400">
+                  Text Translation ({customText.toLocaleString()} chars)
+                </dt>
+                <dd className="font-sans tabular-nums text-sm font-semibold text-neutral-950 dark:text-white">
+                  +${formatUsd(ultraBreakdown.textCost)} USD
+                </dd>
+              </div>
+              <div className="flex items-center justify-between p-5">
+                <dt className="text-sm text-neutral-500 dark:text-neutral-400">
+                  Audio Transcription ({customTranscribe.toLocaleString()} mins)
+                </dt>
+                <dd className="font-sans tabular-nums text-sm font-semibold text-neutral-950 dark:text-white">
+                  +${formatUsd(ultraBreakdown.transcribeCost)} USD
+                </dd>
+              </div>
+              <div className="flex items-center justify-between p-5">
+                <dt className="text-sm text-neutral-500 dark:text-neutral-400">
+                  AI Images ({customImages.toLocaleString()} images)
+                </dt>
+                <dd className="font-sans tabular-nums text-sm font-semibold text-neutral-950 dark:text-white">
+                  +${formatUsd(ultraBreakdown.imagesCost)} USD
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between border-t border-neutral-200 bg-neutral-50/50 p-5 dark:border-white/10 dark:bg-white/[0.02]">
+                <dt className="text-base font-bold text-neutral-950 dark:text-white">Total</dt>
+                <dd className="font-sans tabular-nums text-2xl font-black tracking-tight text-neutral-950 dark:text-white">
+                  ${formatUsd(ultraMonthlyPrice)}{" "}
+                  <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400">USD / mo</span>
+                </dd>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center justify-between p-5">
+                <dt className="text-sm text-neutral-500 dark:text-neutral-400">Seats</dt>
+                <dd className="font-sans tabular-nums text-sm font-semibold text-neutral-950 dark:text-white">
+                  {seats.toLocaleString("en-US")}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between p-5">
+                <dt className="text-sm text-neutral-500 dark:text-neutral-400">Access Type</dt>
+                <dd className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="h-4 w-4" /> Immediate API Activation
+                </dd>
+              </div>
+            </>
+          )}
         </dl>
       </div>
 
+      {isUltraCustom && ultraBreakdown.isEnterpriseInvoice && (
+        <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-xs leading-relaxed text-amber-900 shadow-xs dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
+          <p className="font-semibold">Enterprise Wire Notice:</p>
+          <p className="mt-1">
+            Orders exceeding $5,000/month are processed via verified bank wire/ACH to prevent card processing delays and guarantee dedicated concurrency.
+          </p>
+        </div>
+      )}
+
+      {error && (
+        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
+          {error}
+        </div>
+      )}
+
       <div className="mt-8 flex flex-wrap gap-3">
-        <button
-          type="button"
-          onClick={() => onNavigate("Playground")}
-          className="pressable inline-flex min-h-11 items-center justify-center rounded-xl bg-neutral-950 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
-        >
-          Continue to Playground
-        </button>
+        {isUltraCustom ? (
+          ultraBreakdown.isEnterpriseInvoice ? (
+            <button
+              type="button"
+              onClick={() =>
+                onNavigate(
+                  `Contact Sales?plan=ultra-custom&message=${encodeURIComponent(
+                    `Requesting Enterprise Invoice / ACH Wire for Custom Ultra Subscription ($${ultraMonthlyPrice.toFixed(2)}/mo): ${customDubbing} mins dubbing, ${customVoice} voice credits, ${customText} chars, ${customTranscribe} mins transcribe, ${customImages} images.`
+                  )}`
+                )
+              }
+              className="pressable inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+            >
+              <Building2 className="h-4 w-4" /> Request Enterprise Invoice / ACH Wire
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={handleUltraSubscribe}
+              className="pressable inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-neutral-950 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+            >
+              <CreditCard className="h-4 w-4" />
+              {busy ? "Activating..." : `Subscribe with Card / Apple Pay ($${formatUsd(ultraMonthlyPrice)}/mo)`}
+            </button>
+          )
+        ) : (
+          <button
+            type="button"
+            onClick={() => onNavigate("Playground")}
+            className="pressable inline-flex min-h-11 items-center justify-center rounded-xl bg-neutral-950 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+          >
+            Continue to Playground
+          </button>
+        )}
+
         <button
           type="button"
           onClick={() => onNavigate("Subscription Prices")}
           className="pressable inline-flex min-h-11 items-center justify-center rounded-xl border border-neutral-200/90 bg-white px-5 py-2.5 text-sm font-semibold text-neutral-800 shadow-xs transition hover:bg-neutral-50 dark:border-white/10 dark:bg-neutral-900 dark:text-white dark:hover:bg-neutral-800"
         >
-          Change Plan
+          {isUltraCustom ? "Adjust Quotas" : "Change Plan"}
         </button>
       </div>
 
       <div className="mt-8 flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
         <ShieldCheck className="h-4 w-4 text-neutral-400" />
-        No payment details stored in local simulator mode.
+        {isUltraCustom
+          ? "Ultra subscription quotas refresh on the 1st of each billing cycle. Overages fall back to your prepaid balance."
+          : "No payment details stored in local simulator mode."}
       </div>
     </section>
   );

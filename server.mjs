@@ -334,6 +334,125 @@ function creditUserDeposit({ userId, stripeSessionId, netDepositUsd, grossCharge
   }
 }
 
+function provisionWorkspaceSubscription({
+  userId,
+  stripeSubscriptionId,
+  planId = "ultra-custom",
+  monthlyPriceUsd = 256.04,
+  dubbingMins = 30,
+  voiceCredits = 1200000,
+  textChars = 5000000,
+  transcribeMins = 120,
+  imageCount = 50,
+}) {
+  const subId = randomUUID();
+  const now = new Date().toISOString();
+  const nextMonth = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  sqlDb.exec("BEGIN IMMEDIATE TRANSACTION");
+  try {
+    const existing = stripeSubscriptionId
+      ? sqlDb.prepare("SELECT id FROM workspace_subscriptions WHERE stripe_subscription_id = ?").get(stripeSubscriptionId)
+      : null;
+
+    if (existing) {
+      sqlDb.prepare(`
+        UPDATE workspace_subscriptions
+        SET dubbing_mins_allocated = ?, voice_credits_allocated = ?, text_chars_allocated = ?,
+            transcribe_mins_allocated = ?, images_allocated = ?, monthly_price_usd = ?, updated_at = ?
+        WHERE id = ?
+      `).run(dubbingMins, voiceCredits, textChars, transcribeMins, imageCount, Number(monthlyPriceUsd) || 0, now, existing.id);
+      sqlDb.exec("COMMIT");
+      return { id: existing.id, updated: true };
+    }
+
+    sqlDb.prepare("UPDATE workspace_subscriptions SET status = 'superseded' WHERE user_id = ? AND status = 'active'").run(userId);
+
+    sqlDb.prepare(`
+      INSERT INTO workspace_subscriptions (
+        id, user_id, stripe_subscription_id, plan_id, status, monthly_price_usd,
+        dubbing_mins_allocated, dubbing_mins_used,
+        voice_credits_allocated, voice_credits_used,
+        text_chars_allocated, text_chars_used,
+        transcribe_mins_allocated, transcribe_mins_used,
+        images_allocated, images_used,
+        current_period_start, current_period_end, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, 'active', ?, ?, 0, ?, 0, ?, 0, ?, 0, ?, 0, ?, ?, ?, ?)
+    `).run(
+      subId, userId, stripeSubscriptionId || `sub_${randomBytes(12).toString("hex")}`,
+      planId, Number(monthlyPriceUsd) || 0,
+      dubbingMins, voiceCredits, textChars, transcribeMins, imageCount,
+      now, nextMonth, now, now
+    );
+
+    sqlDb.exec("COMMIT");
+    return { id: subId, created: true };
+  } catch (err) {
+    try { sqlDb.exec("ROLLBACK"); } catch {}
+    throw err;
+  }
+}
+
+function getActiveWorkspaceSubscription(userId) {
+  try {
+    return sqlDb.prepare(
+      "SELECT * FROM workspace_subscriptions WHERE user_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1"
+    ).get(userId);
+  } catch {
+    return null;
+  }
+}
+
+function deductResourceUsage(userId, { resourceType, quantity, fallbackCostUsd }) {
+  const sub = getActiveWorkspaceSubscription(userId);
+  if (sub) {
+    let allocated = 0;
+    let used = 0;
+    let colUsed = "";
+
+    if (resourceType === "dubbing") {
+      allocated = sub.dubbing_mins_allocated;
+      used = sub.dubbing_mins_used;
+      colUsed = "dubbing_mins_used";
+    } else if (resourceType === "voice") {
+      allocated = sub.voice_credits_allocated;
+      used = sub.voice_credits_used;
+      colUsed = "voice_credits_used";
+    } else if (resourceType === "text") {
+      allocated = sub.text_chars_allocated;
+      used = sub.text_chars_used;
+      colUsed = "text_chars_used";
+    } else if (resourceType === "transcribe") {
+      allocated = sub.transcribe_mins_allocated;
+      used = sub.transcribe_mins_used;
+      colUsed = "transcribe_mins_used";
+    } else if (resourceType === "image") {
+      allocated = sub.images_allocated;
+      used = sub.images_used;
+      colUsed = "images_used";
+    }
+
+    const remaining = Math.max(0, allocated - used);
+    if (remaining >= quantity) {
+      sqlDb.prepare(`UPDATE workspace_subscriptions SET ${colUsed} = ${colUsed} + ? WHERE id = ?`).run(quantity, sub.id);
+      return { coveredBySubscription: true, costDeductedUsd: 0, quotaRemaining: remaining - quantity };
+    } else if (remaining > 0) {
+      const overagePortion = quantity - remaining;
+      const overageCost = Number(((overagePortion / quantity) * fallbackCostUsd).toFixed(6));
+      sqlDb.prepare(`UPDATE workspace_subscriptions SET ${colUsed} = ? WHERE id = ?`).run(allocated, sub.id);
+      if (overageCost > 0) {
+        deductUserBalance(userId, overageCost);
+      }
+      return { coveredBySubscription: "partial", costDeductedUsd: overageCost, quotaRemaining: 0 };
+    }
+  }
+
+  if (fallbackCostUsd > 0) {
+    deductUserBalance(userId, fallbackCostUsd);
+  }
+  return { coveredBySubscription: false, costDeductedUsd: fallbackCostUsd, quotaRemaining: 0 };
+}
+
 const batchTextModels = textModels.map((model) => ({
   ...model,
   input: model.input / 2,
@@ -3187,6 +3306,127 @@ async function route(req, res) {
     }
 
     // =========================================================================
+    // 4b. Custom Ultra Subscription Checkout: POST /api/billing/subscription-checkout
+    // =========================================================================
+    if (req.method === "POST" && url.pathname === "/api/billing/subscription-checkout") {
+      const body = await readJson(req);
+      const plan = String(body.plan || "ultra-custom");
+      const dubbingMins = Math.max(0, Number(body.dubbing_mins ?? 30));
+      const voiceCredits = Math.max(0, Number(body.voice_credits ?? 1200000));
+      const textChars = Math.max(0, Number(body.text_chars ?? 5000000));
+      const transcribeMins = Math.max(0, Number(body.transcribe_mins ?? 120));
+      const imageCount = Math.max(0, Number(body.image_count ?? 50));
+      const monthlyPriceUsd = Math.max(29, Number(body.monthly_price_usd ?? 256.04));
+      const userId = String(body.userId || DEFAULT_USER_ID);
+      const userEmail = String(body.userEmail || DEFAULT_USER_EMAIL);
+
+      // If price >= 5000, route to Enterprise Invoice / ACH Wire
+      if (monthlyPriceUsd >= 5000) {
+        return send(res, 200, {
+          isEnterpriseInvoice: true,
+          notice: "Orders exceeding $5,000/month are processed via verified bank wire/ACH to prevent card processing delays and guarantee dedicated concurrency.",
+          contactUrl: `/contact-sales?plan=ultra-custom&price=${monthlyPriceUsd.toFixed(2)}`,
+        });
+      }
+
+      const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+      const origin = req.headers.origin || `http://${req.headers.host || `localhost:${port}`}`;
+      const isLocalOrigin = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+      const appUrl = (body.returnUrl || (isLocalOrigin ? `${origin}/playground` : process.env.APP_URL) || `${origin}/playground`).replace(/\/+$/, "");
+      const sessionId = `sub_session_${randomBytes(16).toString("hex")}`;
+
+      const metadata = {
+        planId: plan,
+        userId,
+        userEmail,
+        dubbing_mins: String(dubbingMins),
+        voice_credits: String(voiceCredits),
+        text_chars: String(textChars),
+        transcribe_mins: String(transcribeMins),
+        image_count: String(imageCount),
+        monthly_price_usd: monthlyPriceUsd.toFixed(2),
+      };
+
+      if (stripeSecretKey && /^(sk|rk)_(live|test)_/.test(stripeSecretKey) && !stripeSecretKey.includes("replace_with")) {
+        try {
+          const stripe = new Stripe(stripeSecretKey);
+          const session = await stripe.checkout.sessions.create({
+            mode: "subscription",
+            line_items: [
+              {
+                price_data: {
+                  currency: "usd",
+                  recurring: { interval: "month" },
+                  unit_amount: Math.round(monthlyPriceUsd * 100),
+                  product_data: {
+                    name: "LingoFusion Ultra Custom Subscription",
+                    description: `Custom monthly quotas: ${dubbingMins}m dubbing, ${voiceCredits} voice credits, ${textChars} text chars, ${transcribeMins}m transcribe, ${imageCount} images (Base Ultra Fee included)`,
+                  },
+                },
+                quantity: 1,
+              },
+            ],
+            metadata,
+            success_url: `${appUrl}?subscription=success&session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${appUrl}?subscription=cancelled`,
+          });
+
+          return send(res, 200, {
+            url: session.url,
+            checkoutUrl: session.url,
+            sessionId: session.id,
+            monthlyPriceUsd,
+            metadata,
+          });
+        } catch (_err) {
+          // fall through to local developer testbed provisioning
+        }
+      }
+
+      // Provision local workspace subscription in testbed mode
+      provisionWorkspaceSubscription({
+        userId,
+        stripeSubscriptionId: sessionId,
+        planId: plan,
+        monthlyPriceUsd,
+        dubbingMins,
+        voiceCredits,
+        textChars,
+        transcribeMins,
+        imageCount,
+      });
+
+      const checkoutBase = appUrl.replace(/\/playground$/, "");
+      const checkoutUrl = `${checkoutBase}/checkout?plan=ultra-custom&dubbing_mins=${dubbingMins}&voice_credits=${voiceCredits}&text_chars=${textChars}&transcribe_mins=${transcribeMins}&image_count=${imageCount}&monthly_price_usd=${monthlyPriceUsd.toFixed(2)}&user_id=${encodeURIComponent(userId)}`;
+
+      return send(res, 200, {
+        url: checkoutUrl,
+        checkoutUrl,
+        sessionId,
+        monthlyPriceUsd,
+        metadata,
+        provisioned: true,
+      });
+    }
+
+    // =========================================================================
+    // 4c. Workspace Subscription Status: GET /api/workspace/subscription
+    // =========================================================================
+    if (req.method === "GET" && url.pathname === "/api/workspace/subscription") {
+      const authHeader = req.headers.authorization || "";
+      let userId = DEFAULT_USER_ID;
+      if (authHeader.startsWith("Bearer ")) {
+        const auth = authenticateBearerApiKey(req, db);
+        if (!auth.error && auth.user) userId = auth.user.id;
+      }
+      const sub = getActiveWorkspaceSubscription(userId);
+      return send(res, 200, {
+        subscription: sub || null,
+        hasActiveSubscription: Boolean(sub),
+      });
+    }
+
+    // =========================================================================
     // 5. Stripe Webhook Route: POST /api/stripe-webhook (and /api/webhooks/stripe)
     // =========================================================================
     if (req.method === "POST" && (url.pathname === "/api/stripe-webhook" || url.pathname === "/api/webhooks/stripe")) {
@@ -3211,6 +3451,28 @@ async function route(req, res) {
         const sessionObj = event.data?.object || {};
         const metadata = sessionObj.metadata || {};
         const userId = metadata.userId || DEFAULT_USER_ID;
+
+        // Custom Ultra Subscription Provisioning
+        if (metadata.planId === "ultra-custom") {
+          const subResult = provisionWorkspaceSubscription({
+            userId,
+            stripeSubscriptionId: sessionObj.subscription || sessionObj.id,
+            planId: "ultra-custom",
+            monthlyPriceUsd: Number(metadata.monthly_price_usd || 256.04),
+            dubbingMins: Number(metadata.dubbing_mins || 30),
+            voiceCredits: Number(metadata.voice_credits || 1200000),
+            textChars: Number(metadata.text_chars || 5000000),
+            transcribeMins: Number(metadata.transcribe_mins || 120),
+            imageCount: Number(metadata.image_count || 50),
+          });
+
+          return send(res, 200, {
+            received: true,
+            type: "subscription_provisioned",
+            subscription: subResult,
+          });
+        }
+
         const netDepositUsd = Number(metadata.topUpAmount ?? metadata.netDepositUsd ?? 0);
         const stripeSessionId = sessionObj.id || `cs_webhook_${randomBytes(8).toString("hex")}`;
         const grossCents = sessionObj.amount_total ?? calculateGrossDepositCents(netDepositUsd).grossAmountCents;
@@ -3242,6 +3504,31 @@ async function route(req, res) {
           net_deposited_usd: netDepositUsd,
           gross_charged_usd: grossChargedUsd,
         });
+      }
+
+      if (event.type === "customer.subscription.created" || event.type === "invoice.payment_succeeded") {
+        const subObj = event.data?.object || {};
+        const metadata = subObj.metadata || subObj.subscription_details?.metadata || {};
+        const userId = metadata.userId || DEFAULT_USER_ID;
+        if (metadata.planId === "ultra-custom") {
+          const subResult = provisionWorkspaceSubscription({
+            userId,
+            stripeSubscriptionId: subObj.id || subObj.subscription,
+            planId: "ultra-custom",
+            monthlyPriceUsd: Number(metadata.monthly_price_usd || 256.04),
+            dubbingMins: Number(metadata.dubbing_mins || 30),
+            voiceCredits: Number(metadata.voice_credits || 1200000),
+            textChars: Number(metadata.text_chars || 5000000),
+            transcribeMins: Number(metadata.transcribe_mins || 120),
+            imageCount: Number(metadata.image_count || 50),
+          });
+          return send(res, 200, {
+            received: true,
+            type: "subscription_provisioned",
+            subscription: subResult,
+          });
+        }
+        return send(res, 200, { received: true });
       }
 
       return send(res, 200, { received: true });

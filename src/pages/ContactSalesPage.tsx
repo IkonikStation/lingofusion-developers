@@ -106,7 +106,10 @@ export function ContactSalesPage({ onNavigate }: { onNavigate: (page: string) =>
               required
               name="message"
               rows={4}
-              defaultValue={`Interested in Enterprise for ${seats.toLocaleString("en-US")} seats with custom throughput limits.`}
+              defaultValue={
+                query.get("message") ||
+                `Interested in Enterprise for ${seats.toLocaleString("en-US")} seats with custom throughput limits.`
+              }
               className="rounded-xl border border-neutral-300/80 bg-white p-3.5 text-sm text-neutral-950 outline-none transition focus:border-neutral-900 dark:border-white/10 dark:bg-[#121214] dark:text-white dark:focus:border-white/40"
             />
           </label>

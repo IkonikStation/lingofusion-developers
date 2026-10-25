@@ -12,7 +12,7 @@ import {
   Volume2,
   WalletCards,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   advancedTtsAdditionalPrice,
   billingIntervals,
@@ -25,12 +25,15 @@ import {
 } from "../data/subscriptions";
 import type { BillingInterval, ProVariant, ProVariantKey, UltraVariant, UltraVariantKey } from "../data/subscriptions";
 import { submitSalesRequest } from "../data/sales";
+import { UltraSubscriptionBuilder } from "./UltraSubscriptionBuilder";
+import { ULTRA_BASE_FEE, ULTRA_DEFAULTS, calculateUltraPrice } from "../data/ultraConfig";
+import type { UltraResourceConfig } from "../data/ultraConfig";
 
 type SubscriptionPageProps = {
   onApiPrices: () => void;
-  onSelectPlan: (planId: string, billingInterval: BillingInterval) => void;
+  onSelectPlan: (planId: string, billingInterval: BillingInterval, customParams?: Record<string, string | number>) => void;
   onBuildTeam: (billingInterval: BillingInterval) => void;
-  onContactSales: (seatCount: number, seatPlanId: string, billingInterval: BillingInterval) => void;
+  onContactSales: (seatCount: number, seatPlanId: string, billingInterval: BillingInterval, customMessage?: string) => void;
   proVariantKey: ProVariantKey;
   onProVariantChange: (key: ProVariantKey) => void;
 };
@@ -58,6 +61,8 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
   const [ultraVariantKey, setUltraVariantKey] = useState<UltraVariantKey>(() =>
     window.localStorage.getItem("lingofusion-ultra-variant") === "x2" ? "x2" : "x1",
   );
+  const [ultraBuilderConfig, setUltraBuilderConfig] = useState<UltraResourceConfig>(ULTRA_DEFAULTS);
+  const ultraCustomBreakdown = useMemo(() => calculateUltraPrice(ultraBuilderConfig), [ultraBuilderConfig]);
   const [teamSeatPlanId, setTeamSeatPlanId] = useState<string>(teamConfiguration.seats[0].planId);
   const [teamMemberCount, setTeamMemberCount] = useState<number>(teamConfiguration.minimumSeats);
   const [salesFormOpen, setSalesFormOpen] = useState(false);
@@ -297,27 +302,80 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
 
           <PlanCard
             className="subscription-card-ultra"
-            planId={ultra.id}
-            name={subscriptionPlans.ultra.name}
-            description={ultra.description}
-            price={priceForBillingInterval(ultra.monthlyPrice, ultra.yearlyPrice, billingInterval)}
-            monthlyPrice={ultra.monthlyPrice}
-            billingInterval={billingInterval}
-            modelAccess={ultra.modelAccess}
-            features={ultraFeatures}
-            usageFeatureCount={5}
-            ctaLabel={ultra.ctaLabel}
+            planId="ultra-custom"
+            name="LingoFusion Ultra"
+            description="Modular custom subscription with configurable monthly quotas and GPT-6 Astra access."
+            price={ultraCustomBreakdown.totalMonthlyPrice}
+            monthlyPrice={ultraCustomBreakdown.totalMonthlyPrice}
+            billingInterval="monthly"
+            modelAccess="Full access to LingoFusion Ultra (GPT-6 Astra) with priority routing."
+            features={[
+              `Base Fee: $${ULTRA_BASE_FEE.toFixed(2)}/mo included`,
+              `${ultraBuilderConfig.dubbingMins.toLocaleString()} min Video Dubbing included`,
+              `${(ultraBuilderConfig.voiceCredits / 1_000_000).toFixed(2)}M Voice Credits included`,
+              `${(ultraBuilderConfig.textChars / 1_000_000).toFixed(2)}M Text Translation characters`,
+              `${ultraBuilderConfig.transcribeMins.toLocaleString()} min Audio Transcription`,
+              `${ultraBuilderConfig.imageCount} AI Image Generations included`,
+              "Over-quota fallback via Pay-As-You-Go wallet",
+              "Priority queues & dedicated concurrency",
+            ]}
+            usageFeatureCount={6}
+            ctaLabel={ultraCustomBreakdown.isEnterpriseInvoice ? "Request Enterprise Invoice" : "Configure & Subscribe"}
             premium
-            valueKey={`${ultra.id}-${billingInterval}`}
-            onSelect={() => onSelectPlan(ultra.id, billingInterval)}
+            badge="Custom Builder"
+            valueKey={`ultra-custom-${billingInterval}`}
+            onSelect={() => {
+              const el = document.getElementById("ultra-custom-builder");
+              if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "start" });
+              } else {
+                onSelectPlan("ultra-custom", "monthly", {
+                  dubbing_mins: ultraBuilderConfig.dubbingMins,
+                  voice_credits: ultraBuilderConfig.voiceCredits,
+                  text_chars: ultraBuilderConfig.textChars,
+                  transcribe_mins: ultraBuilderConfig.transcribeMins,
+                  image_count: ultraBuilderConfig.imageCount,
+                  monthly_price_usd: ultraCustomBreakdown.totalMonthlyPrice,
+                });
+              }
+            }}
             selector={
-              <div role="group" aria-label="Choose an Ultra allowance" className="grid grid-cols-2 rounded-lg border border-[#bfd3ec] bg-[#edf5ff] p-1 dark:border-white/10 dark:bg-white/[0.06]">
-                {(["x1", "x2"] as UltraVariantKey[]).map((key) => {
-                  const selected = key === ultraVariantKey;
-                  return <button key={key} type="button" aria-pressed={selected} onClick={() => selectUltraVariant(key)} className={`pressable subscription-segment min-h-11 rounded-md px-3 py-2 text-sm font-bold outline-none focus-visible:ring-2 focus-visible:ring-[#3679cc] focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#111a2a] ${selected ? "bg-white text-[#163766] shadow-sm dark:bg-[#eaf4ff] dark:text-[#12284a]" : "text-[#607089] hover:text-[#163766] dark:text-slate-400 dark:hover:text-white"}`}>{subscriptionPlans.ultra.variants[key].selectorLabel}</button>;
-                })}
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  document.getElementById("ultra-custom-builder")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                className="pressable flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#bfd3ec] bg-[#edf5ff] p-2 text-xs font-bold text-[#163766] shadow-2xs hover:bg-white dark:border-white/10 dark:bg-white/[0.06] dark:text-blue-300 dark:hover:bg-white/10"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Customize Quotas Below ↓
+              </button>
             }
+          />
+        </div>
+
+        {/* Modular Ultra Custom Subscription Builder */}
+        <div id="ultra-custom-builder" className="mt-12 scroll-mt-24">
+          <UltraSubscriptionBuilder
+            initialConfig={ultraBuilderConfig}
+            onSubscribe={(cfg, breakdown) => {
+              onSelectPlan("ultra-custom", "monthly", {
+                dubbing_mins: cfg.dubbingMins,
+                voice_credits: cfg.voiceCredits,
+                text_chars: cfg.textChars,
+                transcribe_mins: cfg.transcribeMins,
+                image_count: cfg.imageCount,
+                monthly_price_usd: breakdown.totalMonthlyPrice,
+              });
+            }}
+            onRequestInvoice={(cfg, breakdown) => {
+              onContactSales(
+                1,
+                "ultra-custom",
+                "monthly",
+                `Requesting Enterprise Invoice / ACH Wire for Custom Ultra Subscription ($${breakdown.totalMonthlyPrice.toFixed(2)}/mo): ${cfg.dubbingMins} mins dubbing, ${cfg.voiceCredits} voice credits, ${cfg.textChars} text chars, ${cfg.transcribeMins} mins transcription, ${cfg.imageCount} AI images.`
+              );
+            }}
           />
         </div>
 
