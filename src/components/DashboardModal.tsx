@@ -1288,7 +1288,7 @@ export function DashboardModal({
                                     </span>
                                   </div>
                                   <div className="flex items-center justify-between text-neutral-500 dark:text-neutral-400">
-                                    <span>Processing fee</span>
+                                    <span>Included card handling</span>
                                     <span className="font-sans tabular-nums">${formatUsd(breakdown.estimatedStripeFeeUsd)} USD</span>
                                   </div>
                                   <div className="flex items-baseline justify-between border-t border-neutral-200 pt-2.5 text-neutral-950 dark:border-white/10 dark:text-white">

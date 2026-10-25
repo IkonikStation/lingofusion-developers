@@ -257,7 +257,7 @@ export function CheckoutPage({
                   </div>
                   <div className="flex items-center justify-between">
                     <dt className="flex items-center gap-1 text-neutral-500 dark:text-neutral-400">
-                      <span>Card Network Fee</span>
+                      <span>Included card handling</span>
                     </dt>
                     <dd className="font-sans tabular-nums text-neutral-700 dark:text-neutral-300">
                       ${formatUsd(feeUsd)} {currencyParam}

@@ -2081,7 +2081,7 @@ export function PlaygroundPage({
                       </div>
                     )}
                     <div className="flex items-center justify-between text-neutral-500 dark:text-neutral-400">
-                      <span>Processing fee</span>
+                      <span>Included card handling</span>
                       <span className="font-sans tabular-nums">
                         ${formatUsd(depositBreakdown.estimatedStripeFeeUsd)} USD
                       </span>
