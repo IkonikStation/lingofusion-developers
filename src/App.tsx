@@ -36,6 +36,7 @@ import { ModelsPage } from "./pages/ModelsPage";
 import { PlaygroundPage } from "./pages/PlaygroundPage";
 import { PricingPage } from "./pages/PricingPage";
 import { TeamsPage } from "./pages/TeamsPage";
+import { UltraBuilderPage } from "./pages/UltraBuilderPage";
 
 const searchItems = Array.from(
   new Set([
@@ -110,6 +111,8 @@ export default function App() {
     const nextPath =
       nextPage === "Subscription Prices"
         ? "/subscriptions"
+        : nextPage === "Ultra Builder" || nextPage === "Ultra"
+        ? "/subscriptions/ultra"
         : nextPage === "Models"
         ? "/models"
         : nextPage === "Playground"
@@ -342,6 +345,9 @@ export default function App() {
                   ...(customMessage ? { message: customMessage } : {}),
                 })
               }
+              onConfigureUltra={(billingInterval) =>
+                navigate("Ultra Builder", { billing: billingInterval })
+              }
               proVariantKey={proVariantKey}
               onProVariantChange={selectProVariant}
             />
@@ -354,6 +360,8 @@ export default function App() {
               <div key={activePage} className="page-enter min-w-0">
                 {activePage === "Pricing" ? (
                   <PricingPage t={t} onDashboard={() => setDashboardOpen(true)} onOpenModel={navigate} />
+                ) : activePage === "Ultra Builder" ? (
+                  <UltraBuilderPage onNavigate={navigate} />
                 ) : activePage === "Models" ? (
                   <ModelsPage onOpenModel={navigate} />
                 ) : activePage === "Playground" ? (

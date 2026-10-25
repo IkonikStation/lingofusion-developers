@@ -20,6 +20,8 @@ fs.writeFileSync(path.join(distDir, ".nojekyll"), "", "utf-8");
 const routes = [
   "models",
   "subscriptions",
+  "subscriptions/ultra",
+  "ultra",
   "playground",
   "checkout",
   "teams",

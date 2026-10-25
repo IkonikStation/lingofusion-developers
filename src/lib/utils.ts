@@ -46,6 +46,7 @@ export function pageFromPath(pathname: string) {
   const appPath = stripBasePath(pathname);
   const normalized = appPath.replace(/\/+$/, "") || "/";
   if (normalized === "/subscriptions") return "Subscription Prices";
+  if (normalized === "/subscriptions/ultra" || normalized === "/ultra") return "Ultra Builder";
   if (normalized === "/models") return "Models";
   if (normalized === "/playground") return "Playground";
   if (normalized === "/checkout") return "Checkout";

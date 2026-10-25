@@ -1771,12 +1771,19 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
     const transcribeMins = Number(body.transcribe_mins || 120);
     const imageCount = Number(body.image_count || 50);
     const monthlyPriceUsd = Number(body.monthly_price_usd || 256.04);
+    const yearlyPriceUsd = Number(body.yearly_price_usd || Math.round(monthlyPriceUsd * 12 * 0.85 * 100) / 100);
+    const billing = String(body.billing || "monthly").toLowerCase();
+    const isYearly = billing === "yearly";
+    const billedAmountUsd = isYearly ? yearlyPriceUsd : monthlyPriceUsd;
 
     (state.dashboard as any).workspaceSubscription = {
       id: randomId("sub"),
       planId: plan,
       status: "active",
+      billing,
       monthlyPriceUsd,
+      yearlyPriceUsd,
+      billedAmountUsd,
       dubbingMinsAllocated: dubbingMins,
       dubbingMinsUsed: 0,
       voiceCreditsAllocated: voiceCredits,
@@ -1787,14 +1794,14 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
       transcribeMinsUsed: 0,
       imagesAllocated: imageCount,
       imagesUsed: 0,
-      currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      currentPeriodEnd: new Date(Date.now() + (isYearly ? 365 : 30) * 24 * 60 * 60 * 1000).toISOString(),
     };
 
     state.dashboard.ledger.unshift({
       id: randomId("sub"),
       type: "paid_credit_purchase",
-      amount: monthlyPriceUsd,
-      description: `Ultra Custom Subscription: ${dubbingMins}m dubbing, ${(voiceCredits / 1e6).toFixed(1)}M voice, ${(textChars / 1e6).toFixed(1)}M text, ${transcribeMins}m transcribe, ${imageCount} imgs`,
+      amount: billedAmountUsd,
+      description: `Ultra Custom Subscription (${isYearly ? "Annual" : "Monthly"}): ${dubbingMins}m dubbing, ${(voiceCredits / 1e6).toFixed(1)}M voice, ${(textChars / 1e6).toFixed(1)}M text, ${transcribeMins}m transcribe, ${imageCount} imgs`,
       status: "succeeded",
       createdAt: new Date().toISOString(),
     });

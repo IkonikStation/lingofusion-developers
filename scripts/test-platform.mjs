@@ -39,8 +39,10 @@ async function runTests() {
   assert.equal(ultraDefaultPrice.transcribeCost, 2.04, "120m transcribe @ $0.017 must be $2.04");
   assert.equal(ultraDefaultPrice.imagesCost, 6.00, "50 images @ $0.12 must be $6.00");
   assert.equal(ultraDefaultPrice.totalMonthlyPrice, 256.04, "Default Ultra total must be $256.04");
+  assert.equal(ultraDefaultPrice.totalYearlyPrice, 2611.61, "Default Ultra yearly total must be $2611.61 (15% discount)");
+  assert.equal(ultraDefaultPrice.effectiveMonthlyPriceYearly, 217.63, "Default Ultra effective monthly price must be $217.63");
   assert.equal(ultraDefaultPrice.isEnterpriseInvoice, false, "Default Ultra should not require enterprise invoice");
-  console.log("✓ Ultra subscription pricing engine verified: Base $29 + Dubbing $105 + Voice $84 + Text $30 + Transcribe $2.04 + Images $6 = $" + ultraDefaultPrice.totalMonthlyPrice);
+  console.log("✓ Ultra subscription pricing engine verified: Monthly $" + ultraDefaultPrice.totalMonthlyPrice + " / Yearly $" + ultraDefaultPrice.totalYearlyPrice + " (Save 15%)");
 
   // Piecewise Dubbing Slider Tests:
   // 0% -> 0 mins

@@ -19,7 +19,8 @@ export const ULTRA_RATES = {
   imagePerItem: 0.12, // $6.00 / 50 images
 } as const;
 
-export const ULTRA_ENTERPRISE_THRESHOLD = 5000.00; // >= $5,000 requires ACH Wire / Enterprise Invoice
+export const ULTRA_ENTERPRISE_THRESHOLD = 5000.00; // >= $5,000/month requires ACH Wire / Enterprise Invoice
+export const ULTRA_YEARLY_DISCOUNT_PERCENT = 15; // 15% discount for annual subscription payments
 
 export interface UltraResourceConfig {
   dubbingMins: number;
@@ -98,6 +99,9 @@ export interface UltraPriceBreakdown {
   transcribeCost: number;
   imagesCost: number;
   totalMonthlyPrice: number;
+  totalYearlyPrice: number;
+  effectiveMonthlyPriceYearly: number;
+  yearlySavings: number;
   isEnterpriseInvoice: boolean;
 }
 
@@ -119,6 +123,9 @@ export function calculateUltraPrice(config: UltraResourceConfig): UltraPriceBrea
   const imagesCost = Number((imageCount * ULTRA_RATES.imagePerItem).toFixed(2));
 
   const total = Number((baseFee + dubbingCost + voiceCost + textCost + transcribeCost + imagesCost).toFixed(2));
+  const yearlyTotal = Number((total * 12 * (1 - ULTRA_YEARLY_DISCOUNT_PERCENT / 100)).toFixed(2));
+  const effectiveMonthly = Number((yearlyTotal / 12).toFixed(2));
+  const yearlySavings = Number(((total * 12) - yearlyTotal).toFixed(2));
 
   return {
     baseFee,
@@ -128,6 +135,9 @@ export function calculateUltraPrice(config: UltraResourceConfig): UltraPriceBrea
     transcribeCost,
     imagesCost,
     totalMonthlyPrice: total,
+    totalYearlyPrice: yearlyTotal,
+    effectiveMonthlyPriceYearly: effectiveMonthly,
+    yearlySavings,
     isEnterpriseInvoice: total >= ULTRA_ENTERPRISE_THRESHOLD,
   };
 }

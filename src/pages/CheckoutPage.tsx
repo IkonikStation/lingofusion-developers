@@ -50,12 +50,14 @@ export function CheckoutPage({
           method: "POST",
           body: JSON.stringify({
             plan: "ultra-custom",
+            billing,
             dubbing_mins: customDubbing,
             voice_credits: customVoice,
             text_chars: customText,
             transcribe_mins: customTranscribe,
             image_count: customImages,
             monthly_price_usd: ultraMonthlyPrice,
+            yearly_price_usd: ultraBreakdown.totalYearlyPrice,
             userId: userIdParam,
           }),
         });
@@ -65,12 +67,14 @@ export function CheckoutPage({
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             plan: "ultra-custom",
+            billing,
             dubbing_mins: customDubbing,
             voice_credits: customVoice,
             text_chars: customText,
             transcribe_mins: customTranscribe,
             image_count: customImages,
             monthly_price_usd: ultraMonthlyPrice,
+            yearly_price_usd: ultraBreakdown.totalYearlyPrice,
             userId: userIdParam,
           }),
         });
@@ -359,11 +363,29 @@ export function CheckoutPage({
                 </dd>
               </div>
               <div className="flex items-baseline justify-between border-t border-neutral-200 bg-neutral-50/50 p-5 dark:border-white/10 dark:bg-white/[0.02]">
-                <dt className="text-base font-bold text-neutral-950 dark:text-white">Total</dt>
-                <dd className="font-sans tabular-nums text-2xl font-black tracking-tight text-neutral-950 dark:text-white">
-                  ${formatUsd(ultraMonthlyPrice)}{" "}
-                  <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400">USD / mo</span>
-                </dd>
+                <div>
+                  <dt className="text-base font-bold text-neutral-950 dark:text-white">
+                    {billing === "yearly" ? "Annual Total" : "Total"}
+                  </dt>
+                  {billing === "yearly" && (
+                    <p className="mt-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                      Includes 15% Annual Discount (${formatUsd(ultraBreakdown.yearlySavings)} saved)
+                    </p>
+                  )}
+                </div>
+                <div className="text-right">
+                  <dd className="font-sans tabular-nums text-2xl font-black tracking-tight text-neutral-950 dark:text-white">
+                    ${formatUsd(billing === "yearly" ? ultraBreakdown.totalYearlyPrice : ultraMonthlyPrice)}{" "}
+                    <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400">
+                      USD {billing === "yearly" ? "/ yr" : "/ mo"}
+                    </span>
+                  </dd>
+                  {billing === "yearly" && (
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                      (${formatUsd(ultraBreakdown.effectiveMonthlyPriceYearly)}/mo equivalent)
+                    </p>
+                  )}
+                </div>
               </div>
             </>
           ) : (

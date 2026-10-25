@@ -25,7 +25,6 @@ import {
 } from "../data/subscriptions";
 import type { BillingInterval, ProVariant, ProVariantKey, UltraVariant, UltraVariantKey } from "../data/subscriptions";
 import { submitSalesRequest } from "../data/sales";
-import { UltraSubscriptionBuilder } from "./UltraSubscriptionBuilder";
 import { ULTRA_BASE_FEE, ULTRA_DEFAULTS, calculateUltraPrice } from "../data/ultraConfig";
 import type { UltraResourceConfig } from "../data/ultraConfig";
 
@@ -34,6 +33,7 @@ type SubscriptionPageProps = {
   onSelectPlan: (planId: string, billingInterval: BillingInterval, customParams?: Record<string, string | number>) => void;
   onBuildTeam: (billingInterval: BillingInterval) => void;
   onContactSales: (seatCount: number, seatPlanId: string, billingInterval: BillingInterval, customMessage?: string) => void;
+  onConfigureUltra?: (billingInterval: BillingInterval) => void;
   proVariantKey: ProVariantKey;
   onProVariantChange: (key: ProVariantKey) => void;
 };
@@ -53,7 +53,7 @@ function formatPrice(value: number) {
   }).format(value);
 }
 
-export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onContactSales, proVariantKey, onProVariantChange }: SubscriptionPageProps) {
+export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onContactSales, onConfigureUltra, proVariantKey, onProVariantChange }: SubscriptionPageProps) {
   const [comparisonView, setComparisonView] = useState<"subscriptions" | "models">("subscriptions");
   const [billingInterval, setBillingInterval] = useState<BillingInterval>(() =>
     window.localStorage.getItem("lingofusion-subscription-billing") === "yearly" ? "yearly" : "monthly",
@@ -305,9 +305,9 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
             planId="ultra-custom"
             name="Ultra"
             description="Modular custom subscription with configurable monthly quotas and LingoFusion Ultra access."
-            price={ultraCustomBreakdown.totalMonthlyPrice}
+            price={billingInterval === "yearly" ? ultraCustomBreakdown.totalYearlyPrice : ultraCustomBreakdown.totalMonthlyPrice}
             monthlyPrice={ultraCustomBreakdown.totalMonthlyPrice}
-            billingInterval="monthly"
+            billingInterval={billingInterval}
             modelAccess="Access to LingoFusion Ultra, our most advanced model, built for superior translation quality and the best reasoning."
             features={[
               `Base Fee: $${ULTRA_BASE_FEE.toFixed(2)}/mo included`,
@@ -325,17 +325,17 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
             badge="Custom Builder"
             valueKey={`ultra-custom-${billingInterval}`}
             onSelect={() => {
-              const el = document.getElementById("ultra-custom-builder");
-              if (el) {
-                el.scrollIntoView({ behavior: "smooth", block: "start" });
+              if (onConfigureUltra) {
+                onConfigureUltra(billingInterval);
               } else {
-                onSelectPlan("ultra-custom", "monthly", {
+                onSelectPlan("ultra-custom", billingInterval, {
                   dubbing_mins: ultraBuilderConfig.dubbingMins,
                   voice_credits: ultraBuilderConfig.voiceCredits,
                   text_chars: ultraBuilderConfig.textChars,
                   transcribe_mins: ultraBuilderConfig.transcribeMins,
                   image_count: ultraBuilderConfig.imageCount,
                   monthly_price_usd: ultraCustomBreakdown.totalMonthlyPrice,
+                  yearly_price_usd: ultraCustomBreakdown.totalYearlyPrice,
                 });
               }
             }}
@@ -343,39 +343,16 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
               <button
                 type="button"
                 onClick={() => {
-                  document.getElementById("ultra-custom-builder")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  if (onConfigureUltra) {
+                    onConfigureUltra(billingInterval);
+                  }
                 }}
                 className="pressable flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#bfd3ec] bg-[#edf5ff] p-2 text-xs font-bold text-[#163766] shadow-2xs hover:bg-white dark:border-white/10 dark:bg-white/[0.06] dark:text-blue-300 dark:hover:bg-white/10"
               >
                 <Sparkles className="h-3.5 w-3.5" />
-                Customize Quotas Below ↓
+                Configure Custom Quotas →
               </button>
             }
-          />
-        </div>
-
-        {/* Modular Ultra Custom Subscription Builder */}
-        <div id="ultra-custom-builder" className="mt-12 scroll-mt-24">
-          <UltraSubscriptionBuilder
-            initialConfig={ultraBuilderConfig}
-            onSubscribe={(cfg, breakdown) => {
-              onSelectPlan("ultra-custom", "monthly", {
-                dubbing_mins: cfg.dubbingMins,
-                voice_credits: cfg.voiceCredits,
-                text_chars: cfg.textChars,
-                transcribe_mins: cfg.transcribeMins,
-                image_count: cfg.imageCount,
-                monthly_price_usd: breakdown.totalMonthlyPrice,
-              });
-            }}
-            onRequestInvoice={(cfg, breakdown) => {
-              onContactSales(
-                1,
-                "ultra-custom",
-                "monthly",
-                `Requesting Enterprise Invoice / ACH Wire for Custom Ultra Subscription ($${breakdown.totalMonthlyPrice.toFixed(2)}/mo): ${cfg.dubbingMins} mins dubbing, ${cfg.voiceCredits} voice credits, ${cfg.textChars} text chars, ${cfg.transcribeMins} mins transcription, ${cfg.imageCount} AI images.`
-              );
-            }}
           />
         </div>
 

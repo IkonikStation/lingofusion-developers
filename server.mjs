@@ -3311,21 +3311,25 @@ async function route(req, res) {
     if (req.method === "POST" && url.pathname === "/api/billing/subscription-checkout") {
       const body = await readJson(req);
       const plan = String(body.plan || "ultra-custom");
+      const billing = String(body.billing || body.billing_interval || "monthly").toLowerCase();
+      const isYearly = billing === "yearly";
       const dubbingMins = Math.max(0, Number(body.dubbing_mins ?? 30));
       const voiceCredits = Math.max(0, Number(body.voice_credits ?? 1200000));
       const textChars = Math.max(0, Number(body.text_chars ?? 5000000));
       const transcribeMins = Math.max(0, Number(body.transcribe_mins ?? 120));
       const imageCount = Math.max(0, Number(body.image_count ?? 50));
       const monthlyPriceUsd = Math.max(29, Number(body.monthly_price_usd ?? 256.04));
+      const yearlyPriceUsd = Math.round(monthlyPriceUsd * 12 * 0.85 * 100) / 100;
+      const billedAmountUsd = isYearly ? yearlyPriceUsd : monthlyPriceUsd;
       const userId = String(body.userId || DEFAULT_USER_ID);
       const userEmail = String(body.userEmail || DEFAULT_USER_EMAIL);
 
-      // If price >= 5000, route to Enterprise Invoice / ACH Wire
+      // If price >= 5000/mo, route to Enterprise Invoice / ACH Wire
       if (monthlyPriceUsd >= 5000) {
         return send(res, 200, {
           isEnterpriseInvoice: true,
           notice: "Orders exceeding $5,000/month are processed via verified bank wire/ACH to prevent card processing delays and guarantee dedicated concurrency.",
-          contactUrl: `/contact-sales?plan=ultra-custom&price=${monthlyPriceUsd.toFixed(2)}`,
+          contactUrl: `/contact-sales?plan=ultra-custom&billing=${billing}&price=${billedAmountUsd.toFixed(2)}`,
         });
       }
 
@@ -3339,12 +3343,15 @@ async function route(req, res) {
         planId: plan,
         userId,
         userEmail,
+        billing,
         dubbing_mins: String(dubbingMins),
         voice_credits: String(voiceCredits),
         text_chars: String(textChars),
         transcribe_mins: String(transcribeMins),
         image_count: String(imageCount),
         monthly_price_usd: monthlyPriceUsd.toFixed(2),
+        yearly_price_usd: yearlyPriceUsd.toFixed(2),
+        billed_amount_usd: billedAmountUsd.toFixed(2),
       };
 
       if (stripeSecretKey && /^(sk|rk)_(live|test)_/.test(stripeSecretKey) && !stripeSecretKey.includes("replace_with")) {
@@ -3356,11 +3363,11 @@ async function route(req, res) {
               {
                 price_data: {
                   currency: "usd",
-                  recurring: { interval: "month" },
-                  unit_amount: Math.round(monthlyPriceUsd * 100),
+                  recurring: { interval: isYearly ? "year" : "month" },
+                  unit_amount: Math.round(billedAmountUsd * 100),
                   product_data: {
-                    name: "LingoFusion Ultra Custom Subscription",
-                    description: `Custom monthly quotas: ${dubbingMins}m dubbing, ${voiceCredits} voice credits, ${textChars} text chars, ${transcribeMins}m transcribe, ${imageCount} images (Base Ultra Fee included)`,
+                    name: `Ultra Custom Subscription (${isYearly ? "Annual" : "Monthly"})`,
+                    description: `Custom quotas: ${dubbingMins}m dubbing, ${voiceCredits.toLocaleString()} voice credits, ${textChars.toLocaleString()} text chars, ${transcribeMins}m transcribe, ${imageCount} images (${isYearly ? "15% annual savings applied" : "Billed monthly"})`,
                   },
                 },
                 quantity: 1,
@@ -3376,6 +3383,9 @@ async function route(req, res) {
             checkoutUrl: session.url,
             sessionId: session.id,
             monthlyPriceUsd,
+            yearlyPriceUsd,
+            billedAmountUsd,
+            billing,
             metadata,
           });
         } catch (_err) {
@@ -3397,13 +3407,16 @@ async function route(req, res) {
       });
 
       const checkoutBase = appUrl.replace(/\/playground$/, "");
-      const checkoutUrl = `${checkoutBase}/checkout?plan=ultra-custom&dubbing_mins=${dubbingMins}&voice_credits=${voiceCredits}&text_chars=${textChars}&transcribe_mins=${transcribeMins}&image_count=${imageCount}&monthly_price_usd=${monthlyPriceUsd.toFixed(2)}&user_id=${encodeURIComponent(userId)}`;
+      const checkoutUrl = `${checkoutBase}/checkout?plan=ultra-custom&billing=${billing}&dubbing_mins=${dubbingMins}&voice_credits=${voiceCredits}&text_chars=${textChars}&transcribe_mins=${transcribeMins}&image_count=${imageCount}&monthly_price_usd=${monthlyPriceUsd.toFixed(2)}&yearly_price_usd=${yearlyPriceUsd.toFixed(2)}&user_id=${encodeURIComponent(userId)}`;
 
       return send(res, 200, {
         url: checkoutUrl,
         checkoutUrl,
         sessionId,
         monthlyPriceUsd,
+        yearlyPriceUsd,
+        billedAmountUsd,
+        billing,
         metadata,
         provisioned: true,
       });

@@ -315,12 +315,16 @@ export default {
         const stripeKey = env.STRIPE_SECRET_KEY;
         const body = await request.json().catch(() => ({}));
         const plan = String(body.plan || "ultra-custom");
+        const billing = String(body.billing || body.billing_interval || "monthly").toLowerCase();
+        const isYearly = billing === "yearly";
         const dubbingMins = Math.max(0, Number(body.dubbing_mins ?? 30));
         const voiceCredits = Math.max(0, Number(body.voice_credits ?? 1200000));
         const textChars = Math.max(0, Number(body.text_chars ?? 5000000));
         const transcribeMins = Math.max(0, Number(body.transcribe_mins ?? 120));
         const imageCount = Math.max(0, Number(body.image_count ?? 50));
         const monthlyPriceUsd = Math.max(29, Number(body.monthly_price_usd ?? 256.04));
+        const yearlyPriceUsd = Math.round(monthlyPriceUsd * 12 * 0.85 * 100) / 100;
+        const billedAmountUsd = isYearly ? yearlyPriceUsd : monthlyPriceUsd;
         const userId = String(body.userId || "00000000-0000-4000-8000-000000000001");
         const userEmail = String(body.userEmail || body.email || "").trim().toLowerCase();
 
@@ -328,7 +332,7 @@ export default {
           return jsonResponse({
             isEnterpriseInvoice: true,
             notice: "Orders exceeding $5,000/month are processed via verified bank wire/ACH to prevent card processing delays and guarantee dedicated concurrency.",
-            contactUrl: `/contact-sales?plan=ultra-custom&price=${monthlyPriceUsd.toFixed(2)}`,
+            contactUrl: `/contact-sales?plan=ultra-custom&billing=${billing}&price=${billedAmountUsd.toFixed(2)}`,
           }, 200, requestOrigin);
         }
 
@@ -338,8 +342,11 @@ export default {
 
         if (!stripeKey) {
           return jsonResponse({
-            checkoutUrl: `${returnPlaygroundUrl.replace(/\/playground$/, "")}/checkout?plan=ultra-custom&monthly_price_usd=${monthlyPriceUsd.toFixed(2)}&dubbing_mins=${dubbingMins}&voice_credits=${voiceCredits}&text_chars=${textChars}&transcribe_mins=${transcribeMins}&image_count=${imageCount}&user_id=${encodeURIComponent(userId)}`,
+            checkoutUrl: `${returnPlaygroundUrl.replace(/\/playground$/, "")}/checkout?plan=ultra-custom&billing=${billing}&monthly_price_usd=${monthlyPriceUsd.toFixed(2)}&yearly_price_usd=${yearlyPriceUsd.toFixed(2)}&dubbing_mins=${dubbingMins}&voice_credits=${voiceCredits}&text_chars=${textChars}&transcribe_mins=${transcribeMins}&image_count=${imageCount}&user_id=${encodeURIComponent(userId)}`,
             monthlyPriceUsd,
+            yearlyPriceUsd,
+            billedAmountUsd,
+            billing,
             isTestMode: true,
           }, 200, requestOrigin);
         }
@@ -350,22 +357,25 @@ export default {
           params.append("customer_email", userEmail);
         }
         params.append("line_items[0][price_data][currency]", "usd");
-        params.append("line_items[0][price_data][recurring][interval]", "month");
-        params.append("line_items[0][price_data][unit_amount]", String(Math.round(monthlyPriceUsd * 100)));
-        params.append("line_items[0][price_data][product_data][name]", "LingoFusion Ultra Custom Subscription");
+        params.append("line_items[0][price_data][recurring][interval]", isYearly ? "year" : "month");
+        params.append("line_items[0][price_data][unit_amount]", String(Math.round(billedAmountUsd * 100)));
+        params.append("line_items[0][price_data][product_data][name]", `Ultra Custom Subscription (${isYearly ? "Annual" : "Monthly"})`);
         params.append(
           "line_items[0][price_data][product_data][description]",
-          `Custom monthly quotas: ${dubbingMins}m dubbing, ${voiceCredits.toLocaleString()} voice credits, ${textChars.toLocaleString()} text chars, ${transcribeMins}m transcribe, ${imageCount} images (Base Ultra Fee included)`,
+          `Custom quotas: ${dubbingMins}m dubbing, ${voiceCredits.toLocaleString()} voice credits, ${textChars.toLocaleString()} text chars, ${transcribeMins}m transcribe, ${imageCount} images (${isYearly ? "15% annual savings applied" : "Billed monthly"})`,
         );
         params.append("line_items[0][quantity]", "1");
         params.append("metadata[planId]", plan);
         params.append("metadata[userId]", userId);
+        params.append("metadata[billing]", billing);
         params.append("metadata[dubbing_mins]", String(dubbingMins));
         params.append("metadata[voice_credits]", String(voiceCredits));
         params.append("metadata[text_chars]", String(textChars));
         params.append("metadata[transcribe_mins]", String(transcribeMins));
         params.append("metadata[image_count]", String(imageCount));
         params.append("metadata[monthly_price_usd]", monthlyPriceUsd.toFixed(2));
+        params.append("metadata[yearly_price_usd]", yearlyPriceUsd.toFixed(2));
+        params.append("metadata[billed_amount_usd]", billedAmountUsd.toFixed(2));
         params.append("success_url", `${returnPlaygroundUrl}?subscription=success&session_id={CHECKOUT_SESSION_ID}`);
         params.append("cancel_url", `${returnPlaygroundUrl}?subscription=cancelled`);
 
