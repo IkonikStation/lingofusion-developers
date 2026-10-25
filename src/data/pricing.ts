@@ -20,7 +20,7 @@ export type TextPricingMode = "instant" | "batch" | "fast" | "ultrafast";
 export type SimpleModel = {
   model: string;
   priceUsd: number | null;
-  pricingUnit?: "per_1k_characters" | "per_minute" | "per_generation" | "per_500_extractions";
+  pricingUnit?: "per_1k_characters" | "per_minute" | "per_song" | "per_generation" | "per_500_extractions";
 };
 
 export type ImageResolution = "standard" | "4k";
@@ -165,7 +165,7 @@ export const dubbingModels: SimpleModel[] = [
 ];
 
 export const musicModels: SimpleModel[] = [
-  { model: "LingoFusion Music", priceUsd: 0.50, pricingUnit: "per_minute" },
+  { model: "LingoFusion Music", priceUsd: 0.10, pricingUnit: "per_song" },
 ];
 
 // In-image translation is served as LingoFusion Image Translate (upstream

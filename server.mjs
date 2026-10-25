@@ -703,7 +703,8 @@ function normalizeMusicModelName(value) {
 }
 
 function musicCostMicro(model) {
-  return dollarsToMicroCents(model.pricePerGeneration);
+  // Charging currently paused: $0.10/song sticker price, but no charge applied to balance right now
+  return 0;
 }
 
 function tokenEstimate(text) {
@@ -4205,7 +4206,9 @@ async function route(req, res) {
       }
 
       const costMicroCents = musicCostMicro(model);
-      const charge = applyCharge(db, costMicroCents, model.model, 0, 0, auth.sqlKey?.id || null);
+      const charge = costMicroCents > 0
+        ? applyCharge(db, costMicroCents, model.model, 0, 0, auth.sqlKey?.id || null)
+        : { reward: false, paid: false };
 
       if (!charge) {
         db.requestLogs.unshift({

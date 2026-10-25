@@ -1287,13 +1287,9 @@ async function runMusic(state: BrowserState, options?: RequestInit) {
   const durationSeconds = Math.round(Number(body.duration_seconds || 30));
   if (!prompt || !Number.isFinite(durationSeconds) || durationSeconds < 1 || durationSeconds > 3600) fail("invalid_request");
 
-  // Rate: $0.50 per minute
+  // Rate: $0.10 per song (charging paused; balance does not move)
   const durationMinutes = durationSeconds / 60;
-  const cost = Number(((model.priceUsd ?? 0.50) * durationMinutes).toFixed(6));
-
-  if ((state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) < cost) {
-    fail("Insufficient balance. Please deposit credits.");
-  }
+  const cost = 0; // Free preview period: do not charge or deduct balance right now
 
   let audioUrl = "";
   try {
@@ -1344,8 +1340,10 @@ async function runMusic(state: BrowserState, options?: RequestInit) {
   }
 
   const requestId = randomId("req");
-  applyCharge(state, cost);
-  createChargeEntry(state, cost, `${model.model} /v1/music (${durationSeconds}s)`);
+  if (cost > 0) {
+    applyCharge(state, cost);
+    createChargeEntry(state, cost, `${model.model} /v1/music (${durationSeconds}s)`);
+  }
   logRequest(state, {
     id: requestId,
     timestamp: new Date().toISOString(),
@@ -1368,7 +1366,7 @@ async function runMusic(state: BrowserState, options?: RequestInit) {
   return {
     id: requestId,
     model: model.model,
-    upstream_model: "music_v2",
+    upstream_model: "treblo_v3",
     status: "completed",
     output: {
       prompt,

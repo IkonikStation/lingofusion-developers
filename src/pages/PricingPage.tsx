@@ -129,7 +129,7 @@ export function PricingPage({
   const displayCurrency = (usdAmount: number, precise = false) => formatCurrencyAmount(usdAmount, activeCurrency, activeRate, precise);
   const displayPrice = (usdAmount: number | null, unit?: string) => {
     if (usdAmount === null) return "TBD";
-    const suffix = unit === "per_1k_characters" ? "" : unit === "per_minute" ? "/min" : unit === "per_generation" ? " / gen" : unit === "per_500_extractions" ? " / 500 ex." : "";
+    const suffix = unit === "per_1k_characters" ? "" : unit === "per_minute" ? "/min" : unit === "per_song" ? " / song" : unit === "per_generation" ? " / gen" : unit === "per_500_extractions" ? " / 500 ex." : "";
     return `${displayCurrency(usdAmount, true)}${suffix}`;
   };
 
@@ -546,7 +546,7 @@ export function PricingPage({
           <PricingCard
             key={`music-${currencyPresentationKey}`}
             title="Music generation"
-            unit="Price per generation"
+            unit="Price per song"
             kind="simple"
             rows={displayedMusicModels}
             labels={pricingLabels}

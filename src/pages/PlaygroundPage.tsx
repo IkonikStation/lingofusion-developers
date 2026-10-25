@@ -644,7 +644,7 @@ export function PlaygroundPage({
         id: model.model,
         label: model.model,
         icon: <Music className="h-3.5 w-3.5 shrink-0 text-neutral-400" />,
-        hint: `$${model.priceUsd?.toFixed(2)}/min`,
+        hint: `$${model.priceUsd?.toFixed(2)}/song`,
       })),
     [],
   );
@@ -1137,10 +1137,7 @@ export function PlaygroundPage({
   const handleRunMusicGeneration = async () => {
     const prompt = userInput.trim() || translatedOutput.trim();
     if (!prompt || musicRunning) return;
-    if (liveBalance <= 0) {
-      setInsufficientModalOpen(true);
-      return;
-    }
+    // Free preview period: do not charge or gate on credit balance
     setErrorBanner(null);
     setMusicRunning(true);
     setMusicAudioUrl(null);
@@ -1180,7 +1177,7 @@ export function PlaygroundPage({
           id: response.id || runId,
           model: response.model || selectedMusicModel,
           durationSeconds: response.output.duration_seconds || musicDurationSeconds,
-          costUsd: response.usage?.cost_usd || (0.50 * (musicDurationSeconds / 60)),
+          costUsd: 0,
         });
       } else {
         const baseUrl = getApiBaseUrl();
@@ -1234,18 +1231,14 @@ export function PlaygroundPage({
           id: data.id || runId,
           model: data.model || selectedMusicModel,
           durationSeconds: data.duration_seconds || musicDurationSeconds,
-          costUsd: 0.50 * ((data.duration_seconds || musicDurationSeconds) / 60),
+          costUsd: 0,
         });
       }
 
       await loadModelsAndState();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Music generation failed";
-      if (message.toLowerCase().includes("insufficient") || message.toLowerCase().includes("deposit")) {
-        setInsufficientModalOpen(true);
-      } else {
-        setErrorBanner(message);
-      }
+      setErrorBanner(message);
     } finally {
       setMusicRunning(false);
     }
@@ -3431,7 +3424,7 @@ export function PlaygroundPage({
                         className="inline-flex items-center gap-1.5 rounded-full border border-purple-200 bg-purple-50 px-3 py-1 font-sans tabular-nums text-xs font-medium text-purple-900 dark:border-purple-500/30 dark:bg-purple-500/10 dark:text-purple-200"
                       >
                         <Activity className="h-3 w-3 text-purple-600 dark:text-purple-400" />
-                        {musicRun.durationSeconds}s audio • Cost: ${formatCostBadge(musicRun.costUsd)} ($0.50/min)
+                        {musicRun.durationSeconds}s audio • Cost: ${formatCostBadge(musicRun.costUsd)} ($0.10/song)
                       </span>
                     </div>
                   )}
