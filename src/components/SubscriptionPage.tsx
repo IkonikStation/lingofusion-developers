@@ -308,7 +308,7 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
             price={ultraCustomBreakdown.totalMonthlyPrice}
             monthlyPrice={ultraCustomBreakdown.totalMonthlyPrice}
             billingInterval="monthly"
-            modelAccess="Full access to LingoFusion Ultra, the smartest and most powerful model with the best reasoning"
+            modelAccess="Access to LingoFusion Ultra, our most advanced model, built for superior translation quality and the best reasoning."
             features={[
               `Base Fee: $${ULTRA_BASE_FEE.toFixed(2)}/mo included`,
               `${ultraBuilderConfig.dubbingMins.toLocaleString()} min Video Dubbing included`,
