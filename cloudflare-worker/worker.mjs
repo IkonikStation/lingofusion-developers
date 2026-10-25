@@ -644,11 +644,11 @@ export default {
         });
       }
 
-      // 4b. Chat / Text Translation Proxy (server-side only using env.OPENAI_API_KEY)
+      // 4b. Chat / Text Translation Proxy
       if (request.method === "POST" && (path === "/api/playground/chat" || path === "/v1/chat/completions")) {
         const openaiKey = env.OPENAI_API_KEY;
         if (!openaiKey) {
-          return jsonResponse({ error: "translation_provider_not_configured", message: "OPENAI_API_KEY secret is not set on Worker." }, 503, requestOrigin);
+          return jsonResponse({ error: "translation_engine_not_configured", message: "Translation engine secret is not configured on Gateway." }, 503, requestOrigin);
         }
 
         const upstreamRes = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -672,11 +672,11 @@ export default {
         });
       }
 
-      // 4c. Image Translation / Edits Proxy (server-side only using env.OPENAI_API_KEY)
+      // 4c. Image Translation / Edits Proxy
       if (request.method === "POST" && (path === "/api/playground/image" || path === "/v1/images/edits")) {
         const openaiKey = env.OPENAI_API_KEY;
         if (!openaiKey) {
-          return jsonResponse({ error: "image_provider_not_configured", message: "OPENAI_API_KEY secret is not set on Worker." }, 503, requestOrigin);
+          return jsonResponse({ error: "image_engine_not_configured", message: "Image synthesis engine secret is not configured on Gateway." }, 503, requestOrigin);
         }
 
         const contentType = request.headers.get("content-type") || "";

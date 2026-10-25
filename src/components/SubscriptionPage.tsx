@@ -304,11 +304,11 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
             className="subscription-card-ultra"
             planId="ultra-custom"
             name="LingoFusion Ultra"
-            description="Modular custom subscription with configurable monthly quotas and GPT-6 Astra access."
+            description="Modular custom subscription with configurable monthly quotas and LingoFusion Ultra access."
             price={ultraCustomBreakdown.totalMonthlyPrice}
             monthlyPrice={ultraCustomBreakdown.totalMonthlyPrice}
             billingInterval="monthly"
-            modelAccess="Full access to LingoFusion Ultra (GPT-6 Astra) with priority routing."
+            modelAccess="Full access to LingoFusion Ultra with priority routing and dedicated concurrency."
             features={[
               `Base Fee: $${ULTRA_BASE_FEE.toFixed(2)}/mo included`,
               `${ultraBuilderConfig.dubbingMins.toLocaleString()} min Video Dubbing included`,

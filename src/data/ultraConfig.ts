@@ -12,11 +12,11 @@
 export const ULTRA_BASE_FEE = 29.00; // Required monthly platform base fee
 
 export const ULTRA_RATES = {
-  dubbingPerMin: 3.50, // $210.00 / hr (ElevenLabs Dubbing v2 @ $2.20/min upstream)
+  dubbingPerMin: 3.50, // $210.00 / hr
   voicePerCredit: 0.00007, // $70.00 / 1,000,000 credits (1 credit = 1 char on v4 Turbo; 2 credits = 1 char on v4 Standard)
-  textPerChar: 0.000006, // $6.00 / 1,000,000 characters (GPT-6 Luna, Sol, Astra)
-  transcribePerMin: 0.017, // $1.02 / hr (GPT-4o-transcribe)
-  imagePerItem: 0.12, // $6.00 / 50 images (GPT-image 2.5 Sunburst)
+  textPerChar: 0.000006, // $6.00 / 1,000,000 characters
+  transcribePerMin: 0.017, // $1.02 / hr
+  imagePerItem: 0.12, // $6.00 / 50 images
 } as const;
 
 export const ULTRA_ENTERPRISE_THRESHOLD = 5000.00; // >= $5,000 requires ACH Wire / Enterprise Invoice
@@ -46,7 +46,7 @@ export const ULTRA_LIMITS = {
     inputStep: 1,
     unit: "mins",
     label: "Video Dubbing",
-    upstreamNote: "ElevenLabs Dubbing v2",
+    capabilityNote: "High-fidelity voice match & lip sync",
   },
   voice: {
     min: 0,
@@ -56,7 +56,7 @@ export const ULTRA_LIMITS = {
     inputStep: 1_000,
     unit: "credits",
     label: "Voice Synthesis",
-    upstreamNote: "LingoFusion Voice v4 / Turbo",
+    capabilityNote: "LingoFusion Voice v4 / Turbo",
   },
   text: {
     min: 0,
@@ -66,7 +66,7 @@ export const ULTRA_LIMITS = {
     inputStep: 1_000,
     unit: "chars",
     label: "Text Translation",
-    upstreamNote: "GPT-6 Luna, Sol, Astra",
+    capabilityNote: "LingoFusion, Pro & Ultra models",
   },
   transcribe: {
     min: 0,
@@ -76,7 +76,7 @@ export const ULTRA_LIMITS = {
     inputStep: 1,
     unit: "mins",
     label: "Audio Transcription",
-    upstreamNote: "GPT-4o-transcribe",
+    capabilityNote: "Timestamped speech-to-text",
   },
   images: {
     min: 0,
@@ -86,7 +86,7 @@ export const ULTRA_LIMITS = {
     inputStep: 1,
     unit: "images",
     label: "AI Images",
-    upstreamNote: "GPT-image 2.5 Sunburst",
+    capabilityNote: "High-res in-image translation",
   },
 } as const;
 

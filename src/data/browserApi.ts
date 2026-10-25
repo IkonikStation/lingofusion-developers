@@ -1119,7 +1119,7 @@ async function runImageTranslationBrowser(
     model: model.model,
     label: model.label,
     resolution: model.resolution,
-    provider: "openai",
+    provider: "lingofusion",
     upstream_model: model.upstreamModel,
     from_language: fromLanguage,
     to_language: toLanguage,

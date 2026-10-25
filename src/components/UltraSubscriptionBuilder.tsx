@@ -270,7 +270,7 @@ export function UltraSubscriptionBuilder({
                     {ULTRA_LIMITS.dubbing.label}
                   </h3>
                   <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                    ${ULTRA_RATES.dubbingPerMin.toFixed(2)} / min ($210.00 / hr) • Upstream: {ULTRA_LIMITS.dubbing.upstreamNote}
+                    ${ULTRA_RATES.dubbingPerMin.toFixed(2)} / min ($210.00 / hr) • {ULTRA_LIMITS.dubbing.capabilityNote}
                   </p>
                 </div>
               </div>
@@ -386,7 +386,7 @@ export function UltraSubscriptionBuilder({
                     {ULTRA_LIMITS.text.label}
                   </h3>
                   <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                    $6.00 / 1M characters • Combined GPT-6 Luna, Sol & Astra
+                    $6.00 / 1M characters • {ULTRA_LIMITS.text.capabilityNote}
                   </p>
                 </div>
               </div>
@@ -444,7 +444,7 @@ export function UltraSubscriptionBuilder({
                     {ULTRA_LIMITS.transcribe.label}
                   </h3>
                   <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                    $0.017 / min ($1.02 / hr) • Upstream: {ULTRA_LIMITS.transcribe.upstreamNote}
+                    $0.017 / min ($1.02 / hr) • {ULTRA_LIMITS.transcribe.capabilityNote}
                   </p>
                 </div>
               </div>
@@ -502,7 +502,7 @@ export function UltraSubscriptionBuilder({
                     {ULTRA_LIMITS.images.label}
                   </h3>
                   <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                    $0.12 / image ($6.00 / 50 images) • {ULTRA_LIMITS.images.upstreamNote}
+                    $0.12 / image ($6.00 / 50 images) • {ULTRA_LIMITS.images.capabilityNote}
                   </p>
                 </div>
               </div>
@@ -578,7 +578,7 @@ export function UltraSubscriptionBuilder({
                 </span>
               </div>
               <p className="-mt-1 pl-5 text-[10px] text-neutral-400">
-                Platform sync, priority queue, GPT-6 Astra access
+                Platform sync, priority queue, full LingoFusion Ultra engine access
               </p>
 
               <div className="flex items-center justify-between text-neutral-600 dark:text-neutral-300">
