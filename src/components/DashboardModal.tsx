@@ -1308,7 +1308,7 @@ export function DashboardModal({
                                     <CreditCard className="h-4 w-4" />
                                     {busyAction === "recharge"
                                       ? tc("Redirecting to Stripe...")
-                                      : `Pay $${formatUsd(breakdown.grossChargedUsd)} USD`}
+                                      : tc("Continue to Checkout")}
                                   </ActionButton>
                                   <div className="flex items-center justify-between pt-1">
                                     <span className="inline-flex items-center gap-1 text-[11px] text-neutral-400">

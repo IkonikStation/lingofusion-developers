@@ -2134,12 +2134,12 @@ export function PlaygroundPage({
                         {depositTab === "gift" ? (
                           <>
                             <Gift className="h-4 w-4" />
-                            Pay ${formatUsd(depositBreakdown.grossChargedUsd)} USD (Gift)
+                            Continue to Checkout
                           </>
                         ) : (
                           <>
                             <CreditCard className="h-4 w-4" />
-                            Pay ${formatUsd(depositBreakdown.grossChargedUsd)} USD
+                            Continue to Checkout
                           </>
                         )}
                       </>
