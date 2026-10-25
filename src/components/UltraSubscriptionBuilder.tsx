@@ -1,11 +1,11 @@
 import {
   ArrowUpRight,
   Building2,
+  Clapperboard,
   FileText,
   Image as ImageIcon,
   MessageSquare,
   Sparkles,
-  Video,
   Volume2,
 } from "lucide-react";
 import { useId, useMemo, useState } from "react";
@@ -321,7 +321,7 @@ export function UltraSubscriptionBuilder({
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-neutral-200/90 bg-white text-neutral-700 shadow-2xs dark:border-white/10 dark:bg-neutral-800 dark:text-neutral-300">
-                  <Video className="h-4 w-4" />
+                  <Clapperboard className="h-4 w-4" />
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold text-neutral-950 dark:text-white">
