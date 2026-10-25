@@ -1162,7 +1162,7 @@ export function PlaygroundPage({
     const payload = {
       model: selectedMusicModel,
       prompt,
-      duration_seconds: musicDurationSeconds,
+      instrumental: musicInstrumental,
       force_instrumental: musicInstrumental,
     };
 
@@ -2854,22 +2854,6 @@ export function PlaygroundPage({
                 )}
                 {mode === "music" && (
                   <>
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs text-neutral-500 dark:text-neutral-400">Duration:</label>
-                      <select
-                        value={musicDurationSeconds}
-                        onChange={(e) => setMusicDurationSeconds(Number(e.target.value))}
-                        className="h-8 rounded-lg border border-neutral-200 bg-white px-2 text-xs font-semibold text-neutral-900 outline-none dark:border-white/15 dark:bg-neutral-950 dark:text-white"
-                      >
-                        <option value={30}>30 sec</option>
-                        <option value={60}>1 min</option>
-                        <option value={120}>2 min</option>
-                        <option value={180}>3 min</option>
-                        <option value={240}>4 min</option>
-                        <option value={300}>5 min</option>
-                      </select>
-                    </div>
-
                     <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
                       <input
                         type="checkbox"
