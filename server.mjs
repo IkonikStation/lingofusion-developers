@@ -3255,8 +3255,8 @@ async function route(req, res) {
                   currency,
                   unit_amount: grossAmountCents,
                   product_data: {
-                    name: `LingoFusion Credits — $${netDepositedUsd.toFixed(2)} ${currency.toUpperCase()}`,
-                    description: `Adds +$${netDepositedUsd.toFixed(2)} ${currency.toUpperCase()} to your LingoFusion balance (includes $${estimatedStripeFeeUsd.toFixed(2)} processing fee)`,
+                    name: `LingoFusion Balance — $${netDepositedUsd.toFixed(2)} API Credit`,
+                    description: `Adds +$${netDepositedUsd.toFixed(2)} ${currency.toUpperCase()} to your usable API balance`,
                   },
                 },
                 quantity: 1,
@@ -3306,20 +3306,47 @@ async function route(req, res) {
     }
 
     // =========================================================================
-    // 4b. Custom Ultra Subscription Checkout: POST /api/billing/subscription-checkout
+    // 4b. Custom Ultra / Pro / Pro Max Subscription Checkout: POST /api/billing/subscription-checkout
     // =========================================================================
     if (req.method === "POST" && url.pathname === "/api/billing/subscription-checkout") {
-      const body = await readJson(req);
+      try {
+        const body = await parseBody(req);
       const plan = String(body.plan || "ultra-custom");
       const billing = String(body.billing || body.billing_interval || "monthly").toLowerCase();
       const isYearly = billing === "yearly";
-      const dubbingMins = Math.max(0, Number(body.dubbing_mins ?? 30));
-      const voiceCredits = Math.max(0, Number(body.voice_credits ?? 1200000));
-      const textChars = Math.max(0, Number(body.text_chars ?? 5000000));
-      const transcribeMins = Math.max(0, Number(body.transcribe_mins ?? 120));
-      const imageCount = Math.max(0, Number(body.image_count ?? 50));
-      const monthlyPriceUsd = Math.max(29, Number(body.monthly_price_usd ?? 256.04));
-      const yearlyPriceUsd = Math.round(monthlyPriceUsd * 12 * 0.85 * 100) / 100;
+
+      let dubbingMins = 0;
+      let voiceCredits = 25000;
+      let textChars = 2200000;
+      let transcribeMins = 30;
+      let imageCount = 50;
+      let monthlyPriceUsd = 19.99;
+      let yearlyPriceUsd = 204.0;
+      let productName = "LingoFusion Pro";
+      let productDesc = "LingoFusion Pro recurring subscription — flat $19.99/mo with zero checkout fees";
+
+      if (plan === "pro-max-750k" || plan === "pro-max") {
+        monthlyPriceUsd = 39.99;
+        yearlyPriceUsd = 408.0;
+        dubbingMins = 0;
+        voiceCredits = 75000;
+        textChars = 4800000;
+        transcribeMins = 75;
+        imageCount = 150;
+        productName = "LingoFusion Pro Max";
+        productDesc = "LingoFusion Pro Max recurring subscription — flat $39.99/mo with zero checkout fees";
+      } else if (plan === "ultra-custom") {
+        dubbingMins = Math.max(0, Number(body.dubbing_mins ?? 30));
+        voiceCredits = Math.max(0, Number(body.voice_credits ?? 1200000));
+        textChars = Math.max(0, Number(body.text_chars ?? 5000000));
+        transcribeMins = Math.max(0, Number(body.transcribe_mins ?? 120));
+        imageCount = Math.max(0, Number(body.image_count ?? 50));
+        monthlyPriceUsd = Math.max(29, Number(body.monthly_price_usd ?? 256.04));
+        yearlyPriceUsd = Math.round(monthlyPriceUsd * 12 * 0.85 * 100) / 100;
+        productName = `Ultra Custom Subscription (${isYearly ? "Annual" : "Monthly"})`;
+        productDesc = `Custom quotas: ${dubbingMins}m dubbing, ${voiceCredits.toLocaleString()} voice credits, ${textChars.toLocaleString()} text chars, ${transcribeMins}m transcribe, ${imageCount} images (${isYearly ? "15% annual savings applied" : "Billed monthly"})`;
+      }
+
       const billedAmountUsd = isYearly ? yearlyPriceUsd : monthlyPriceUsd;
       const userId = String(body.userId || DEFAULT_USER_ID);
       const userEmail = String(body.userEmail || DEFAULT_USER_EMAIL);
@@ -3329,7 +3356,7 @@ async function route(req, res) {
         return send(res, 200, {
           isEnterpriseInvoice: true,
           notice: "Orders exceeding $5,000/month are processed via verified bank wire/ACH to prevent card processing delays and guarantee dedicated concurrency.",
-          contactUrl: `/contact-sales?plan=ultra-custom&billing=${billing}&price=${billedAmountUsd.toFixed(2)}`,
+          contactUrl: `/contact-sales?plan=${encodeURIComponent(plan)}&billing=${billing}&price=${billedAmountUsd.toFixed(2)}`,
         });
       }
 
@@ -3366,8 +3393,8 @@ async function route(req, res) {
                   recurring: { interval: isYearly ? "year" : "month" },
                   unit_amount: Math.round(billedAmountUsd * 100),
                   product_data: {
-                    name: `Ultra Custom Subscription (${isYearly ? "Annual" : "Monthly"})`,
-                    description: `Custom quotas: ${dubbingMins}m dubbing, ${voiceCredits.toLocaleString()} voice credits, ${textChars.toLocaleString()} text chars, ${transcribeMins}m transcribe, ${imageCount} images (${isYearly ? "15% annual savings applied" : "Billed monthly"})`,
+                    name: productName,
+                    description: productDesc,
                   },
                 },
                 quantity: 1,
@@ -3407,7 +3434,7 @@ async function route(req, res) {
       });
 
       const checkoutBase = appUrl.replace(/\/playground$/, "");
-      const checkoutUrl = `${checkoutBase}/checkout?plan=ultra-custom&billing=${billing}&dubbing_mins=${dubbingMins}&voice_credits=${voiceCredits}&text_chars=${textChars}&transcribe_mins=${transcribeMins}&image_count=${imageCount}&monthly_price_usd=${monthlyPriceUsd.toFixed(2)}&yearly_price_usd=${yearlyPriceUsd.toFixed(2)}&user_id=${encodeURIComponent(userId)}`;
+      const checkoutUrl = `${checkoutBase}/checkout?plan=${encodeURIComponent(plan)}&billing=${billing}&dubbing_mins=${dubbingMins}&voice_credits=${voiceCredits}&text_chars=${textChars}&transcribe_mins=${transcribeMins}&image_count=${imageCount}&monthly_price_usd=${monthlyPriceUsd.toFixed(2)}&yearly_price_usd=${yearlyPriceUsd.toFixed(2)}&user_id=${encodeURIComponent(userId)}`;
 
       return send(res, 200, {
         url: checkoutUrl,
@@ -3418,8 +3445,11 @@ async function route(req, res) {
         billedAmountUsd,
         billing,
         metadata,
-        provisioned: true,
       });
+      } catch (err) {
+        console.error("subscription-checkout error:", err);
+        return send(res, 500, { error: err.message, stack: err.stack });
+      }
     }
 
     // =========================================================================
@@ -3465,18 +3495,40 @@ async function route(req, res) {
         const metadata = sessionObj.metadata || {};
         const userId = metadata.userId || DEFAULT_USER_ID;
 
-        // Custom Ultra Subscription Provisioning
-        if (metadata.planId === "ultra-custom") {
+        // Subscription Provisioning (Ultra or Pro / Pro Max)
+        if (metadata.planId) {
+          let dubbingMins = Number(metadata.dubbing_mins || 0);
+          let voiceCredits = Number(metadata.voice_credits || 25000);
+          let textChars = Number(metadata.text_chars || 2200000);
+          let transcribeMins = Number(metadata.transcribe_mins || 30);
+          let imageCount = Number(metadata.image_count || 50);
+          let monthlyPriceUsd = Number(metadata.monthly_price_usd || 19.99);
+
+          if (metadata.planId === "pro-max-750k" || metadata.planId === "pro-max") {
+            monthlyPriceUsd = 39.99;
+            voiceCredits = Number(metadata.voice_credits || 75000);
+            textChars = Number(metadata.text_chars || 4800000);
+            transcribeMins = Number(metadata.transcribe_mins || 75);
+            imageCount = Number(metadata.image_count || 150);
+          } else if (metadata.planId === "ultra-custom") {
+            monthlyPriceUsd = Number(metadata.monthly_price_usd || 256.04);
+            dubbingMins = Number(metadata.dubbing_mins || 30);
+            voiceCredits = Number(metadata.voice_credits || 1200000);
+            textChars = Number(metadata.text_chars || 5000000);
+            transcribeMins = Number(metadata.transcribe_mins || 120);
+            imageCount = Number(metadata.image_count || 50);
+          }
+
           const subResult = provisionWorkspaceSubscription({
             userId,
             stripeSubscriptionId: sessionObj.subscription || sessionObj.id,
-            planId: "ultra-custom",
-            monthlyPriceUsd: Number(metadata.monthly_price_usd || 256.04),
-            dubbingMins: Number(metadata.dubbing_mins || 30),
-            voiceCredits: Number(metadata.voice_credits || 1200000),
-            textChars: Number(metadata.text_chars || 5000000),
-            transcribeMins: Number(metadata.transcribe_mins || 120),
-            imageCount: Number(metadata.image_count || 50),
+            planId: metadata.planId,
+            monthlyPriceUsd,
+            dubbingMins,
+            voiceCredits,
+            textChars,
+            transcribeMins,
+            imageCount,
           });
 
           return send(res, 200, {
@@ -3519,28 +3571,84 @@ async function route(req, res) {
         });
       }
 
-      if (event.type === "customer.subscription.created" || event.type === "invoice.payment_succeeded") {
-        const subObj = event.data?.object || {};
-        const metadata = subObj.metadata || subObj.subscription_details?.metadata || {};
+      if (event.type === "invoice.paid" || event.type === "invoice.payment_succeeded" || event.type === "customer.subscription.created") {
+        const invoiceOrSub = event.data?.object || {};
+        const metadata = invoiceOrSub.metadata || invoiceOrSub.subscription_details?.metadata || invoiceOrSub.lines?.data?.[0]?.metadata || {};
         const userId = metadata.userId || DEFAULT_USER_ID;
-        if (metadata.planId === "ultra-custom") {
+
+        // If this invoice is for a balance top-up
+        const netDepositUsd = Number(metadata.topUpAmount ?? metadata.netDepositUsd ?? 0);
+        if (Number.isFinite(netDepositUsd) && netDepositUsd > 0) {
+          const stripeSessionId = invoiceOrSub.id || `inv_paid_${randomBytes(8).toString("hex")}`;
+          const grossCents = invoiceOrSub.amount_paid ?? invoiceOrSub.amount_total ?? calculateGrossDepositCents(netDepositUsd).grossAmountCents;
+          const grossChargedUsd = Number((grossCents / 100).toFixed(2));
+
+          const settlement = creditUserDeposit({
+            userId,
+            stripeSessionId,
+            netDepositUsd,
+            grossChargedUsd,
+            status: "completed",
+          });
+
+          db.account.paidBalanceMicroCents = dollarsToMicroCents(settlement.user?.balance_usd || 0);
+          if (!settlement.alreadyProcessed) {
+            db.account.totalPaidCreditPurchasedMicroCents += dollarsToMicroCents(netDepositUsd);
+          }
+          await saveDb(db);
+
+          return send(res, 200, {
+            received: true,
+            alreadyProcessed: settlement.alreadyProcessed,
+            depositId: settlement.depositId,
+            balance_usd: settlement.user?.balance_usd,
+            net_deposited_usd: netDepositUsd,
+            gross_charged_usd: grossChargedUsd,
+          });
+        }
+
+        if (metadata.planId) {
+          let dubbingMins = Number(metadata.dubbing_mins || 0);
+          let voiceCredits = Number(metadata.voice_credits || 25000);
+          let textChars = Number(metadata.text_chars || 2200000);
+          let transcribeMins = Number(metadata.transcribe_mins || 30);
+          let imageCount = Number(metadata.image_count || 50);
+          let monthlyPriceUsd = Number(metadata.monthly_price_usd || 19.99);
+
+          if (metadata.planId === "pro-max-750k" || metadata.planId === "pro-max") {
+            monthlyPriceUsd = 39.99;
+            voiceCredits = Number(metadata.voice_credits || 75000);
+            textChars = Number(metadata.text_chars || 4800000);
+            transcribeMins = Number(metadata.transcribe_mins || 75);
+            imageCount = Number(metadata.image_count || 150);
+          } else if (metadata.planId === "ultra-custom") {
+            monthlyPriceUsd = Number(metadata.monthly_price_usd || 256.04);
+            dubbingMins = Number(metadata.dubbing_mins || 30);
+            voiceCredits = Number(metadata.voice_credits || 1200000);
+            textChars = Number(metadata.text_chars || 5000000);
+            transcribeMins = Number(metadata.transcribe_mins || 120);
+            imageCount = Number(metadata.image_count || 50);
+          }
+
           const subResult = provisionWorkspaceSubscription({
             userId,
-            stripeSubscriptionId: subObj.id || subObj.subscription,
-            planId: "ultra-custom",
-            monthlyPriceUsd: Number(metadata.monthly_price_usd || 256.04),
-            dubbingMins: Number(metadata.dubbing_mins || 30),
-            voiceCredits: Number(metadata.voice_credits || 1200000),
-            textChars: Number(metadata.text_chars || 5000000),
-            transcribeMins: Number(metadata.transcribe_mins || 120),
-            imageCount: Number(metadata.image_count || 50),
+            stripeSubscriptionId: invoiceOrSub.subscription || invoiceOrSub.id,
+            planId: metadata.planId,
+            monthlyPriceUsd,
+            dubbingMins,
+            voiceCredits,
+            textChars,
+            transcribeMins,
+            imageCount,
           });
+
           return send(res, 200, {
             received: true,
             type: "subscription_provisioned",
             subscription: subResult,
           });
         }
+
         return send(res, 200, { received: true });
       }
 

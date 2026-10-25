@@ -13,6 +13,7 @@ import {
   Gauge,
   Gift,
   Globe,
+  HelpCircle,
   Image as ImageIcon,
   Link2,
   Loader2,
@@ -34,6 +35,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { FeeBreakdownModal } from "../components/FeeBreakdownModal";
 import { LiveMarkdownEditor } from "../components/LiveMarkdownEditor";
 import { MarkdownView } from "../components/MarkdownView";
 import { ModelThumb } from "../components/shared/FormFields";
@@ -215,6 +217,7 @@ export function PlaygroundPage({
   const [checkingGifts, setCheckingGifts] = useState<boolean>(false);
   const [insufficientModalOpen, setInsufficientModalOpen] = useState<boolean>(false);
   const [depositAmount, setDepositAmount] = useState<number>(10);
+  const [showFeeModal, setShowFeeModal] = useState<boolean>(false);
   const [depositBusy, setDepositBusy] = useState<boolean>(false);
   const [depositStatusMessage, setDepositStatusMessage] = useState<string | null>(null);
   const [paymentNotice, setPaymentNotice] = useState<{
@@ -2046,9 +2049,18 @@ export function PlaygroundPage({
                     </div>
                   )}
 
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                    Summary
-                  </h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+                      Summary
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setShowFeeModal(true)}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-neutral-500 underline transition hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white"
+                    >
+                      <HelpCircle className="h-3 w-3" /> Where is the extra cost coming from?
+                    </button>
+                  </div>
 
                   <div
                     data-testid="gross-charge-preview"
@@ -2122,12 +2134,12 @@ export function PlaygroundPage({
                         {depositTab === "gift" ? (
                           <>
                             <Gift className="h-4 w-4" />
-                            Send Gift with Stripe
+                            Pay ${formatUsd(depositBreakdown.grossChargedUsd)} USD (Gift)
                           </>
                         ) : (
                           <>
                             <CreditCard className="h-4 w-4" />
-                            Continue to Checkout
+                            Pay ${formatUsd(depositBreakdown.grossChargedUsd)} USD
                           </>
                         )}
                       </>
@@ -2336,6 +2348,18 @@ export function PlaygroundPage({
           </div>,
           document.body,
         )}
+
+      <FeeBreakdownModal
+        isOpen={showFeeModal}
+        onClose={() => setShowFeeModal(false)}
+        accountCredit={
+          depositTab === "gift"
+            ? `+$${formatUsd(depositBreakdown.netDepositedUsd)} USD (Gift)`
+            : `+$${formatUsd(depositBreakdown.netDepositedUsd)} USD`
+        }
+        cardNetworkFee={`$${formatUsd(depositBreakdown.estimatedStripeFeeUsd)} USD`}
+        totalCharged={`$${formatUsd(depositBreakdown.grossChargedUsd)} USD`}
+      />
 
       {/* Claim Gift Modal Pop-up with Full-Screen Blurred Dark Backdrop (Portaled to document.body) */}
       {claimModalOpen &&

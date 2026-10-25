@@ -8,6 +8,7 @@ import {
   CreditCard,
   Download,
   FileText,
+  HelpCircle,
   KeyRound,
   LogIn,
   Music,
@@ -27,6 +28,7 @@ import { sdkExamples } from "../data/sdkExamples";
 import type { SdkLanguage } from "../data/sdkExamples";
 import { highlightCode } from "../lib/highlightCode";
 import { formatUsd } from "../lib/utils";
+import { FeeBreakdownModal } from "./FeeBreakdownModal";
 
 type DashboardModalProps = {
   tc: (text: string) => string;
@@ -303,6 +305,7 @@ export function DashboardModal({
     spendLimit: 50,
   });
   const [rechargeAmount, setRechargeAmount] = useState(25);
+  const [showFeeModal, setShowFeeModal] = useState(false);
   const [autoRecharge, setAutoRecharge] = useState({
     enabled: false,
     threshold: 10,
@@ -1268,6 +1271,16 @@ export function DashboardModal({
                             return (
                               <>
                                 <div className="space-y-2.5 text-xs">
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-semibold text-neutral-600 dark:text-neutral-400">Order Summary</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowFeeModal(true)}
+                                      className="inline-flex items-center gap-1 text-[11px] font-medium text-neutral-500 underline transition hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white"
+                                    >
+                                      <HelpCircle className="h-3 w-3" /> Where is the extra cost coming from?
+                                    </button>
+                                  </div>
                                   <div className="flex items-center justify-between text-neutral-600 dark:text-neutral-300">
                                     <span>Credits added</span>
                                     <span className="font-sans tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
@@ -1295,7 +1308,7 @@ export function DashboardModal({
                                     <CreditCard className="h-4 w-4" />
                                     {busyAction === "recharge"
                                       ? tc("Redirecting to Stripe...")
-                                      : `Checkout +$${formatUsd(breakdown.netDepositedUsd)} USD`}
+                                      : `Pay $${formatUsd(breakdown.grossChargedUsd)} USD`}
                                   </ActionButton>
                                   <div className="flex items-center justify-between pt-1">
                                     <span className="inline-flex items-center gap-1 text-[11px] text-neutral-400">
@@ -1611,6 +1624,19 @@ export function DashboardModal({
           }}
         />
       )}
+
+      {(() => {
+        const modalBreakdown = calculateGrossDeposit(Math.max(1, Math.min(50000, Number(rechargeAmount) || 1)));
+        return (
+          <FeeBreakdownModal
+            isOpen={showFeeModal}
+            onClose={() => setShowFeeModal(false)}
+            accountCredit={`+$${formatUsd(modalBreakdown.netDepositedUsd)} USD`}
+            cardNetworkFee={`$${formatUsd(modalBreakdown.estimatedStripeFeeUsd)} USD`}
+            totalCharged={`$${formatUsd(modalBreakdown.grossChargedUsd)} USD`}
+          />
+        );
+      })()}
     </div>
     </DashboardTextContext.Provider>
   );

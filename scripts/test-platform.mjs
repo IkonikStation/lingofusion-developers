@@ -264,6 +264,93 @@ async function runTests() {
     assert.equal(webhookData.balance_usd, 5.0, "User balance must be credited exact net deposit ($5.00)");
     console.log(`✓ POST /api/webhooks/stripe verified signature, credited $5.00 net, recorded deposit_ledger`);
 
+    // Test invoice.paid webhook for balance top-up
+    const invoicePaidPayload = JSON.stringify({
+      id: "evt_test_inv_001",
+      type: "invoice.paid",
+      data: {
+        object: {
+          id: "in_test_001",
+          amount_paid: 546,
+          amount_total: 546,
+          metadata: {
+            userId: depositData.metadata.userId,
+            netDepositUsd: "5.00",
+            topUpAmount: "5.00",
+          },
+        },
+      },
+    });
+    const invTs = Math.floor(Date.now() / 1000);
+    const invSig = createHmac("sha256", "whsec_test_secret_123")
+      .update(`${invTs}.${invoicePaidPayload}`, "utf8")
+      .digest("hex");
+    const invWebhookRes = await fetch(`${BASE_URL}/api/webhooks/stripe`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "stripe-signature": `t=${invTs},v1=${invSig}`,
+      },
+      body: invoicePaidPayload,
+    });
+    assert.equal(invWebhookRes.status, 200);
+    const invWebhookData = await invWebhookRes.json();
+    assert.equal(invWebhookData.balance_usd, 10.0, "invoice.paid must credit exact net $5.00 without deducting processing fee");
+    console.log(`✓ POST /api/webhooks/stripe (invoice.paid) credited $5.00 net without deducting processing fee`);
+
+    // Test Recurring Subscription Tiers: Pro ($19.99) and Pro Max ($39.99)
+    const proSubRes = await fetch(`${BASE_URL}/api/billing/subscription-checkout`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ plan: "pro-350k", billing: "monthly" }),
+    });
+    assert.equal(proSubRes.status, 200);
+    const proSubData = await proSubRes.json();
+    assert.equal(proSubData.monthlyPriceUsd, 19.99, "LingoFusion Pro must bill at flat $19.99/mo without checkout fees");
+    assert.equal(proSubData.billedAmountUsd, 19.99);
+
+    const proMaxSubRes = await fetch(`${BASE_URL}/api/billing/subscription-checkout`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ plan: "pro-max-750k", billing: "monthly" }),
+    });
+    assert.equal(proMaxSubRes.status, 200);
+    const proMaxSubData = await proMaxSubRes.json();
+    assert.equal(proMaxSubData.monthlyPriceUsd, 39.99, "LingoFusion Pro Max must bill at flat $39.99/mo without checkout fees");
+    assert.equal(proMaxSubData.billedAmountUsd, 39.99);
+    console.log(`✓ Subscription checkout verified: Pro bills flat $19.99/mo and Pro Max bills flat $39.99/mo`);
+
+    // Test invoice.paid webhook for subscription provisioning
+    const subInvoicePayload = JSON.stringify({
+      id: "evt_test_sub_inv_002",
+      type: "invoice.paid",
+      data: {
+        object: {
+          id: "in_sub_002",
+          subscription: "sub_pro_test_123",
+          metadata: {
+            userId: depositData.metadata.userId,
+            planId: "pro-350k",
+          },
+        },
+      },
+    });
+    const subInvSig = createHmac("sha256", "whsec_test_secret_123")
+      .update(`${invTs}.${subInvoicePayload}`, "utf8")
+      .digest("hex");
+    const subInvRes = await fetch(`${BASE_URL}/api/webhooks/stripe`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "stripe-signature": `t=${invTs},v1=${subInvSig}`,
+      },
+      body: subInvoicePayload,
+    });
+    assert.equal(subInvRes.status, 200);
+    const subInvData = await subInvRes.json();
+    assert.equal(subInvData.type, "subscription_provisioned");
+    console.log(`✓ invoice.paid webhook granted subscription entitlement immediately`);
+
     // Test Direct API Proxy (/v1/chat/completions) non-streaming with LingoFusion Pro + medium reasoning
     const chatRes = await fetch(`${BASE_URL}/v1/chat/completions`, {
       method: "POST",
@@ -288,7 +375,7 @@ async function runTests() {
     assert.ok(chatData.usage.completion_tokens > 0);
     assert.ok(chatData.usage.cost_usd > 0);
     assert.equal(
-      Number((5.0 - chatData.usage.cost_usd).toFixed(6)),
+      Number((10.0 - chatData.usage.cost_usd).toFixed(6)),
       chatData.usage.balance_usd,
       "Balance must be atomically deducted by exact cost_usd",
     );

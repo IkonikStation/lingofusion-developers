@@ -1,8 +1,9 @@
-import { ArrowLeft, Building2, CheckCircle2, CreditCard, ShieldCheck, Sparkles, Zap } from "lucide-react";
+import { ArrowLeft, Building2, CheckCircle2, CreditCard, HelpCircle, ShieldCheck, Sparkles, Zap } from "lucide-react";
 import { useState } from "react";
 import { browserApi, calculateGrossDeposit, getApiBaseUrl, shouldUseBrowserApi } from "../data/browserApi";
 import { formatUsd, humanizePlanId, pageQuery, withBasePath } from "../lib/utils";
 import { calculateUltraPrice, ULTRA_BASE_FEE, ULTRA_ENTERPRISE_THRESHOLD } from "../data/ultraConfig";
+import { FeeBreakdownModal } from "../components/FeeBreakdownModal";
 
 export function CheckoutPage({
   onNavigate,
@@ -37,18 +38,34 @@ export function CheckoutPage({
   });
   const ultraMonthlyPrice = Number(query.get("monthly_price_usd")) || ultraBreakdown.totalMonthlyPrice;
 
+  // Plan pricing resolution for standard tiers
+  const getStandardPlanPricing = (id: string) => {
+    if (id === "pro-max-750k" || id === "pro-max") {
+      return { monthly: 39.99, yearly: 408.0, name: "LingoFusion Pro Max" };
+    }
+    if (id === "pro-350k" || id === "pro") {
+      return { monthly: 19.99, yearly: 204.0, name: "LingoFusion Pro" };
+    }
+    return { monthly: 19.99, yearly: 204.0, name: humanizePlanId(id) };
+  };
+
+  const stdPricing = getStandardPlanPricing(planId);
+  const planMonthlyPrice = isUltraCustom ? ultraMonthlyPrice : stdPricing.monthly;
+  const planYearlyPrice = isUltraCustom ? ultraBreakdown.totalYearlyPrice : stdPricing.yearly;
+  const planBilledPrice = billing === "yearly" ? planYearlyPrice : planMonthlyPrice;
+  const planDisplayName = isUltraCustom ? "Ultra (Custom Modular Tier)" : stdPricing.name;
+
   const [busy, setBusy] = useState(false);
   const [settled, setSettled] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showFeeModal, setShowFeeModal] = useState(false);
 
-  const handleUltraSubscribe = async () => {
+  const handleSubscribe = async () => {
     setBusy(true);
     setError(null);
     try {
-      if (shouldUseBrowserApi()) {
-        await browserApi("/api/billing/subscription-checkout", {
-          method: "POST",
-          body: JSON.stringify({
+      const payload = isUltraCustom
+        ? {
             plan: "ultra-custom",
             billing,
             dubbing_mins: customDubbing,
@@ -59,26 +76,38 @@ export function CheckoutPage({
             monthly_price_usd: ultraMonthlyPrice,
             yearly_price_usd: ultraBreakdown.totalYearlyPrice,
             userId: userIdParam,
-          }),
-        });
+          }
+        : {
+            plan: planId,
+            billing,
+            monthly_price_usd: planMonthlyPrice,
+            yearly_price_usd: planYearlyPrice,
+            userId: userIdParam,
+          };
+
+      let checkoutSessionUrl = "";
+      if (shouldUseBrowserApi()) {
+        const res = (await browserApi("/api/billing/subscription-checkout", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        })) as { checkoutUrl?: string; url?: string };
+        checkoutSessionUrl = res.checkoutUrl || res.url || "";
       } else {
-        await fetch(`${getApiBaseUrl()}/api/billing/subscription-checkout`, {
+        const res = await fetch(`${getApiBaseUrl()}/api/billing/subscription-checkout`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            plan: "ultra-custom",
-            billing,
-            dubbing_mins: customDubbing,
-            voice_credits: customVoice,
-            text_chars: customText,
-            transcribe_mins: customTranscribe,
-            image_count: customImages,
-            monthly_price_usd: ultraMonthlyPrice,
-            yearly_price_usd: ultraBreakdown.totalYearlyPrice,
-            userId: userIdParam,
-          }),
+          body: JSON.stringify(payload),
         });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Failed to activate subscription");
+        checkoutSessionUrl = data.checkoutUrl || data.url || "";
       }
+
+      if (checkoutSessionUrl && !checkoutSessionUrl.includes("/checkout?")) {
+        window.location.href = checkoutSessionUrl;
+        return;
+      }
+
       setSettled(true);
       window.location.href = withBasePath("/playground?subscription=active");
     } catch (err) {
@@ -200,9 +229,18 @@ export function CheckoutPage({
             {/* Right Column: Payment Receipt & Action */}
             <div className="flex flex-col justify-between bg-neutral-50/60 p-6 dark:bg-white/[0.02] sm:p-8">
               <div>
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                  Order Summary
-                </h2>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+                    Order Summary
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => setShowFeeModal(true)}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-neutral-500 underline transition hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white"
+                  >
+                    <HelpCircle className="h-3 w-3" /> Where is the extra cost coming from?
+                  </button>
+                </div>
 
                 {error && (
                   <div className="mt-4 rounded-xl border border-red-300 bg-red-50 p-3.5 text-xs text-red-900 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
@@ -212,21 +250,21 @@ export function CheckoutPage({
 
                 <dl className="mt-4 space-y-3 rounded-xl border border-neutral-200/80 bg-white p-4 text-xs dark:border-white/10 dark:bg-neutral-950">
                   <div className="flex items-center justify-between">
-                    <dt className="text-neutral-500 dark:text-neutral-400">Credits added to balance</dt>
+                    <dt className="text-neutral-500 dark:text-neutral-400">Account Credit</dt>
                     <dd className="font-sans tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
                       +${formatUsd(netUsd)} {currencyParam}
                     </dd>
                   </div>
                   <div className="flex items-center justify-between">
-                    <dt className="text-neutral-500 dark:text-neutral-400">
-                      Processing fee
+                    <dt className="flex items-center gap-1 text-neutral-500 dark:text-neutral-400">
+                      <span>Card Network Fee</span>
                     </dt>
                     <dd className="font-sans tabular-nums text-neutral-700 dark:text-neutral-300">
                       ${formatUsd(feeUsd)} {currencyParam}
                     </dd>
                   </div>
                   <div className="flex items-baseline justify-between border-t border-neutral-200/80 pt-3 text-neutral-950 dark:border-white/10 dark:text-white">
-                    <dt className="text-lg font-bold">Total</dt>
+                    <dt className="text-lg font-bold">Total Charged</dt>
                     <dd className="font-sans tabular-nums text-lg font-bold">
                       ${formatUsd(grossUsd)}{" "}
                       <span className="text-xs font-medium text-neutral-500">{currencyParam}</span>
@@ -271,6 +309,14 @@ export function CheckoutPage({
             </div>
           </div>
         </div>
+
+        <FeeBreakdownModal
+          isOpen={showFeeModal}
+          onClose={() => setShowFeeModal(false)}
+          accountCredit={`$${formatUsd(netUsd)} ${currencyParam}`}
+          cardNetworkFee={`$${formatUsd(feeUsd)} ${currencyParam}`}
+          totalCharged={`$${formatUsd(grossUsd)} ${currencyParam}`}
+        />
       </section>
     );
   }
@@ -294,19 +340,26 @@ export function CheckoutPage({
         Review your plan selection.
       </h1>
       <p className="mt-3 max-w-2xl text-base leading-7 text-neutral-600 dark:text-neutral-400">
-        You selected a plan from the subscriptions page. This is a developer testbed demo, so no charges or cards will be billed.
+        All-inclusive transparent pricing with immediate API entitlement and dedicated concurrency.
       </p>
 
       {/* Plan Card */}
       <div className="mt-8 overflow-hidden rounded-2xl border border-neutral-200/90 bg-white shadow-sm dark:border-white/[0.08] dark:bg-neutral-900/60">
-        <div className="border-b border-neutral-200/80 bg-neutral-50/60 px-6 py-4 dark:border-white/[0.08] dark:bg-white/[0.02]">
+        <div className="flex items-center justify-between border-b border-neutral-200/80 bg-neutral-50/60 px-6 py-4 dark:border-white/[0.08] dark:bg-white/[0.02]">
           <h2 className="text-sm font-semibold text-neutral-900 dark:text-white">Order Summary</h2>
+          <button
+            type="button"
+            onClick={() => setShowFeeModal(true)}
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-neutral-500 underline transition hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white"
+          >
+            <HelpCircle className="h-3 w-3" /> Fee breakdown
+          </button>
         </div>
         <dl className="divide-y divide-neutral-200/80 dark:divide-white/[0.08]">
           <div className="flex items-center justify-between p-5">
             <dt className="text-sm text-neutral-500 dark:text-neutral-400">Plan</dt>
             <dd className="text-sm font-semibold text-neutral-950 dark:text-white">
-              {isUltraCustom ? "Ultra (Custom Modular Tier)" : humanizePlanId(planId)}
+              {planDisplayName}
             </dd>
           </div>
           <div className="flex items-center justify-between p-5">
@@ -362,10 +415,16 @@ export function CheckoutPage({
                   +${formatUsd(ultraBreakdown.imagesCost)} USD
                 </dd>
               </div>
+              <div className="flex items-center justify-between p-5">
+                <dt className="text-sm text-neutral-500 dark:text-neutral-400">Card Network Fee</dt>
+                <dd className="font-sans tabular-nums text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                  $0.00 USD (Included)
+                </dd>
+              </div>
               <div className="flex items-baseline justify-between border-t border-neutral-200 bg-neutral-50/50 p-5 dark:border-white/10 dark:bg-white/[0.02]">
                 <div>
                   <dt className="text-base font-bold text-neutral-950 dark:text-white">
-                    {billing === "yearly" ? "Annual Total" : "Total"}
+                    {billing === "yearly" ? "Annual Total Charged" : "Total Charged"}
                   </dt>
                   {billing === "yearly" && (
                     <p className="mt-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
@@ -391,6 +450,18 @@ export function CheckoutPage({
           ) : (
             <>
               <div className="flex items-center justify-between p-5">
+                <dt className="text-sm text-neutral-500 dark:text-neutral-400">Sticker Price</dt>
+                <dd className="font-sans tabular-nums text-sm font-semibold text-neutral-950 dark:text-white">
+                  ${formatUsd(planMonthlyPrice)} USD / month
+                </dd>
+              </div>
+              <div className="flex items-center justify-between p-5">
+                <dt className="text-sm text-neutral-500 dark:text-neutral-400">Card Network Fee</dt>
+                <dd className="font-sans tabular-nums text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                  $0.00 USD (Included)
+                </dd>
+              </div>
+              <div className="flex items-center justify-between p-5">
                 <dt className="text-sm text-neutral-500 dark:text-neutral-400">Seats</dt>
                 <dd className="font-sans tabular-nums text-sm font-semibold text-neutral-950 dark:text-white">
                   {seats.toLocaleString("en-US")}
@@ -401,6 +472,24 @@ export function CheckoutPage({
                 <dd className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                   <CheckCircle2 className="h-4 w-4" /> Immediate API Activation
                 </dd>
+              </div>
+              <div className="flex items-baseline justify-between border-t border-neutral-200 bg-neutral-50/50 p-5 dark:border-white/10 dark:bg-white/[0.02]">
+                <div>
+                  <dt className="text-base font-bold text-neutral-950 dark:text-white">
+                    {billing === "yearly" ? "Annual Total Charged" : "Total Charged"}
+                  </dt>
+                  <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+                    Exact recurring amount billed to invoice. Zero checkout fees.
+                  </p>
+                </div>
+                <div className="text-right">
+                  <dd className="font-sans tabular-nums text-2xl font-black tracking-tight text-neutral-950 dark:text-white">
+                    ${formatUsd(planBilledPrice)}{" "}
+                    <span className="text-xs font-semibold text-neutral-500 dark:text-neutral-400">
+                      USD {billing === "yearly" ? "/ yr" : "/ mo"}
+                    </span>
+                  </dd>
+                </div>
               </div>
             </>
           )}
@@ -423,39 +512,31 @@ export function CheckoutPage({
       )}
 
       <div className="mt-8 flex flex-wrap gap-3">
-        {isUltraCustom ? (
-          ultraBreakdown.isEnterpriseInvoice ? (
-            <button
-              type="button"
-              onClick={() =>
-                onNavigate(
-                  `Contact Sales?plan=ultra-custom&message=${encodeURIComponent(
-                    `Requesting Enterprise Invoice / ACH Wire for Custom Ultra Subscription ($${ultraMonthlyPrice.toFixed(2)}/mo): ${customDubbing} mins dubbing, ${customVoice} voice credits, ${customText} chars, ${customTranscribe} mins transcribe, ${customImages} images.`
-                  )}`
-                )
-              }
-              className="pressable inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
-            >
-              <Building2 className="h-4 w-4" /> Request Enterprise Invoice / ACH Wire
-            </button>
-          ) : (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={handleUltraSubscribe}
-              className="pressable inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-neutral-950 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
-            >
-              <CreditCard className="h-4 w-4" />
-              {busy ? "Activating..." : `Subscribe with Card / Apple Pay ($${formatUsd(ultraMonthlyPrice)}/mo)`}
-            </button>
-          )
+        {isUltraCustom && ultraBreakdown.isEnterpriseInvoice ? (
+          <button
+            type="button"
+            onClick={() =>
+              onNavigate(
+                `Contact Sales?plan=ultra-custom&message=${encodeURIComponent(
+                  `Requesting Enterprise Invoice / ACH Wire for Custom Ultra Subscription ($${ultraMonthlyPrice.toFixed(2)}/mo): ${customDubbing} mins dubbing, ${customVoice} voice credits, ${customText} chars, ${customTranscribe} mins transcribe, ${customImages} images.`
+                )}`
+              )
+            }
+            className="pressable inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+          >
+            <Building2 className="h-4 w-4" /> Request Enterprise Invoice / ACH Wire
+          </button>
         ) : (
           <button
             type="button"
-            onClick={() => onNavigate("Playground")}
-            className="pressable inline-flex min-h-11 items-center justify-center rounded-xl bg-neutral-950 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+            disabled={busy}
+            onClick={handleSubscribe}
+            className="pressable inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-neutral-950 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-neutral-800 disabled:opacity-50 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
           >
-            Continue to Playground
+            <CreditCard className="h-4 w-4" />
+            {busy
+              ? "Activating..."
+              : `Subscribe with Card / Apple Pay ($${formatUsd(planBilledPrice)}${billing === "yearly" ? "/yr" : "/mo"})`}
           </button>
         )}
 
@@ -470,10 +551,18 @@ export function CheckoutPage({
 
       <div className="mt-8 flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
         <ShieldCheck className="h-4 w-4 text-neutral-400" />
-        {isUltraCustom
-          ? "Ultra subscription quotas refresh on the 1st of each billing cycle. Overages fall back to your prepaid balance."
-          : "No payment details stored in local simulator mode."}
+        <span>
+          All-inclusive billing complying with Quebec & Canadian consumer protection laws. Billed amounts match advertised sticker prices with zero hidden checkout surcharges.
+        </span>
       </div>
+
+      <FeeBreakdownModal
+        isOpen={showFeeModal}
+        onClose={() => setShowFeeModal(false)}
+        accountCredit={planDisplayName}
+        cardNetworkFee="$0.00 USD"
+        totalCharged={`$${formatUsd(planBilledPrice)} USD`}
+      />
     </section>
   );
 }

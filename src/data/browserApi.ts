@@ -1561,55 +1561,119 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
     }
   } else if (method === "POST" && (path === "/api/stripe-webhook" || path === "/api/webhooks/stripe")) {
     const body = requestBody(options);
-    const sessionObj = (body.data as Record<string, unknown>)?.object as Record<string, unknown> || {};
-    const metadata = (sessionObj.metadata as Record<string, string>) || {};
-    const netDepositUsd = Number(metadata.topUpAmount ?? metadata.netDepositUsd ?? 0);
-    const stripeSessionId = String(sessionObj.id || randomId("cs_test"));
+    const sessionObj = ((body.data as Record<string, unknown>)?.object as Record<string, unknown>) || {};
+    const metadata =
+      ((sessionObj.metadata as Record<string, string>) ||
+      (sessionObj.subscription_details as Record<string, unknown>)?.metadata as Record<string, string> ||
+      ((sessionObj.lines as Record<string, unknown>)?.data as Array<Record<string, unknown>>)?.[0]?.metadata as Record<string, string>) ||
+      {};
+    const planId = metadata.planId;
     const userId = String(metadata.userId || state.dashboard.user?.id || "00000000-0000-4000-8000-000000000001");
-    const { grossChargedUsd } = calculateGrossDeposit(netDepositUsd);
 
-    const alreadyProcessed = state.dashboard.depositLedger?.some(
-      (entry) => entry.stripe_session_id === stripeSessionId,
-    );
+    if (planId) {
+      let dubbingMins = Number(metadata.dubbing_mins || 0);
+      let voiceCredits = Number(metadata.voice_credits || 25000);
+      let textChars = Number(metadata.text_chars || 2200000);
+      let transcribeMins = Number(metadata.transcribe_mins || 30);
+      let imageCount = Number(metadata.image_count || 50);
+      let monthlyPriceUsd = 19.99;
+      let yearlyPriceUsd = 204.0;
 
-    if (alreadyProcessed) {
+      if (planId === "pro-max-750k" || planId === "pro-max") {
+        monthlyPriceUsd = 39.99;
+        yearlyPriceUsd = 408.0;
+        voiceCredits = Number(metadata.voice_credits || 75000);
+        textChars = Number(metadata.text_chars || 4800000);
+        transcribeMins = Number(metadata.transcribe_mins || 75);
+        imageCount = Number(metadata.image_count || 150);
+      } else if (planId === "ultra-custom") {
+        monthlyPriceUsd = Number(metadata.monthly_price_usd || 256.04);
+        yearlyPriceUsd = Number(metadata.yearly_price_usd || Math.round(monthlyPriceUsd * 12 * 0.85 * 100) / 100);
+        dubbingMins = Number(metadata.dubbing_mins || 30);
+        voiceCredits = Number(metadata.voice_credits || 1200000);
+        textChars = Number(metadata.text_chars || 5000000);
+        transcribeMins = Number(metadata.transcribe_mins || 120);
+        imageCount = Number(metadata.image_count || 50);
+      }
+
+      const billing = String(metadata.billing || "monthly").toLowerCase();
+      const isYearly = billing === "yearly";
+      const billedAmountUsd = isYearly ? yearlyPriceUsd : monthlyPriceUsd;
+
+      (state.dashboard as any).workspaceSubscription = {
+        id: randomId("sub"),
+        planId,
+        status: "active",
+        billing,
+        monthlyPriceUsd,
+        yearlyPriceUsd,
+        billedAmountUsd,
+        dubbingMinsAllocated: dubbingMins,
+        dubbingMinsUsed: 0,
+        voiceCreditsAllocated: voiceCredits,
+        voiceCreditsUsed: 0,
+        textCharsAllocated: textChars,
+        textCharsUsed: 0,
+        transcribeMinsAllocated: transcribeMins,
+        transcribeMinsUsed: 0,
+        imagesAllocated: imageCount,
+        imagesUsed: 0,
+        currentPeriodEnd: new Date(Date.now() + (isYearly ? 365 : 30) * 24 * 60 * 60 * 1000).toISOString(),
+      };
+
       result = {
         received: true,
-        duplicate: true,
-        balance_usd: state.dashboard.account.paidBalance,
-        net_deposited_usd: netDepositUsd,
-        gross_charged_usd: grossChargedUsd,
+        type: "subscription_provisioned",
+        subscription: (state.dashboard as any).workspaceSubscription,
       };
     } else {
-      state.dashboard.account.paidBalance = Number((state.dashboard.account.paidBalance + netDepositUsd).toFixed(6));
-      state.dashboard.account.totalPaidCreditPurchased = Number((state.dashboard.account.totalPaidCreditPurchased + netDepositUsd).toFixed(6));
-      if (state.dashboard.user) {
-        state.dashboard.user.balance_usd = state.dashboard.account.paidBalance;
+      const netDepositUsd = Number(metadata.topUpAmount ?? metadata.netDepositUsd ?? 0);
+      const stripeSessionId = String(sessionObj.id || randomId("cs_test"));
+      const { grossChargedUsd } = calculateGrossDeposit(netDepositUsd);
+
+      const alreadyProcessed = state.dashboard.depositLedger?.some(
+        (entry) => entry.stripe_session_id === stripeSessionId,
+      );
+
+      if (alreadyProcessed) {
+        result = {
+          received: true,
+          duplicate: true,
+          balance_usd: state.dashboard.account.paidBalance,
+          net_deposited_usd: netDepositUsd,
+          gross_charged_usd: grossChargedUsd,
+        };
+      } else {
+        state.dashboard.account.paidBalance = Number((state.dashboard.account.paidBalance + netDepositUsd).toFixed(6));
+        state.dashboard.account.totalPaidCreditPurchased = Number((state.dashboard.account.totalPaidCreditPurchased + netDepositUsd).toFixed(6));
+        if (state.dashboard.user) {
+          state.dashboard.user.balance_usd = state.dashboard.account.paidBalance;
+        }
+        state.dashboard.depositLedger?.unshift({
+          id: randomId("dep"),
+          user_id: userId,
+          stripe_session_id: stripeSessionId,
+          net_deposited_usd: netDepositUsd,
+          gross_charged_usd: grossChargedUsd,
+          status: "completed",
+          created_at: new Date().toISOString(),
+        });
+        state.dashboard.ledger.unshift({
+          id: randomId("dep"),
+          type: "stripe_deposit",
+          amount: netDepositUsd,
+          description: `Stripe Deposit (Net $${netDepositUsd.toFixed(2)} / Gross charged $${grossChargedUsd.toFixed(2)})`,
+          status: "completed",
+          createdAt: new Date().toISOString(),
+        });
+        result = {
+          received: true,
+          duplicate: false,
+          balance_usd: state.dashboard.account.paidBalance,
+          net_deposited_usd: netDepositUsd,
+          gross_charged_usd: grossChargedUsd,
+        };
       }
-      state.dashboard.depositLedger?.unshift({
-        id: randomId("dep"),
-        user_id: userId,
-        stripe_session_id: stripeSessionId,
-        net_deposited_usd: netDepositUsd,
-        gross_charged_usd: grossChargedUsd,
-        status: "completed",
-        created_at: new Date().toISOString(),
-      });
-      state.dashboard.ledger.unshift({
-        id: randomId("dep"),
-        type: "stripe_deposit",
-        amount: netDepositUsd,
-        description: `Stripe Deposit (Net $${netDepositUsd.toFixed(2)} / Gross charged $${grossChargedUsd.toFixed(2)})`,
-        status: "completed",
-        createdAt: new Date().toISOString(),
-      });
-      result = {
-        received: true,
-        duplicate: false,
-        balance_usd: state.dashboard.account.paidBalance,
-        net_deposited_usd: netDepositUsd,
-        gross_charged_usd: grossChargedUsd,
-      };
     }
   } else if (method === "POST" && path === "/api/verify-checkout-session") {
     const body = requestBody(options);
@@ -1765,15 +1829,37 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
   } else if (method === "POST" && path === "/api/billing/subscription-checkout") {
     const body = requestBody(options);
     const plan = String(body.plan || "ultra-custom");
-    const dubbingMins = Number(body.dubbing_mins || 30);
-    const voiceCredits = Number(body.voice_credits || 1200000);
-    const textChars = Number(body.text_chars || 5000000);
-    const transcribeMins = Number(body.transcribe_mins || 120);
-    const imageCount = Number(body.image_count || 50);
-    const monthlyPriceUsd = Number(body.monthly_price_usd || 256.04);
-    const yearlyPriceUsd = Number(body.yearly_price_usd || Math.round(monthlyPriceUsd * 12 * 0.85 * 100) / 100);
     const billing = String(body.billing || "monthly").toLowerCase();
     const isYearly = billing === "yearly";
+
+    let dubbingMins = 0;
+    let voiceCredits = 25000;
+    let textChars = 2200000;
+    let transcribeMins = 30;
+    let imageCount = 50;
+    let monthlyPriceUsd = 19.99;
+    let yearlyPriceUsd = 204.0;
+    let desc = `LingoFusion Pro (${isYearly ? "Annual" : "Monthly"}) — flat $19.99/mo with zero checkout fees`;
+
+    if (plan === "pro-max-750k" || plan === "pro-max") {
+      monthlyPriceUsd = 39.99;
+      yearlyPriceUsd = 408.0;
+      voiceCredits = 75000;
+      textChars = 4800000;
+      transcribeMins = 75;
+      imageCount = 150;
+      desc = `LingoFusion Pro Max (${isYearly ? "Annual" : "Monthly"}) — flat $39.99/mo with zero checkout fees`;
+    } else if (plan === "ultra-custom") {
+      dubbingMins = Number(body.dubbing_mins || 30);
+      voiceCredits = Number(body.voice_credits || 1200000);
+      textChars = Number(body.text_chars || 5000000);
+      transcribeMins = Number(body.transcribe_mins || 120);
+      imageCount = Number(body.image_count || 50);
+      monthlyPriceUsd = Number(body.monthly_price_usd || 256.04);
+      yearlyPriceUsd = Number(body.yearly_price_usd || Math.round(monthlyPriceUsd * 12 * 0.85 * 100) / 100);
+      desc = `Ultra Custom Subscription (${isYearly ? "Annual" : "Monthly"}): ${dubbingMins}m dubbing, ${(voiceCredits / 1e6).toFixed(1)}M voice, ${(textChars / 1e6).toFixed(1)}M text, ${transcribeMins}m transcribe, ${imageCount} imgs`;
+    }
+
     const billedAmountUsd = isYearly ? yearlyPriceUsd : monthlyPriceUsd;
 
     (state.dashboard as any).workspaceSubscription = {
@@ -1801,7 +1887,7 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
       id: randomId("sub"),
       type: "paid_credit_purchase",
       amount: billedAmountUsd,
-      description: `Ultra Custom Subscription (${isYearly ? "Annual" : "Monthly"}): ${dubbingMins}m dubbing, ${(voiceCredits / 1e6).toFixed(1)}M voice, ${(textChars / 1e6).toFixed(1)}M text, ${transcribeMins}m transcribe, ${imageCount} imgs`,
+      description: desc,
       status: "succeeded",
       createdAt: new Date().toISOString(),
     });
