@@ -1275,7 +1275,10 @@ export function DashboardModal({
                                     <span className="font-semibold text-neutral-600 dark:text-neutral-400">Order Summary</span>
                                     <button
                                       type="button"
-                                      onClick={() => setShowFeeModal(true)}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setShowFeeModal(true);
+                                      }}
                                       className="inline-flex items-center gap-1 text-[11px] font-medium text-neutral-500 underline transition hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white"
                                     >
                                       <HelpCircle className="h-3 w-3" /> Where is the extra cost coming from?

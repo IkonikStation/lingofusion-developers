@@ -1,5 +1,6 @@
 import { HelpCircle, X } from "lucide-react";
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 
 interface FeeBreakdownModalProps {
   isOpen: boolean;
@@ -27,17 +28,17 @@ export function FeeBreakdownModal({
 
   if (!isOpen) return null;
 
-  return (
+  const modalElement = (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="fee-breakdown-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-neutral-950/60 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-neutral-950/60 backdrop-blur-xs animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md overflow-hidden rounded-2xl border border-neutral-200/90 bg-white p-6 shadow-2xl transition-all dark:border-white/10 dark:bg-neutral-900"
+        className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-neutral-200/90 bg-white p-6 shadow-2xl transition-all dark:border-white/10 dark:bg-neutral-900"
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -98,4 +99,9 @@ export function FeeBreakdownModal({
       </div>
     </div>
   );
+
+  if (typeof document !== "undefined") {
+    return createPortal(modalElement, document.body);
+  }
+  return modalElement;
 }
