@@ -327,9 +327,6 @@ export function UltraSubscriptionBuilder({
                   <h3 className="text-sm font-semibold text-neutral-950 dark:text-white">
                     Dubbing
                   </h3>
-                  <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                    ${ULTRA_RATES.dubbingPerMin.toFixed(2)}/min • High-fidelity voice match & lip sync
-                  </p>
                 </div>
               </div>
 
@@ -387,9 +384,6 @@ export function UltraSubscriptionBuilder({
                   <h3 className="text-sm font-semibold text-neutral-950 dark:text-white">
                     Voice Synthesis
                   </h3>
-                  <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                    $70.00 / 1M credits • LingoFusion Voice V4 / Turbo
-                  </p>
                 </div>
               </div>
 
@@ -447,9 +441,6 @@ export function UltraSubscriptionBuilder({
                   <h3 className="text-sm font-semibold text-neutral-950 dark:text-white">
                     Text Translation
                   </h3>
-                  <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                    $6.00 / 1M chars • LingoFusion, Pro & Ultra models
-                  </p>
                 </div>
               </div>
 
@@ -507,9 +498,6 @@ export function UltraSubscriptionBuilder({
                   <h3 className="text-sm font-semibold text-neutral-950 dark:text-white">
                     Audio Transcription
                   </h3>
-                  <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                    $0.017/min ($1.02/hr) • Timestamped speech-to-text
-                  </p>
                 </div>
               </div>
 
@@ -567,9 +555,6 @@ export function UltraSubscriptionBuilder({
                   <h3 className="text-sm font-semibold text-neutral-950 dark:text-white">
                     Image Translations
                   </h3>
-                  <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                    $0.12/image • High-res in-image translation
-                  </p>
                 </div>
               </div>
 
