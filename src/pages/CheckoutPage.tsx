@@ -302,7 +302,7 @@ export function CheckoutPage({
           <div className="flex items-center justify-between p-5">
             <dt className="text-sm text-neutral-500 dark:text-neutral-400">Plan</dt>
             <dd className="text-sm font-semibold text-neutral-950 dark:text-white">
-              {isUltraCustom ? "LingoFusion Ultra (Custom Modular Tier)" : humanizePlanId(planId)}
+              {isUltraCustom ? "Ultra (Custom Modular Tier)" : humanizePlanId(planId)}
             </dd>
           </div>
           <div className="flex items-center justify-between p-5">
