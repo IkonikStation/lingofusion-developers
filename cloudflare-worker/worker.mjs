@@ -736,11 +736,11 @@ export default {
         });
       }
 
-      // 4d. Music Generation Proxy (server-side only using env.VOICE_API_KEY / ElevenLabs Music v2)
+      // 4d. Music Generation Proxy (server-side only using Treblo v3 / Melodia)
       if (request.method === "POST" && (path === "/api/playground/music" || path === "/v1/music")) {
-        const voiceKey = env.VOICE_API_KEY;
-        if (!voiceKey) {
-          return jsonResponse({ error: "music_provider_not_configured", message: "VOICE_API_KEY secret is not set on Worker." }, 503, requestOrigin);
+        const trebloKey = env.TREBLO_API_KEY || env.VOICE_API_KEY;
+        if (!trebloKey) {
+          return jsonResponse({ error: "music_provider_not_configured", message: "TREBLO_API_KEY secret is not set on Worker." }, 503, requestOrigin);
         }
 
         const body = await request.json().catch(() => ({}));
@@ -750,48 +750,139 @@ export default {
         }
 
         const durationSeconds = Math.max(5, Math.min(300, Number(body.duration_seconds || body.duration || 30)));
-        const musicLengthMs = Math.round(durationSeconds * 1000);
-        const modelId = "music_v2";
+        const lyrics = typeof body.lyrics === "string" && body.lyrics.trim() ? body.lyrics.trim() : undefined;
 
-        const upstreamRes = await fetch("https://api.elevenlabs.io/v1/music", {
+        // Treblo v3 payload
+        const trebloPayload = {
+          prompt,
+          ...(lyrics ? { lyrics } : {}),
+        };
+
+        const upstreamRes = await fetch("https://api.treblo.com/v1/generations/v3", {
           method: "POST",
           headers: {
-            "xi-api-key": voiceKey,
+            "Authorization": `Bearer ${trebloKey}`,
             "Content-Type": "application/json",
-            Accept: "audio/mpeg",
           },
-          body: JSON.stringify({
-            prompt,
-            model_id: modelId,
-            music_length_ms: musicLengthMs,
-            force_instrumental: Boolean(body.force_instrumental ?? false),
-          }),
+          body: JSON.stringify(trebloPayload),
         });
 
         if (!upstreamRes.ok) {
           const errData = await upstreamRes.json().catch(() => ({}));
+          const errMsg = typeof errData?.detail === "object" ? errData.detail?.message : (errData?.detail || errData?.message || `Music generation failed (HTTP ${upstreamRes.status})`);
           return jsonResponse({
             error: "music_generation_failed",
-            message: errData?.detail?.message || errData?.message || `Music generation failed (HTTP ${upstreamRes.status})`,
+            message: errMsg,
           }, upstreamRes.status, requestOrigin);
         }
 
-        const arrayBuffer = await upstreamRes.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
-        let binary = "";
-        const chunkSize = 0x8000;
-        for (let i = 0; i < bytes.length; i += chunkSize) {
-          binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+        const data = await upstreamRes.json().catch(() => ({}));
+        const taskId = data?.task_id || data?.id;
+        if (!taskId) {
+          return jsonResponse({ error: "invalid_upstream_response", message: "No task_id returned from music provider." }, 502, requestOrigin);
         }
-        const base64 = btoa(binary);
+
+        // Poll for completion (up to ~36 seconds on the edge before letting client poll)
+        const maxPolls = 12;
+        const pollIntervalMs = 3000;
+        let songUrl = null;
+
+        for (let i = 0; i < maxPolls; i++) {
+          await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+          try {
+            const pollRes = await fetch(`https://api.treblo.com/v1/generations/${taskId}`, {
+              headers: {
+                "Authorization": `Bearer ${trebloKey}`,
+              },
+            });
+            if (pollRes.ok) {
+              const pollData = await pollRes.json();
+              if (pollData.status === "SUCCESS" && Array.isArray(pollData.song_paths) && pollData.song_paths.length > 0) {
+                songUrl = pollData.song_paths[0];
+                break;
+              } else if (pollData.status === "FAILURE") {
+                return jsonResponse({
+                  error: "generation_failed",
+                  message: pollData.error_message || "Music generation failed upstream.",
+                }, 500, requestOrigin);
+              }
+            }
+          } catch (_e) {
+            // continue polling
+          }
+        }
+
+        if (songUrl) {
+          return jsonResponse({
+            id: taskId,
+            model: "LingoFusion Music",
+            upstream_model: "treblo_v3",
+            status: "completed",
+            audio_url: songUrl,
+            duration_seconds: durationSeconds,
+            prompt,
+          }, 200, requestOrigin);
+        }
+
+        // If generation is taking longer than initial edge poll window, return processing status so client can poll
+        return jsonResponse({
+          id: taskId,
+          model: "LingoFusion Music",
+          upstream_model: "treblo_v3",
+          status: "processing",
+          task_id: taskId,
+          duration_seconds: durationSeconds,
+          prompt,
+          message: "Music generation in progress. Check status with task ID.",
+        }, 200, requestOrigin);
+      }
+
+      // 4d-2. Music Generation Status Polling
+      if (request.method === "GET" && (path === "/api/playground/music" || path === "/v1/music" || path.startsWith("/v1/music/"))) {
+        const trebloKey = env.TREBLO_API_KEY || env.VOICE_API_KEY;
+        if (!trebloKey) {
+          return jsonResponse({ error: "music_provider_not_configured", message: "TREBLO_API_KEY secret is not set on Worker." }, 503, requestOrigin);
+        }
+
+        const taskId = url.searchParams.get("id") || url.searchParams.get("task_id") || path.split("/").pop();
+        if (!taskId || taskId === "music") {
+          return jsonResponse({ error: "missing_task_id", message: "Task ID is required." }, 400, requestOrigin);
+        }
+
+        const pollRes = await fetch(`https://api.treblo.com/v1/generations/${taskId}`, {
+          headers: {
+            "Authorization": `Bearer ${trebloKey}`,
+          },
+        });
+
+        if (!pollRes.ok) {
+          return jsonResponse({ error: "task_not_found", message: "Generation task not found." }, pollRes.status, requestOrigin);
+        }
+
+        const pollData = await pollRes.json();
+        if (pollData.status === "SUCCESS" && Array.isArray(pollData.song_paths) && pollData.song_paths.length > 0) {
+          return jsonResponse({
+            id: taskId,
+            model: "LingoFusion Music",
+            upstream_model: "treblo_v3",
+            status: "completed",
+            audio_url: pollData.song_paths[0],
+            prompt: pollData.prompt,
+            tags: pollData.tags,
+          }, 200, requestOrigin);
+        } else if (pollData.status === "FAILURE") {
+          return jsonResponse({
+            id: taskId,
+            status: "failed",
+            error: pollData.error_message || "Music generation failed upstream.",
+          }, 500, requestOrigin);
+        }
 
         return jsonResponse({
-          id: `music_${ crypto.randomUUID().replace(/-/g, "").slice(0, 16) }`,
-          model: "LingoFusion Music",
-          upstream_model: "music_v2",
-          status: "completed",
-          audio_url: `data:audio/mpeg;base64,${base64}`,
-          duration_seconds: durationSeconds,
+          id: taskId,
+          status: "processing",
+          upstream_status: pollData.status,
+          message: "Generation still in progress.",
         }, 200, requestOrigin);
       }
 

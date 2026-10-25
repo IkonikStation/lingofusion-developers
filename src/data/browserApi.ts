@@ -1310,9 +1310,33 @@ async function runMusic(state: BrowserState, options?: RequestInit) {
       }),
     });
 
-    const data = (await upstreamRes.json().catch(() => ({}))) as Record<string, any>;
-    if (!upstreamRes.ok || !data.audio_url) {
+    let data = (await upstreamRes.json().catch(() => ({}))) as Record<string, any>;
+    if (!upstreamRes.ok) {
       throw new Error(data?.message || data?.error || `Music generation failed (HTTP ${upstreamRes.status})`);
+    }
+
+    if (data.status === "processing" && (data.id || data.task_id)) {
+      const taskId = String(data.id || data.task_id);
+      const pollStart = Date.now();
+      while (!data.audio_url && Date.now() - pollStart < 300000) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const pollRes = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/playground/music?id=${encodeURIComponent(taskId)}`, {
+          headers: { "X-LingoFusion-Client-Token": "lf_play_secure_649f7" },
+        });
+        if (pollRes.ok) {
+          const pollData = (await pollRes.json().catch(() => ({}))) as Record<string, any>;
+          if (pollData.status === "completed" && pollData.audio_url) {
+            data = pollData;
+            break;
+          } else if (pollData.status === "failed") {
+            throw new Error(pollData.error || "Music generation failed upstream");
+          }
+        }
+      }
+    }
+
+    if (!data.audio_url) {
+      throw new Error(data?.message || data?.error || `Music generation timed out. Please try again.`);
     }
     audioUrl = String(data.audio_url);
   } catch (err) {
