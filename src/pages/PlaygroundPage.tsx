@@ -309,6 +309,7 @@ export function PlaygroundPage({
   const [musicAudioUrl, setMusicAudioUrl] = useState<string | null>(null);
   const [musicRunning, setMusicRunning] = useState<boolean>(false);
   const [musicPlaying, setMusicPlaying] = useState<boolean>(false);
+  const [musicStreaming, setMusicStreaming] = useState<boolean>(false);
   const [musicElapsedSeconds, setMusicElapsedSeconds] = useState<number>(0);
   const musicAudioRef = useRef<HTMLAudioElement | null>(null);
   const [musicRun, setMusicRun] = useState<{
@@ -1153,6 +1154,7 @@ export function PlaygroundPage({
     // Free preview period: do not charge or gate on credit balance
     setErrorBanner(null);
     setMusicRunning(true);
+    setMusicStreaming(false);
     setMusicAudioUrl(null);
     setMusicRun(null);
 
@@ -1164,99 +1166,80 @@ export function PlaygroundPage({
       force_instrumental: musicInstrumental,
     };
 
+    const gatewayUrl = DEFAULT_EDGE_GATEWAY_URL || getApiBaseUrl();
+
     try {
-      if (shouldUseBrowserApi()) {
-        const response = await callApi<{
-          id: string;
-          model: string;
-          status: string;
-          output: {
-            prompt: string;
-            duration_seconds: number;
-            audio_url: string;
-          };
-          usage: {
-            audio_seconds: number;
-            audio_minutes: number;
-            cost_usd: number;
-          };
-        }>("/api/playground/music", {
-          method: "POST",
-          body: JSON.stringify(payload),
+      const res = await fetch(`${gatewayUrl}/api/playground/music`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "X-LingoFusion-Client-Token": "lf_play_secure_649f7",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const msg =
+          typeof errData?.error === "object" && errData?.error?.message
+            ? errData.error.message
+            : errData?.message || `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+
+      let data = await res.json();
+      const taskId = String(data.id || data.task_id || runId);
+
+      setMusicRun({
+        id: taskId,
+        model: selectedMusicModel,
+        durationSeconds: musicDurationSeconds,
+        costUsd: 0,
+      });
+
+      // Poll until streaming is ready, and continue until fully completed
+      const pollStart = Date.now();
+      let hasAttachedStream = false;
+
+      while (Date.now() - pollStart < 360000) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const pollRes = await fetch(`${gatewayUrl}/api/playground/music?id=${encodeURIComponent(taskId)}`, {
+          headers: { "X-LingoFusion-Client-Token": "lf_play_secure_649f7" },
         });
 
-        setMusicAudioUrl(response.output.audio_url);
-        setMusicRun({
-          id: response.id || runId,
-          model: response.model || selectedMusicModel,
-          durationSeconds: response.output.duration_seconds || musicDurationSeconds,
-          costUsd: 0,
-        });
-      } else {
-        const gatewayUrl = DEFAULT_EDGE_GATEWAY_URL || getApiBaseUrl();
-        const res = await fetch(`${gatewayUrl}/api/playground/music`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "X-LingoFusion-Client-Token": "lf_play_secure_649f7",
-          },
-          body: JSON.stringify(payload),
-        });
+        if (pollRes.ok) {
+          const pollData = await pollRes.json().catch(() => ({}));
 
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          const msg =
-            typeof errData?.error === "object" && errData?.error?.message
-              ? errData.error.message
-              : errData?.message || `HTTP ${res.status}`;
-          throw new Error(msg);
-        }
-
-        let data = await res.json();
-
-        // If generation is processing asynchronously, poll until ready
-        if (data.status === "processing" && (data.id || data.task_id)) {
-          const taskId = String(data.id || data.task_id);
-          const pollStart = Date.now();
-          while (!data.audio_url && Date.now() - pollStart < 360000) {
-            await new Promise((r) => setTimeout(r, 2500));
-            const pollRes = await fetch(`${gatewayUrl}/api/playground/music?id=${encodeURIComponent(taskId)}`, {
-              headers: { "X-LingoFusion-Client-Token": "lf_play_secure_649f7" },
-            });
-            if (pollRes.ok) {
-              const pollData = await pollRes.json().catch(() => ({}));
-              if (pollData.status === "completed" && pollData.audio_url) {
-                data = pollData;
-                break;
-              } else if (pollData.status === "failed") {
-                throw new Error(pollData.error || "Music generation failed upstream");
-              }
-            } else if (pollRes.status >= 400 && pollRes.status !== 404) {
-              const errData = await pollRes.json().catch(() => ({}));
-              throw new Error(errData?.message || errData?.error || `Polling failed (HTTP ${pollRes.status})`);
-            }
+          // Live audio stream is ready (in ~12-15s)
+          if (pollData.status === "streaming" && pollData.audio_url && !hasAttachedStream) {
+            hasAttachedStream = true;
+            setMusicAudioUrl(pollData.audio_url);
+            setMusicStreaming(true);
           }
-        }
 
-        if (!data.audio_url) {
-          throw new Error("Music generation timed out. Please try again.");
-        }
+          // Full audio track completed and mastered
+          if (pollData.status === "completed" && pollData.audio_url) {
+            setMusicAudioUrl(pollData.audio_url);
+            setMusicStreaming(false);
+            setMusicRunning(false);
+            break;
+          }
 
-        setMusicAudioUrl(data.audio_url);
-        setMusicRun({
-          id: data.id || runId,
-          model: data.model || selectedMusicModel,
-          durationSeconds: data.duration_seconds || musicDurationSeconds,
-          costUsd: 0,
-        });
+          if (pollData.status === "failed") {
+            throw new Error(pollData.error || "Music generation failed upstream");
+          }
+        } else if (pollRes.status >= 400 && pollRes.status !== 404) {
+          const errData = await pollRes.json().catch(() => ({}));
+          throw new Error(errData?.message || errData?.error || `Polling failed (HTTP ${pollRes.status})`);
+        }
       }
 
       await loadModelsAndState();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Music generation failed";
       setErrorBanner(message);
-    } finally {
       setMusicRunning(false);
+      setMusicStreaming(false);
     }
   };
 
@@ -3374,13 +3357,32 @@ export function PlaygroundPage({
                             <span className="text-xs font-semibold text-neutral-900 dark:text-white">
                               Music audio
                             </span>
+                            {musicStreaming && (
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                Live Streaming
+                              </span>
+                            )}
                           </div>
-                          {musicRun && (
+                          {musicStreaming && musicRunning ? (
+                            <span className="font-mono text-[11px] text-purple-600 dark:text-purple-400">
+                              Generating {Math.floor(musicElapsedSeconds / 60)}:{(musicElapsedSeconds % 60).toString().padStart(2, "0")}…
+                            </span>
+                          ) : musicRun ? (
                             <span className="font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
                               {musicRun.durationSeconds}s track
                             </span>
-                          )}
+                          ) : null}
                         </div>
+
+                        {musicStreaming && musicRunning && (
+                          <div className="mb-3 flex items-center gap-2 rounded-xl bg-purple-50/70 px-3 py-2 text-xs text-purple-800 dark:bg-purple-950/40 dark:text-purple-200">
+                            <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-purple-600 dark:text-purple-400" />
+                            <span>
+                              Listening in real-time as Melodia v3 composes the rest of the track…
+                            </span>
+                          </div>
+                        )}
 
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                           <button

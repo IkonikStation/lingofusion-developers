@@ -752,9 +752,11 @@ export default {
         const durationSeconds = Math.max(5, Math.min(300, Number(body.duration_seconds || body.duration || 30)));
         const lyrics = typeof body.lyrics === "string" && body.lyrics.trim() ? body.lyrics.trim() : undefined;
 
-        // Treblo v3 payload
+        // Treblo v3 payload with real-time audio streaming
         const trebloPayload = {
           prompt,
+          enable_streaming: true,
+          stream_format: "mp3",
           ...(lyrics ? { lyrics } : {}),
         };
 
@@ -825,8 +827,22 @@ export default {
             upstream_model: "treblo_v3",
             status: "completed",
             audio_url: pollData.song_paths[0],
+            is_streaming: false,
             prompt: pollData.prompt,
             tags: pollData.tags,
+          }, 200, requestOrigin);
+        } else if (pollData.status === "GENERATING_STREAMING_READY") {
+          return jsonResponse({
+            id: taskId,
+            model: "LingoFusion Music",
+            upstream_model: "treblo_v3",
+            status: "streaming",
+            is_streaming: true,
+            audio_url: `https://api-stream.treblo.com/stream/${taskId}`,
+            stream_url: `https://api-stream.treblo.com/stream/${taskId}`,
+            prompt: pollData.prompt,
+            tags: pollData.tags,
+            message: "Live stream ready. Audio is listenable while generating.",
           }, 200, requestOrigin);
         } else if (pollData.status === "FAILURE") {
           return jsonResponse({
