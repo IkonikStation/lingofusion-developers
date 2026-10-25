@@ -3379,7 +3379,7 @@ export function PlaygroundPage({
                           <div className="mb-3 flex items-center gap-2 rounded-xl bg-purple-50/70 px-3 py-2 text-xs text-purple-800 dark:bg-purple-950/40 dark:text-purple-200">
                             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-purple-600 dark:text-purple-400" />
                             <span>
-                              Listening in real-time as Melodia v3 composes the rest of the track…
+                              Listening in real-time as the track continues generating…
                             </span>
                           </div>
                         )}
@@ -3434,7 +3434,7 @@ export function PlaygroundPage({
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-neutral-900 dark:text-white">
-                            Generating Music with Melodia v3… ({Math.floor(musicElapsedSeconds / 60)}:{(musicElapsedSeconds % 60).toString().padStart(2, "0")})
+                            Generating Music… ({Math.floor(musicElapsedSeconds / 60)}:{(musicElapsedSeconds % 60).toString().padStart(2, "0")})
                           </p>
                           <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
                             {musicElapsedSeconds < 15
@@ -3444,9 +3444,6 @@ export function PlaygroundPage({
                               : musicElapsedSeconds < 120
                               ? "Generating high-fidelity audio…"
                               : "Mastering and rendering full audio track…"}
-                          </p>
-                          <p className="mt-2 text-[11px] text-neutral-400 dark:text-neutral-500">
-                            Treblo v3 generates full-length tracks (typically takes 2–3 minutes). Please keep this page open.
                           </p>
                         </div>
                       </div>
@@ -3459,18 +3456,6 @@ export function PlaygroundPage({
                       </div>
                     )}
                   </div>
-
-                  {musicRun && (
-                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-neutral-200/70 pt-3 dark:border-white/10">
-                      <span
-                        data-testid="music-response-usage-badge"
-                        className="inline-flex items-center gap-1.5 rounded-full border border-purple-200 bg-purple-50 px-3 py-1 font-sans tabular-nums text-xs font-medium text-purple-900 dark:border-purple-500/30 dark:bg-purple-500/10 dark:text-purple-200"
-                      >
-                        <Activity className="h-3 w-3 text-purple-600 dark:text-purple-400" />
-                        {musicRun.durationSeconds}s audio • Cost: ${formatCostBadge(musicRun.costUsd)} ($0.10/song)
-                      </span>
-                    </div>
-                  )}
                 </div>
               </div>
             </>
