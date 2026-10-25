@@ -4170,9 +4170,9 @@ async function route(req, res) {
       });
     }
 
-    if (req.method === "POST" && url.pathname === "/v1/music") {
+    if (req.method === "POST" && (url.pathname === "/v1/music" || url.pathname === "/api/playground/music")) {
       const started = Date.now();
-      const auth = requireKey(db, req);
+      const isPlayground = url.pathname.startsWith("/api/playground");
       const requestId = id("req");
       const body = await parseBody(req);
       const idempotencyKey = req.headers["idempotency-key"];
@@ -4188,11 +4188,20 @@ async function route(req, res) {
         return send(res, 200, existingIdempotency.response);
       }
 
-      if (auth.error) {
-        return send(res, 401, { error: auth.error, request_id: requestId });
-      }
-      if (!auth.key.scopes.includes("Music generation")) {
-        return send(res, 403, { error: "missing_scope", required_scope: "Music generation", request_id: requestId });
+      let auth = null;
+      let apiKeyId = null;
+      let projectId = db.projects?.[0]?.id || "proj_default";
+
+      if (!isPlayground) {
+        auth = requireKey(db, req);
+        if (auth.error) {
+          return send(res, 401, { error: auth.error, request_id: requestId });
+        }
+        if (!auth.key.scopes.includes("Music generation")) {
+          return send(res, 403, { error: "missing_scope", required_scope: "Music generation", request_id: requestId });
+        }
+        apiKeyId = auth.sqlKey?.id || null;
+        projectId = auth.project?.id || projectId;
       }
 
       const model = normalizeMusicModelName(body.model);
@@ -4214,9 +4223,9 @@ async function route(req, res) {
         db.requestLogs.unshift({
           id: requestId,
           timestamp: nowIso(),
-          projectId: auth.project.id,
-          keyId: auth.key.id,
-          endpoint: "/v1/music",
+          projectId,
+          keyId: apiKeyId || "playground_session",
+          endpoint: isPlayground ? "/api/playground/music" : "/v1/music",
           model: model.model,
           feature: "Music generation",
           method: "POST",
@@ -4256,9 +4265,9 @@ async function route(req, res) {
       db.requestLogs.unshift({
         id: requestId,
         timestamp: nowIso(),
-        projectId: auth.project.id,
-        keyId: auth.key.id,
-        endpoint: "/v1/music",
+        projectId,
+        keyId: apiKeyId || "playground_session",
+        endpoint: isPlayground ? "/api/playground/music" : "/v1/music",
         model: model.model,
         feature: "Music generation",
         method: "POST",

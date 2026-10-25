@@ -1279,8 +1279,17 @@ async function runSpeechBrowser(state: BrowserState, options?: RequestInit) {
 
 async function runMusic(state: BrowserState, options?: RequestInit) {
   const started = Date.now();
-  const { key, project } = authorize(state, options);
-  if (!key.scopes.includes("Music generation")) fail("missing_scope");
+  let keyId = "playground_session";
+  let projectId = state.dashboard.projects[0]?.id || "proj_default";
+
+  const secret = requestSecret(options);
+  if (secret) {
+    const auth = authorize(state, options);
+    if (!auth.key.scopes.includes("Music generation")) fail("missing_scope");
+    keyId = auth.key.id;
+    projectId = auth.project.id;
+  }
+
   const body = requestBody(options);
   const model = musicModels.find((candidate) => candidate.model === body.model) ?? musicModels[0];
   const prompt = String(body.prompt ?? "").trim();
@@ -1347,8 +1356,8 @@ async function runMusic(state: BrowserState, options?: RequestInit) {
   logRequest(state, {
     id: requestId,
     timestamp: new Date().toISOString(),
-    projectId: project.id,
-    keyId: key.id,
+    projectId,
+    keyId,
     endpoint: "/v1/music",
     model: model.model,
     feature: "Music generation",
@@ -1383,7 +1392,16 @@ async function runMusic(state: BrowserState, options?: RequestInit) {
 
 async function runDubbingBrowser(state: BrowserState, options?: RequestInit) {
   const started = Date.now();
-  const { key, project } = authorize(state, options);
+  let keyId = "playground_session";
+  let projectId = state.dashboard.projects[0]?.id || "proj_default";
+
+  const secret = requestSecret(options);
+  if (secret) {
+    const auth = authorize(state, options);
+    keyId = auth.key.id;
+    projectId = auth.project.id;
+  }
+
   const body = requestBody(options);
   const model = dubbingModels.find((candidate) => candidate.model === body.model) ?? dubbingModels[0];
   const targetLang = String(body.target_lang || body.target_language || "Spanish").trim();
@@ -1443,8 +1461,8 @@ async function runDubbingBrowser(state: BrowserState, options?: RequestInit) {
   logRequest(state, {
     id: requestId,
     timestamp: new Date().toISOString(),
-    projectId: project.id,
-    keyId: key.id,
+    projectId,
+    keyId,
     endpoint: "/v1/dubbing",
     model: model.model,
     feature: "Dubbing",
