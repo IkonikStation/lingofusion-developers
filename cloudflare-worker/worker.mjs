@@ -750,6 +750,7 @@ export default {
         }
 
         const isInstrumental = Boolean(body.instrumental || body.force_instrumental || body.is_instrumental);
+        const durationSeconds = Number(body.duration_seconds || body.duration || 60);
         const lyrics = !isInstrumental && typeof body.lyrics === "string" && body.lyrics.trim() ? body.lyrics.trim() : undefined;
 
         // Treblo v3 payload with real-time audio streaming
