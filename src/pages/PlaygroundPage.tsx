@@ -47,6 +47,7 @@ import {
   defaultBrowserModelPricing,
   getApiBaseUrl,
   getWebSearchCallRateUsd,
+  recordBrowserMusicUsage,
   recordBrowserStreamUsage,
   shouldUseBrowserApi,
   streamChatCompletionBrowser,
@@ -1151,7 +1152,11 @@ export function PlaygroundPage({
   const handleRunMusicGeneration = async () => {
     const prompt = userInput.trim() || translatedOutput.trim();
     if (!prompt || musicRunning) return;
-    // Free preview period: do not charge or gate on credit balance
+    const songCost = 0.10;
+    if (liveBalance < songCost || liveBalance <= 0) {
+      setInsufficientModalOpen(true);
+      return;
+    }
     setErrorBanner(null);
     setMusicRunning(true);
     setMusicStreaming(false);
@@ -1190,11 +1195,23 @@ export function PlaygroundPage({
       let data = await res.json();
       const taskId = String(data.id || data.task_id || runId);
 
+      // Charge $0.10 from user balance upon starting generation
+      if (shouldUseBrowserApi()) {
+        const remaining = recordBrowserMusicUsage({
+          modelId: selectedMusicModel,
+          costUsd: songCost,
+          durationSeconds: musicDurationSeconds,
+          prompt,
+          source: "playground",
+        });
+        updateBalance(remaining);
+      }
+
       setMusicRun({
         id: taskId,
         model: selectedMusicModel,
         durationSeconds: musicDurationSeconds,
-        costUsd: 0,
+        costUsd: songCost,
       });
 
       // Poll until streaming is ready, and continue until fully completed
@@ -1237,7 +1254,11 @@ export function PlaygroundPage({
       await loadModelsAndState();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Music generation failed";
-      setErrorBanner(message);
+      if (message.toLowerCase().includes("insufficient") || message.toLowerCase().includes("deposit")) {
+        setInsufficientModalOpen(true);
+      } else {
+        setErrorBanner(message);
+      }
       setMusicRunning(false);
       setMusicStreaming(false);
     }

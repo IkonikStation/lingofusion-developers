@@ -909,6 +909,61 @@ export function recordBrowserStreamUsage({
   return state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance;
 }
 
+export function recordBrowserMusicUsage({
+  modelId,
+  costUsd = 0.10,
+  durationSeconds = 60,
+  prompt = "",
+  source = "playground",
+}: {
+  modelId: string;
+  costUsd?: number;
+  durationSeconds?: number;
+  prompt?: string;
+  source?: "api" | "playground";
+}): number {
+  const state = loadState();
+  applyCharge(state, costUsd);
+  const now = new Date().toISOString();
+  state.dashboard.usageLedger?.unshift({
+    id: randomId("ulg"),
+    user_id: state.dashboard.user?.id || "00000000-0000-4000-8000-000000000001",
+    api_key_id: null,
+    model_id: modelId,
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    cost_usd: costUsd,
+    source,
+    created_at: now,
+  });
+  createChargeEntry(
+    state,
+    costUsd,
+    `${modelId} (${durationSeconds}s) via ${source}`,
+  );
+  logRequest(state, {
+    id: `music-${randomId("browser")}`,
+    timestamp: now,
+    projectId: state.dashboard.projects[0]?.id || "proj_default",
+    keyId: "playground_session",
+    endpoint: source === "api" ? "/v1/music" : "/api/playground/music",
+    model: modelId,
+    feature: "Music generation",
+    status: 200,
+    inputTokens: 0,
+    outputTokens: 0,
+    reasoningTokens: 0,
+    totalTokens: 0,
+    words: prompt.split(/\s+/).length,
+    cost: costUsd,
+    latencyMs: 120,
+    errorCode: "",
+    streaming: false,
+  });
+  saveState(state);
+  return state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance;
+}
+
 export async function streamChatCompletionBrowser(
   body: Record<string, any>,
   signal?: AbortSignal,
@@ -1296,9 +1351,13 @@ async function runMusic(state: BrowserState, options?: RequestInit) {
   const durationSeconds = Math.round(Number(body.duration_seconds || 30));
   if (!prompt || !Number.isFinite(durationSeconds) || durationSeconds < 1 || durationSeconds > 3600) fail("invalid_request");
 
-  // Rate: $0.10 per song (charging paused; balance does not move)
+  // Rate: $0.10 per song
   const durationMinutes = durationSeconds / 60;
-  const cost = 0; // Free preview period: do not charge or deduct balance right now
+  const cost = Number((model.priceUsd ?? 0.10).toFixed(4));
+
+  if ((state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) < cost) {
+    fail("Insufficient balance. Please deposit credits.");
+  }
 
   let audioUrl = "";
   try {
