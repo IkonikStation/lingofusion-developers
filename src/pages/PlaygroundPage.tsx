@@ -251,27 +251,6 @@ export function PlaygroundPage({
     if (q === "voice" || q === "tts") return "voice";
     return q === "image" ? "image" : "text";
   });
-  const [modeDropdownOpen, setModeDropdownOpen] = useState<boolean>(false);
-  const modeDropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!modeDropdownOpen) return;
-    const handleClickOutside = (e: MouseEvent | PointerEvent) => {
-      if (!modeDropdownRef.current?.contains(e.target as Node)) {
-        setModeDropdownOpen(false);
-      }
-    };
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setModeDropdownOpen(false);
-    };
-    document.addEventListener("pointerdown", handleClickOutside);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handleClickOutside);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [modeDropdownOpen]);
-
   const PLAYGROUND_MODES = [
     { id: "text" as const, label: "Text", icon: FileText },
     { id: "image" as const, label: "Image", icon: ImageIcon },
@@ -279,8 +258,6 @@ export function PlaygroundPage({
     { id: "music" as const, label: "Music", icon: Music },
     { id: "dubbing" as const, label: "Dubbing", icon: Clapperboard },
   ];
-  const activeModeItem = PLAYGROUND_MODES.find((m) => m.id === mode) ?? PLAYGROUND_MODES[0];
-  const ActiveModeIcon = activeModeItem.icon;
 
   // Dubbing studio state
   const [selectedDubbingModel, setSelectedDubbingModel] = useState<string>("LingoFusion Dubbing");
@@ -1633,15 +1610,15 @@ export function PlaygroundPage({
   };
 
   return (
-    <section className="mx-auto max-w-5xl py-6 sm:py-10">
-      {/* Minimal Top Bar: Title + Model Selector + Live Balance */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <section className="playground mx-auto max-w-5xl py-1 sm:py-3" aria-labelledby="playground-heading">
+      {/* Page title and wallet */}
+      <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
         <div className="flex items-center gap-3.5">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-neutral-950 dark:text-white">
+            <h1 id="playground-heading" className="text-3xl font-semibold tracking-tight text-neutral-950 dark:text-white">
               Playground
             </h1>
-            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            <p className="mt-2 max-w-xl text-sm leading-6 text-neutral-500 dark:text-neutral-400">
               {mode === "image"
                 ? "Upload an image or paste a URL, then translate the text inside it."
                 : mode === "voice"
@@ -1655,64 +1632,8 @@ export function PlaygroundPage({
           </div>
         </div>
 
-        {/* Right: Modality Dropdown + Live Balance Pill + Add Credits Trigger */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Mode Dropdown (Text, Image, Voice, Music) */}
-          <div ref={modeDropdownRef} className="relative">
-            <button
-              type="button"
-              aria-haspopup="menu"
-              aria-expanded={modeDropdownOpen}
-              data-testid="playground-mode-dropdown-btn"
-              onClick={() => setModeDropdownOpen((prev) => !prev)}
-              className="inline-flex h-10 items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 text-xs font-semibold text-neutral-950 shadow-2xs transition hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-950 dark:border-white/10 dark:bg-neutral-900 dark:text-white dark:hover:bg-neutral-800 dark:focus-visible:ring-white"
-            >
-              <ActiveModeIcon className="h-3.5 w-3.5 text-neutral-600 dark:text-neutral-300" />
-              <span>{activeModeItem.label}</span>
-              <ChevronDown
-                className={`h-3.5 w-3.5 text-neutral-400 transition-transform duration-150 ${
-                  modeDropdownOpen ? "rotate-180" : ""
-                }`}
-              />
-            </button>
-
-            {modeDropdownOpen && (
-              <div
-                role="menu"
-                aria-label="Select mode"
-                className="absolute left-0 top-[calc(100%+6px)] z-40 w-44 rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl dark:border-white/15 dark:bg-neutral-900 sm:left-auto sm:right-0"
-              >
-                {PLAYGROUND_MODES.map((item) => {
-                  const isSelected = mode === item.id;
-                  const ItemIcon = item.icon;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      role="menuitem"
-                      data-testid={`playground-mode-${item.id}`}
-                      onClick={() => {
-                        setMode(item.id);
-                        setModeDropdownOpen(false);
-                      }}
-                      className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs transition ${
-                        isSelected
-                          ? "bg-neutral-100 font-semibold text-neutral-950 dark:bg-white/10 dark:text-white"
-                          : "text-neutral-700 hover:bg-neutral-100/70 dark:text-neutral-300 dark:hover:bg-white/5"
-                      }`}
-                    >
-                      <ItemIcon className="h-3.5 w-3.5 shrink-0 text-neutral-500 dark:text-neutral-400" />
-                      <span className="flex-1">{item.label}</span>
-                      {isSelected && (
-                        <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
+        {/* Wallet balance and deposit shortcut */}
+        <div className="playground-wallet flex shrink-0 flex-wrap items-center gap-2.5">
           <div
             data-testid="playground-live-balance"
             className="inline-flex h-10 items-center gap-2.5 rounded-xl border border-neutral-200 bg-neutral-50/90 px-3.5 text-xs dark:border-white/10 dark:bg-neutral-900"
@@ -2668,17 +2589,34 @@ export function PlaygroundPage({
           document.body,
         )}
 
-      {/* Main Minimal Translation Card */}
-      <div className="mt-6 overflow-hidden rounded-2xl border border-neutral-200/90 bg-white shadow-xs dark:border-white/10 dark:bg-neutral-900/70">
+      <nav className="playground-modes mt-7 flex gap-1 border-b border-neutral-200 pb-3 dark:border-white/10" aria-label="Playground mode">
+        {PLAYGROUND_MODES.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={mode === id}
+            data-testid={`playground-mode-${id}`}
+            onClick={() => setMode(id)}
+            className={`inline-flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 text-sm font-medium transition ${mode === id ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950" : "text-neutral-500 hover:bg-neutral-100 hover:text-neutral-950 dark:text-neutral-400 dark:hover:bg-white/5 dark:hover:text-white"}`}
+          >
+            <Icon className="h-4 w-4 shrink-0" />
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      {/* Workspace: configuration above the input and output. */}
+      <div className="playground-workspace mt-5 rounded-2xl border border-neutral-200/90 bg-white shadow-sm dark:border-white/10 dark:bg-neutral-900/70">
         {/* Control Bar: Language Pair → Modality & Model → Options & Run */}
-        <div className="border-b border-neutral-200/80 bg-neutral-50/60 px-4 py-4 dark:border-white/10 dark:bg-white/[0.02] sm:px-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
+        <div className="playground-toolbar rounded-t-2xl border-b border-neutral-200/80 bg-neutral-50/60 p-4 dark:border-white/10 dark:bg-white/[0.02] sm:p-5">
+          <div className="playground-configuration flex flex-col gap-4">
             {/* Left column: language pair on top (text/image only), mode + model below */}
             <div className="flex min-w-0 flex-col gap-3">
               {/* Language pair: source ⇄ target (only shown for text & image modes) */}
               {(mode === "text" || mode === "image") && (
-                <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-1.5 lg:w-[24rem]">
+                <div className="playground-languages grid w-full grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-2">
                   <Picker
+                    showLabel
                     label="Source language"
                     testId="playground-source-language"
                     items={languageItems}
@@ -2692,6 +2630,7 @@ export function PlaygroundPage({
                     type="button"
                     onClick={swapLanguages}
                     title="Swap languages"
+                    aria-label="Swap languages"
                     data-testid="playground-swap-languages"
                     className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-neutral-300 bg-white text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-950 dark:border-white/15 dark:bg-neutral-950 dark:text-neutral-300 dark:hover:bg-white/10"
                   >
@@ -2699,6 +2638,7 @@ export function PlaygroundPage({
                   </button>
 
                   <Picker
+                    showLabel
                     label="Target language"
                     testId="playground-target-language"
                     items={languageItems}
@@ -2786,12 +2726,12 @@ export function PlaygroundPage({
 
                 {mode === "dubbing" && (
                   <>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex w-full min-w-0 flex-col items-start gap-1.5 sm:w-auto sm:flex-row sm:items-center">
                       <span className="shrink-0 text-xs font-semibold text-neutral-500 dark:text-neutral-400">
                         Dub into:
                       </span>
                       <Picker
-                        className="w-56 sm:w-64"
+                        className="w-full sm:w-64"
                         panelClassName="w-[min(20rem,calc(100vw-2.5rem))] sm:w-72"
                         label="Dub into"
                         testId="playground-dubbing-target-select"
@@ -2894,7 +2834,7 @@ export function PlaygroundPage({
             </div>
 
             {/* Right: Text-mode options popover, or the run/stop action */}
-            <div className="flex w-full items-center gap-2.5 sm:w-auto">
+            <div className="playground-actions flex w-full items-center justify-end gap-2.5 border-t border-neutral-200/70 pt-4 dark:border-white/10">
               {mode === "text" && (
                 <Popover
                   trigger={
@@ -3035,7 +2975,7 @@ export function PlaygroundPage({
         </div>
 
         {/* Clean Side-by-Side Input & Output Panes */}
-        <div className="grid divide-y divide-neutral-200/80 dark:divide-white/10 md:grid-cols-2 md:divide-x md:divide-y-0">
+        <div className="playground-panes grid divide-y divide-neutral-200/80 dark:divide-white/10 md:grid-cols-2 md:divide-x md:divide-y-0">
           {mode === "text" ? (
             <>
           {/* Left Pane: Input Text with Live Markdown */}
@@ -3081,7 +3021,7 @@ export function PlaygroundPage({
           </div>
 
           {/* Right Pane: Translated Output (Always Markdown) */}
-          <div className="flex flex-col bg-neutral-50/40 p-4 dark:bg-white/[0.01] sm:p-5">
+          <div className="flex min-w-0 flex-col rounded-b-2xl bg-neutral-50/40 p-4 dark:bg-white/[0.01] sm:p-5 md:rounded-bl-none">
             <div className="mb-2.5 flex items-center justify-between">
               <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">
                 {toLanguage}
@@ -3248,7 +3188,7 @@ export function PlaygroundPage({
               </div>
 
               {/* Right Pane: Translated Image */}
-              <div className="flex flex-col bg-neutral-50/40 p-4 dark:bg-white/[0.01] sm:p-5">
+              <div className="flex min-w-0 flex-col rounded-b-2xl bg-neutral-50/40 p-4 dark:bg-white/[0.01] sm:p-5 md:rounded-bl-none">
                 <div className="mb-2.5 flex items-center justify-between">
                   <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">
                     Image output
@@ -3332,7 +3272,7 @@ export function PlaygroundPage({
               </div>
 
               {/* Right Pane: Audio Player & Result */}
-              <div className="flex flex-col bg-neutral-50/40 p-4 dark:bg-white/[0.01] sm:p-5">
+              <div className="flex min-w-0 flex-col rounded-b-2xl bg-neutral-50/40 p-4 dark:bg-white/[0.01] sm:p-5 md:rounded-bl-none">
                 <div className="mb-2.5 flex items-center justify-between">
                   <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">
                     Music output
@@ -3426,7 +3366,7 @@ export function PlaygroundPage({
                             onPlay={() => setMusicPlaying(true)}
                             onPause={() => setMusicPlaying(false)}
                             onEnded={() => setMusicPlaying(false)}
-                            className="h-11 flex-1"
+                            className="h-11 w-full min-w-0 flex-1"
                             data-testid="playground-music-audio-player"
                           />
                         </div>
@@ -3511,7 +3451,7 @@ export function PlaygroundPage({
               </div>
 
               {/* Right Pane: Audio Player & Result */}
-              <div className="flex flex-col bg-neutral-50/40 p-4 dark:bg-white/[0.01] sm:p-5">
+              <div className="flex min-w-0 flex-col rounded-b-2xl bg-neutral-50/40 p-4 dark:bg-white/[0.01] sm:p-5 md:rounded-bl-none">
                 <div className="mb-2.5 flex items-center justify-between">
                   <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">
                     Voice output
@@ -3586,7 +3526,7 @@ export function PlaygroundPage({
                             onPlay={() => setVoicePlaying(true)}
                             onPause={() => setVoicePlaying(false)}
                             onEnded={() => setVoicePlaying(false)}
-                            className="h-11 flex-1"
+                            className="h-11 w-full min-w-0 flex-1"
                             data-testid="playground-voice-audio-player"
                           />
                         </div>
@@ -3752,7 +3692,7 @@ export function PlaygroundPage({
               </div>
 
               {/* Right Pane: Dubbed Output & Download */}
-              <div className="flex flex-col bg-neutral-50/40 p-4 dark:bg-white/[0.01] sm:p-5">
+              <div className="flex min-w-0 flex-col rounded-b-2xl bg-neutral-50/40 p-4 dark:bg-white/[0.01] sm:p-5 md:rounded-bl-none">
                 <div className="mb-2.5 flex items-center justify-between">
                   <span className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">
                     Dubbed Output

@@ -78,6 +78,24 @@ export default function App() {
   const activeLanguage = getLanguage(language);
   const isSubscriptionPage = activePage === "Subscription Prices";
 
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileOpen(false);
+    };
+    const desktop = window.matchMedia("(min-width: 1024px)");
+    const closeOnDesktop = () => { if (desktop.matches) setMobileOpen(false); };
+    desktop.addEventListener("change", closeOnDesktop);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      desktop.removeEventListener("change", closeOnDesktop);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [mobileOpen]);
+
   const refreshLiveBalance = async () => {
     try {
       if (shouldUseBrowserApi()) {
@@ -330,7 +348,7 @@ export default function App() {
           onCloseMobile={() => setMobileOpen(false)}
         />
 
-        <main className="min-w-0 flex-1 overflow-hidden px-4 py-6 sm:px-8 sm:py-10 lg:px-12">
+        <main id="main-content" className="site-main min-w-0 flex-1 overflow-hidden px-4 py-6 sm:px-8 sm:py-10 lg:px-12">
           {isSubscriptionPage ? (
             <SubscriptionPage
               onApiPrices={() => navigate("API Prices")}

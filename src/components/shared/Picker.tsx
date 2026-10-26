@@ -44,7 +44,7 @@ const triggerClosedClass =
   "border-neutral-300 hover:bg-neutral-50 dark:border-white/15 dark:bg-neutral-950 dark:hover:bg-neutral-900";
 
 const panelBaseClass =
-  "absolute top-[calc(100%+6px)] z-40 w-[min(19rem,calc(100vw-2.5rem))] rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl dark:border-white/15 dark:bg-neutral-900 sm:w-[17rem]";
+  "picker-panel absolute top-[calc(100%+6px)] z-40 w-[min(19rem,calc(100vw-2.5rem))] rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl dark:border-white/15 dark:bg-neutral-900 sm:w-[17rem]";
 
 /**
  * Searchable select (listbox) used for languages and models where the raw
@@ -60,6 +60,7 @@ export function Picker({
   align = "left",
   searchPlaceholder = "Search…",
   panelClassName,
+  showLabel = false,
 }: {
   label: string;
   items: PickerItem[];
@@ -70,6 +71,7 @@ export function Picker({
   align?: PopoverAlign;
   searchPlaceholder?: string;
   panelClassName?: string;
+  showLabel?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -104,10 +106,12 @@ export function Picker({
   };
 
   return (
-    <div ref={rootRef} className={`relative ${className ?? ""}`}>
+    <div ref={rootRef} className={`picker relative min-w-0 ${className ?? ""}`}>
+      {showLabel && <span className="mb-2 block text-xs font-medium text-neutral-500 dark:text-neutral-400">{label}</span>}
       <button
         ref={triggerRef}
         type="button"
+        aria-label={`${label}: ${selected?.label ?? "Select"}`}
         aria-haspopup="listbox"
         aria-expanded={open}
         data-testid={testId}
@@ -246,7 +250,8 @@ export function Popover({
       {open && (
         <div
           role="dialog"
-          className="absolute left-0 top-[calc(100%+6px)] z-40 w-[min(19rem,calc(100vw-2.5rem))] rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl dark:border-white/15 dark:bg-neutral-900 lg:left-auto lg:right-0 lg:w-64"
+          aria-label="Response options"
+          className="picker-panel absolute left-0 top-[calc(100%+6px)] z-40 w-[min(19rem,calc(100vw-2.5rem))] rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl dark:border-white/15 dark:bg-neutral-900 sm:left-auto sm:right-0 sm:w-64"
         >
           {children(close)}
         </div>

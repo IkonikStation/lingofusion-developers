@@ -136,7 +136,7 @@ export function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
     >
       <div onClick={onClose} className="fixed inset-0 bg-neutral-950/60 backdrop-blur-sm" />
 
-      <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-neutral-200/90 bg-white shadow-2xl dark:border-white/10 dark:bg-[#141414]">
+      <div className="relative max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto rounded-2xl border border-neutral-200/90 bg-white shadow-2xl dark:border-white/10 dark:bg-[#141414]">
         <button
           type="button"
           onClick={onClose}

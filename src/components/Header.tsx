@@ -98,20 +98,20 @@ export function Header({
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-neutral-200/80 bg-white/95 backdrop-blur-md dark:border-neutral-800/80 dark:bg-[#0d0d0d]/95">
+    <header className="site-header sticky top-0 z-40 border-b border-neutral-200/80 bg-white/95 backdrop-blur-md dark:border-neutral-800/80 dark:bg-[#0d0d0d]/95">
       <div className="flex h-14 w-full items-center justify-between px-3 sm:px-4 lg:px-6">
         {/* Left: Mobile hamburger + Brand logo */}
         <div className="flex items-center gap-3 sm:gap-6">
-          {!isSubscriptionPage && (
-            <button
-              type="button"
-              aria-label={mobileOpen ? t("closeNavigation") : t("openNavigation")}
-              onClick={onToggleMobile}
-              className="grid h-8 w-8 place-items-center rounded-md text-neutral-600 hover:text-neutral-900 lg:hidden dark:text-neutral-400 dark:hover:text-white"
-            >
-              {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
-            </button>
-          )}
+          <button
+            type="button"
+            aria-label={mobileOpen ? t("closeNavigation") : t("openNavigation")}
+            aria-expanded={mobileOpen}
+            aria-controls="site-navigation"
+            onClick={onToggleMobile}
+            className="grid h-8 w-8 place-items-center rounded-md text-neutral-600 hover:text-neutral-900 lg:hidden dark:text-neutral-400 dark:hover:text-white"
+          >
+            {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+          </button>
 
           <button
             type="button"
@@ -136,7 +136,7 @@ export function Header({
           </button>
 
           {/* Center/Left Nav links */}
-          <nav className="ml-4 hidden items-center gap-1 md:flex">
+          <nav className="ml-4 hidden items-center gap-1 2xl:flex">
             {navItems.map((item) => {
               const active = isCurrent(item.page);
               return (
@@ -176,7 +176,7 @@ export function Header({
           </button>
 
           {/* Minimal Search bar */}
-          <div className="relative hidden w-44 sm:block lg:w-52">
+          <div className="relative hidden w-44 xl:block lg:w-52">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400" />
             <input
               value={query}
@@ -399,7 +399,7 @@ export function Header({
           <button
             type="button"
             onClick={onDashboard}
-            className="inline-flex h-8 items-center gap-1.5 rounded-full bg-neutral-950 px-3.5 text-xs font-medium text-white transition hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+            className="hidden h-8 items-center gap-1.5 rounded-full bg-neutral-950 lg:inline-flex px-3.5 text-xs font-medium text-white transition hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
           >
             <span>Dashboard</span>
             <ExternalLink className="h-3 w-3 opacity-70" />

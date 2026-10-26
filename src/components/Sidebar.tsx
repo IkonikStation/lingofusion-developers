@@ -19,7 +19,7 @@ import {
   Terminal,
   Video,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AuthUser } from "../data/auth";
 import type { LanguageCode, TranslationKey } from "../data/i18n";
 
@@ -59,6 +59,33 @@ export function Sidebar({
   onToggleCollapse,
   onCloseMobile,
 }: SidebarProps) {
+  const navigationRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const navigation = navigationRef.current;
+    const focusable = () => Array.from(navigation?.querySelectorAll<HTMLElement>('button, input, select, a[href]') ?? [])
+      .filter((element) => element.getClientRects().length > 0);
+    const frame = requestAnimationFrame(() => focusable()[0]?.focus());
+    const trapFocus = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
+      const elements = focusable();
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault(); last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault(); first?.focus();
+      }
+    };
+    navigation?.addEventListener("keydown", trapFocus);
+    return () => {
+      cancelAnimationFrame(frame);
+      navigation?.removeEventListener("keydown", trapFocus);
+      previousFocus?.focus({ preventScroll: true });
+    };
+  }, [mobileOpen]);
+  const compact = collapsed && !mobileOpen;
   const [search, setSearch] = useState("");
   const [projectOpen, setProjectOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState("Default project");
@@ -110,12 +137,12 @@ export function Sidebar({
   };
 
   const sidebarContent = (
-    <div className="flex h-full flex-col justify-between">
+    <div className="flex min-h-0 h-full flex-col justify-between">
       {/* Top Section: Project selector + Search + Nav list */}
-      <div className="flex flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* Project Selector Header */}
         <div className="flex items-center justify-between border-b border-neutral-200/80 px-3 py-3 dark:border-neutral-800/80">
-          {!collapsed ? (
+          {!compact ? (
             <div className="relative">
               <button
                 type="button"
@@ -158,15 +185,15 @@ export function Sidebar({
           <button
             type="button"
             onClick={onToggleCollapse}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-white"
+            aria-label={compact ? "Expand sidebar" : "Collapse sidebar"}
+            className="hidden h-7 w-7 items-center justify-center rounded-md lg:flex text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-white"
           >
-            {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            {compact ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
           </button>
         </div>
 
         {/* Search input */}
-        {!collapsed && (
+        {!compact && (
           <div className="px-3 pt-3">
             <div className="relative">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400" />
@@ -194,13 +221,13 @@ export function Sidebar({
               <button
                 key={entry.id}
                 type="button"
-                title={collapsed ? entry.label : undefined}
+                title={compact ? entry.label : undefined}
                 onClick={() => handleClick(entry)}
                 className={`group flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-xs transition ${
                   active
                     ? "bg-neutral-200/80 font-medium text-neutral-950 dark:bg-[#262626] dark:text-white"
                     : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950 dark:text-[#a3a3a3] dark:hover:bg-[#1c1c1c] dark:hover:text-white"
-                } ${collapsed ? "justify-center px-2" : ""}`}
+                } ${compact ? "justify-center px-2" : ""}`}
               >
                 <Icon
                   className={`h-4 w-4 shrink-0 stroke-[1.75] ${
@@ -209,7 +236,7 @@ export function Sidebar({
                       : "text-neutral-500 group-hover:text-neutral-950 dark:text-[#8e8e8e] dark:group-hover:text-white"
                   }`}
                 />
-                {!collapsed && (
+                {!compact && (
                   <span className="flex flex-1 items-center justify-between">
                     <span>{entry.label}</span>
                     {entry.badge && (
@@ -238,7 +265,7 @@ export function Sidebar({
           }}
           title={currentUser && currentUser.provider !== "guest" ? "Open Account & Dashboard" : "Sign in to your account"}
           className={`flex w-full items-center gap-2.5 rounded-lg p-1.5 text-left transition hover:bg-neutral-100 dark:hover:bg-neutral-800/60 ${
-            collapsed ? "justify-center" : ""
+            compact ? "justify-center" : ""
           }`}
         >
           {/* Avatar circle */}
@@ -266,7 +293,7 @@ export function Sidebar({
               </span>
             )}
           </div>
-          {!collapsed && (
+          {!compact && (
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-semibold text-neutral-900 dark:text-neutral-100">
                 {currentUser?.name || "Sign In"}
@@ -290,14 +317,17 @@ export function Sidebar({
           type="button"
           aria-label="Close navigation overlay"
           onClick={onCloseMobile}
-          className="fixed inset-0 z-40 bg-neutral-950/40 backdrop-blur-xs dark:bg-black/70 lg:hidden"
+          className="fixed inset-x-0 bottom-0 top-14 z-40 bg-neutral-950/40 backdrop-blur-xs dark:bg-black/70 lg:hidden"
         />
       )}
 
       <aside
-        className={`fixed bottom-0 left-0 top-14 z-40 h-[calc(100vh-3.5rem)] border-r border-neutral-200/80 bg-white transition-all duration-200 ease-in-out dark:border-neutral-800/80 dark:bg-[#121212] lg:sticky lg:top-14 lg:z-20 lg:translate-x-0 ${
-          mobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full lg:translate-x-0"
-        } ${collapsed ? "w-16" : "w-60"}`}
+        ref={navigationRef}
+        id="site-navigation"
+        aria-label="Main navigation"
+        className={`fixed bottom-0 left-0 top-14 z-40 h-[calc(100dvh-3.5rem)] border-r border-neutral-200/80 bg-white transition-all duration-200 ease-in-out dark:border-neutral-800/80 dark:bg-[#121212] lg:sticky lg:top-14 lg:z-20 lg:translate-x-0 ${
+          mobileOpen ? "visible translate-x-0 shadow-2xl" : "invisible -translate-x-full lg:visible lg:translate-x-0"
+        } ${compact ? "w-16" : "w-60"}`}
       >
         {sidebarContent}
       </aside>

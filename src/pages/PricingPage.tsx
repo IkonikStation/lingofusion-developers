@@ -325,7 +325,7 @@ export function PricingPage({
         <section className="border-t border-neutral-200 pt-10 dark:border-neutral-800">
           <h2 className="text-xl font-normal text-neutral-900 dark:text-neutral-50">Web search grounding</h2>
           <p className="mt-1 text-xs text-neutral-500">Per-call pricing for live search engine grounding.</p>
-          <div className="mt-4 overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800">
+          <div className="mt-4 overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
             <table className="w-full text-left text-xs">
               <thead className="border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/50">
                 <tr>

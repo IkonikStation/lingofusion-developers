@@ -86,7 +86,7 @@ export function PricingCard(props: PricingCardProps) {
 
 function TextTable({ rows, labels }: { rows: DisplayTextModel[]; labels: PricingLabels }) {
   return (
-    <table className="w-full min-w-[500px] text-left text-xs">
+    <table className="mobile-record-table w-full min-w-[500px] text-left text-xs">
       <thead className="border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/50">
         <tr>
           <th className="px-5 py-3 font-medium text-neutral-600 dark:text-neutral-400">{labels.model}</th>
@@ -97,8 +97,8 @@ function TextTable({ rows, labels }: { rows: DisplayTextModel[]; labels: Pricing
       <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
         {rows.map((row) => (
           <tr key={row.model} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/30">
-            <td className="px-5 py-3.5">
-              <div className="flex items-center gap-2">
+            <td data-label={labels.model} className="px-5 py-3.5">
+              <div className="flex flex-wrap items-center justify-end gap-2 sm:justify-start">
                 <span className="font-semibold text-neutral-900 dark:text-neutral-100">{row.model}</span>
                 {row.recommended && (
                   <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
@@ -107,8 +107,8 @@ function TextTable({ rows, labels }: { rows: DisplayTextModel[]; labels: Pricing
                 )}
               </div>
             </td>
-            <td className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.input}</td>
-            <td className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.output}</td>
+            <td data-label={labels.input} className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.input}</td>
+            <td data-label={labels.output} className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.output}</td>
           </tr>
         ))}
       </tbody>
@@ -118,7 +118,7 @@ function TextTable({ rows, labels }: { rows: DisplayTextModel[]; labels: Pricing
 
 function SimpleTable({ rows, labels }: { rows: DisplaySimpleModel[]; labels: PricingLabels }) {
   return (
-    <table className="w-full min-w-[360px] text-left text-xs">
+    <table className="mobile-record-table w-full min-w-[360px] text-left text-xs">
       <thead className="border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/50">
         <tr>
           <th className="px-5 py-3 font-medium text-neutral-600 dark:text-neutral-400">{labels.model}</th>
@@ -128,8 +128,8 @@ function SimpleTable({ rows, labels }: { rows: DisplaySimpleModel[]; labels: Pri
       <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
         {rows.map((row) => (
           <tr key={row.model} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/30">
-            <td className="px-5 py-3.5 font-semibold text-neutral-900 dark:text-neutral-100">{row.model}</td>
-            <td className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.price}</td>
+            <td data-label={labels.model} className="px-5 py-3.5 font-semibold text-neutral-900 dark:text-neutral-100">{row.model}</td>
+            <td data-label={labels.price} className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.price}</td>
           </tr>
         ))}
       </tbody>
@@ -139,7 +139,7 @@ function SimpleTable({ rows, labels }: { rows: DisplaySimpleModel[]; labels: Pri
 
 function ImageTable({ rows, labels }: { rows: DisplayImageModel[]; labels: PricingLabels }) {
   return (
-    <table className="w-full min-w-[500px] text-left text-xs">
+    <table className="mobile-record-table w-full min-w-[500px] text-left text-xs">
       <thead className="border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/50">
         <tr>
           <th className="px-5 py-3 font-medium text-neutral-600 dark:text-neutral-400">{labels.imageSize}</th>
@@ -150,9 +150,9 @@ function ImageTable({ rows, labels }: { rows: DisplayImageModel[]; labels: Prici
       <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
         {rows.map((row) => (
           <tr key={row.size} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/30">
-            <td className="px-5 py-3.5 font-semibold text-neutral-900 dark:text-neutral-100">{row.size}</td>
-            <td className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.input}</td>
-            <td className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.output}</td>
+            <td data-label={labels.imageSize} className="px-5 py-3.5 font-semibold text-neutral-900 dark:text-neutral-100">{row.size}</td>
+            <td data-label={labels.input} className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.input}</td>
+            <td data-label={labels.output} className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.output}</td>
           </tr>
         ))}
       </tbody>

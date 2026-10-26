@@ -167,13 +167,13 @@ print(response.output_text)`,
       <section className="site-reveal mt-10 grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(18rem,0.6fr)]">
         <div className="overflow-hidden rounded-2xl border border-neutral-200/90 bg-[#0d0d11] text-white shadow-md dark:border-white/[0.08]">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.08] px-5 py-3.5">
-            <div className="flex items-center gap-2.5 text-xs font-semibold tracking-wide text-neutral-200">
-              <span className="flex gap-1.5">
+            <div className="flex min-w-0 items-center gap-2.5 text-xs font-semibold tracking-wide text-neutral-200">
+              <span className="flex shrink-0 gap-1.5">
                 <span className="h-2.5 w-2.5 rounded-full bg-red-500/80" />
                 <span className="h-2.5 w-2.5 rounded-full bg-amber-500/80" />
                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-500/80" />
               </span>
-              <span className="ml-2 font-mono text-neutral-400">
+              <span className="min-w-0 break-all font-mono text-[10px] leading-5 text-neutral-400 sm:ml-2 sm:text-xs">
                 {isSpeechGeneration ? "api.lingofusion.dev/v1/audio/speech" : "api.lingofusion.dev/v1/translate"}
               </span>
             </div>
