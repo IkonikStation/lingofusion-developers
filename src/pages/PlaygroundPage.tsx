@@ -47,8 +47,6 @@ import {
   defaultBrowserModelPricing,
   getApiBaseUrl,
   getWebSearchCallRateUsd,
-  checkNetworkWhitelisted,
-  isCurrentNetworkWhitelistedSync,
   recordBrowserMusicUsage,
   recordBrowserStreamUsage,
   shouldUseBrowserApi,
@@ -235,8 +233,7 @@ export function PlaygroundPage({
   } | null>(null);
   const [claimCopied, setClaimCopied] = useState<boolean>(false);
 
-  // Network whitelisted state (e.g. user's home Wi-Fi with unlimited free playground access)
-  const [isHomeWifi, setIsHomeWifi] = useState<boolean>(false);
+  // Auto Top-Up settings state
   const [autoTopUpEnabled, setAutoTopUpEnabled] = useState<boolean>(false);
   const [autoTopUpThreshold, setAutoTopUpThreshold] = useState<number>(10);
   const [autoTopUpTarget, setAutoTopUpTarget] = useState<number>(50);
@@ -448,9 +445,6 @@ export function PlaygroundPage({
 
   useEffect(() => {
     loadModelsAndState();
-    void checkNetworkWhitelisted().then((whitelisted) => {
-      setIsHomeWifi(whitelisted);
-    });
     const unsub = subscribeAuth((user) => {
       setActiveUserId(user.id);
       setCurrentUserEmail(user.email);
@@ -685,7 +679,7 @@ export function PlaygroundPage({
 
   const handleRunTranslation = async () => {
     if (!userInput.trim() || isRunning) return;
-    if (!isHomeWifi && liveBalance <= 0) {
+    if (liveBalance <= 0) {
       setInsufficientModalOpen(true);
       return;
     }
@@ -988,7 +982,7 @@ export function PlaygroundPage({
 
   const handleRunImageTranslation = async () => {
     if (imageRunning) return;
-    if (!isHomeWifi && liveBalance <= 0) {
+    if (liveBalance <= 0) {
       setInsufficientModalOpen(true);
       return;
     }
@@ -1069,7 +1063,7 @@ export function PlaygroundPage({
   const handleRunVoiceSynthesis = async () => {
     const textToSpeak = userInput.trim() || translatedOutput.trim();
     if (!textToSpeak || voiceRunning) return;
-    if (!isHomeWifi && liveBalance <= 0) {
+    if (liveBalance <= 0) {
       setInsufficientModalOpen(true);
       return;
     }
@@ -1159,7 +1153,7 @@ export function PlaygroundPage({
     const prompt = userInput.trim() || translatedOutput.trim();
     if (!prompt || musicRunning) return;
     const songCost = 0.10;
-    if (!isHomeWifi && (liveBalance < songCost || liveBalance <= 0)) {
+    if (liveBalance < songCost || liveBalance <= 0) {
       setInsufficientModalOpen(true);
       return;
     }
@@ -1344,7 +1338,7 @@ export function PlaygroundPage({
 
   const handleRunDubbing = async () => {
     if (!dubbingFile || dubbingRunning) return;
-    if (!isHomeWifi && liveBalance <= 0) {
+    if (liveBalance <= 0) {
       setInsufficientModalOpen(true);
       return;
     }
@@ -1731,12 +1725,6 @@ export function PlaygroundPage({
             >
               ${formatUsd(liveBalance)}
             </span>
-            {isHomeWifi && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Wi-Fi Unlimited Free Access
-              </span>
-            )}
           </div>
 
           <button

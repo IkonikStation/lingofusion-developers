@@ -531,46 +531,7 @@ function translatePhrase(input: string, fromLanguage: string, toLanguage: string
   return dictionaryMap[targetLower] ?? `[${toLanguage} — ${modelId}] ${input.trim()}`;
 }
 
-// In-memory cache for network whitelisting status (e.g. user's home Wi-Fi)
-let isNetworkWhitelistedCache: boolean | null = null;
-let networkWhitelistedCheckPromise: Promise<boolean> | null = null;
-
-export async function checkNetworkWhitelisted(): Promise<boolean> {
-  if (isNetworkWhitelistedCache !== null) {
-    return isNetworkWhitelistedCache;
-  }
-  if (networkWhitelistedCheckPromise) {
-    return networkWhitelistedCheckPromise;
-  }
-  networkWhitelistedCheckPromise = (async () => {
-    try {
-      const res = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/network-status`, {
-        cache: "no-store",
-      });
-      if (res.ok) {
-        const data = await res.json().catch(() => ({}));
-        isNetworkWhitelistedCache = Boolean(data.is_free_access || data.is_whitelisted);
-        return isNetworkWhitelistedCache;
-      }
-    } catch {
-      // Offline or network error
-    }
-    isNetworkWhitelistedCache = false;
-    return false;
-  })();
-  return networkWhitelistedCheckPromise;
-}
-
-export function isCurrentNetworkWhitelistedSync(): boolean {
-  return Boolean(isNetworkWhitelistedCache);
-}
-
 function applyCharge(state: BrowserState, cost: number) {
-  // If the user's device is connected via their whitelisted home Wi-Fi network,
-  // all usage is completely free of charge and does not require or deduct balance.
-  if (isCurrentNetworkWhitelistedSync()) {
-    return;
-  }
   const account = state.dashboard.account;
   if (account.paidBalance + account.rewardBalance < cost || account.paidBalance + account.rewardBalance <= 0) {
     fail("Insufficient balance. Please deposit credits.");
@@ -726,7 +687,7 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
     projectId = auth.project.id;
   }
 
-  if (!isCurrentNetworkWhitelistedSync() && (state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) <= 0) {
+  if ((state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) <= 0) {
     fail("Insufficient balance. Please deposit credits.");
   }
 
@@ -1008,7 +969,7 @@ export async function streamChatCompletionBrowser(
   signal?: AbortSignal,
 ): Promise<Response> {
   const state = loadState();
-  if (!isCurrentNetworkWhitelistedSync() && (state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) <= 0) {
+  if ((state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) <= 0) {
     fail("Insufficient balance. Please deposit credits.");
   }
 
@@ -1095,7 +1056,7 @@ async function runImageTranslationBrowser(
   source: "api" | "playground" = "playground",
 ) {
   const started = Date.now();
-  if (!isCurrentNetworkWhitelistedSync() && (state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) <= 0) {
+  if ((state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) <= 0) {
     fail("Insufficient balance. Please deposit credits.");
   }
 
@@ -1305,7 +1266,7 @@ async function runSpeechBrowser(state: BrowserState, options?: RequestInit) {
   const modelName = isFlash ? "LingoFusion Voice Flash" : "LingoFusion Voice";
   const cost = Number(((input.length / 1000) * rate).toFixed(6));
 
-  if (!isCurrentNetworkWhitelistedSync() && (state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) < cost) {
+  if ((state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) < cost) {
     fail("Insufficient balance. Please deposit credits.");
   }
 
@@ -1394,7 +1355,7 @@ async function runMusic(state: BrowserState, options?: RequestInit) {
   const durationMinutes = durationSeconds / 60;
   const cost = Number((model.priceUsd ?? 0.10).toFixed(4));
 
-  if (!isCurrentNetworkWhitelistedSync() && (state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) < cost) {
+  if ((state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) < cost) {
     fail("Insufficient balance. Please deposit credits.");
   }
 
@@ -1515,7 +1476,7 @@ async function runDubbingBrowser(state: BrowserState, options?: RequestInit) {
   const durationMinutes = durationSeconds / 60;
   const cost = Number(((model.priceUsd ?? 3.50) * durationMinutes).toFixed(6));
 
-  if (!isCurrentNetworkWhitelistedSync() && (state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) < cost) {
+  if ((state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) < cost) {
     fail("Insufficient balance. Please deposit credits.");
   }
 
