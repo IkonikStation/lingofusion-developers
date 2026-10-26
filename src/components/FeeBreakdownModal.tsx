@@ -49,7 +49,7 @@ export function FeeBreakdownModal({
               id="fee-breakdown-title"
               className="text-base font-semibold text-neutral-950 dark:text-white"
             >
-              Fee Breakdown
+              About processing fees
             </h3>
           </div>
           <button
@@ -63,7 +63,7 @@ export function FeeBreakdownModal({
         </div>
 
         <p className="mt-4 text-xs leading-relaxed text-neutral-600 dark:text-neutral-300">
-          Payment Processing Breakdown. Card networks and issuing banks apply a standard interchange and settlement fee to every online transaction. To ensure that 100% of your deposit goes directly toward your usable API balance, this processing cost is billed at cost rather than deducted from your compute credits.
+          The full credit amount goes to the wallet or gift. Card processing is added separately, so the total payment includes both amounts.
         </p>
 
         <div className="mt-5 divide-y divide-neutral-200/80 rounded-xl border border-neutral-200/80 bg-neutral-50/70 text-xs dark:divide-white/10 dark:border-white/10 dark:bg-white/[0.03]">

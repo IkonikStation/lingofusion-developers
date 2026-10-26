@@ -1067,3 +1067,98 @@ a {
   .playground-configuration { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 24px; }
   .playground-actions { width: auto; border-top: 0; padding-top: 0; }
 }
+
+/* Wallet funding and gifting share a compact, readable checkout preview. */
+.funding-dialog { max-width: 920px; max-height: calc(100dvh - 48px); color: #171717; }
+.dark .funding-dialog { color: #f5f5f5; }
+.funding-header { padding: 28px 32px 24px; border-bottom: 1px solid #e5e5e5; }
+.funding-eyebrow { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .14em; color: #737373; }
+.funding-close { display: grid; place-items: center; width: 36px; height: 36px; flex-shrink: 0; border-radius: 50%; color: #737373; background: #f5f5f5; }
+.funding-close:hover { background: #e5e5e5; color: #171717; }
+.funding-tabs { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; margin-top: 24px; }
+.funding-tabs > button { display: flex; align-items: center; gap: 12px; padding: 16px; min-width: 0; border: 1px solid #e5e5e5; border-radius: 14px; color: #737373; }
+.funding-tabs > button[aria-pressed="true"] { border-color: #262626; background: #fafafa; color: #171717; box-shadow: 0 0 0 1px #262626; }
+.funding-dialog[data-destination="gift"] .funding-tabs > button[aria-pressed="true"] { border-color: #7c3aed; background: #faf5ff; color: #6d28d9; box-shadow: 0 0 0 1px #7c3aed; }
+.funding-radio { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; border: 1px solid #d4d4d4; flex-shrink: 0; }
+.funding-tabs [aria-pressed="true"] .funding-radio { background: currentColor; border-color: currentColor; }
+.funding-radio svg { color: #fff; }
+.funding-grid { display: grid; grid-template-columns: minmax(0,1.1fr) minmax(0,1fr); }
+.funding-form { padding: 28px 32px; min-width: 0; }
+.funding-currency { border: 1px solid #e5e5e5; border-radius: 6px; padding: 3px 6px; font-size: 10px; font-weight: 500; color: #737373; }
+.funding-presets button { position: relative; display: flex; align-items: center; justify-content: center; height: 56px; border: 1px solid #e5e5e5; border-radius: 12px; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; background: #fff; color: #525252; }
+.funding-presets button:hover { background: #fafafa; border-color: #a3a3a3; }
+.funding-presets button[aria-pressed="true"] { border-color: #262626; background: #262626; color: #fff; }
+.funding-presets button svg { position: absolute; top: 5px; right: 5px; width: 11px; height: 11px; opacity: .75; }
+.funding-dialog[data-destination="gift"] .funding-presets button[aria-pressed="true"] { background: #7c3aed; border-color: #7c3aed; }
+.funding-amount-input { display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 0 16px; border: 1px solid #d4d4d4; border-radius: 12px; }
+.funding-amount-input:focus-within { outline: 2px solid #a3a3a3; outline-offset: 2px; }
+.funding-amount-input input { width: 100%; min-width: 0; height: 50px; background: transparent; outline: none; font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.funding-amount-input > span { color: #a3a3a3; font-size: 12px; }
+.funding-amount-input > span:first-child { font-size: 18px; }
+.funding-balance { display: flex; align-items: center; gap: 12px; margin-top: 24px; border: 1px solid #d1e8dd; background: #f4faf7; padding: 16px; border-radius: 12px; }
+.funding-recipient { border-top: 1px solid #e5e5e5; margin-top: 24px; padding-top: 24px; }
+.funding-label { display: block; font-size: 12px; font-weight: 500; color: #525252; }
+.funding-field { margin-top: 8px; display: block; width: 100%; min-width: 0; border: 1px solid #d4d4d4; border-radius: 10px; padding: 12px; background: #fff; color: #171717; font-size: 14px; outline: none; }
+.funding-field:focus { border-color: #8b5cf6; box-shadow: 0 0 0 3px #8b5cf61a; }
+.funding-summary { min-width: 0; padding: 28px; border-left: 1px solid #e5e5e5; background: #fafafa; }
+.funding-credit-card { padding: 24px; border-radius: 16px; background: linear-gradient(135deg,#193e36,#122b29); color: #fff; box-shadow: 0 6px 18px #122b2912; }
+.funding-card-brand { font-size: 13px; font-weight: 600; letter-spacing: -.02em; }
+.funding-gift-card { background: radial-gradient(ellipse at top right,#8853cb70,transparent 75%),linear-gradient(125deg,#412363,#241a3d); }
+.funding-gift-copy { overflow-wrap: anywhere; }
+.funding-gift-copy > p:last-child { max-height: 120px; overflow-y: auto; }
+.funding-fee-link { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: #737373; text-decoration: underline; text-underline-offset: 3px; }
+.funding-receipt > div { display: flex; justify-content: space-between; gap: 12px; padding-bottom: 12px; font-size: 13px; }
+.funding-receipt dt { color: #737373; }
+.funding-receipt dd { flex-shrink: 0; font-variant-numeric: tabular-nums; font-weight: 500; }
+.funding-receipt .funding-total { padding: 16px 0 0; margin-top: 2px; border-top: 1px solid #e5e5e5; align-items: baseline; }
+.funding-total dt { color: inherit; font-size: 14px; font-weight: 600; }
+.funding-total dd { font-size: 24px; font-weight: 600; letter-spacing: -.04em; }
+.funding-total dd span { font-size: 11px; font-weight: 400; letter-spacing: 0; color: #a3a3a3; }
+.funding-checkout { display: flex; justify-content: center; align-items: center; gap: 8px; width: 100%; min-height: 48px; border-radius: 12px; background: #171717; color: #fff; font-size: 13px; font-weight: 600; }
+.funding-checkout:hover { background: #404040; }
+.funding-checkout:disabled { opacity: .45; cursor: not-allowed; }
+.funding-dialog[data-destination="gift"] .funding-checkout { background: #7c3aed; }
+.funding-dialog[data-destination="gift"] .funding-checkout:hover { background: #6d28d9; }
+.funding-auto { border-top: 1px solid #e5e5e5; }
+.funding-auto > summary { display: flex; align-items: center; gap: 10px; list-style: none; padding: 20px 32px; cursor: pointer; font-size: 13px; font-weight: 500; }
+.funding-auto > summary::-webkit-details-marker { display: none; }
+.funding-auto[open] .funding-auto-chevron { transform: rotate(180deg); }
+.funding-dialog :where(button, summary):focus-visible { outline: 2px solid #8b5cf6; outline-offset: 3px; }
+.dark :is(.funding-header,.funding-recipient,.funding-summary,.funding-auto,.funding-total) { border-color: #ffffff14; }
+.dark .funding-tabs > button, .dark .funding-presets button { border-color: #ffffff1f; color: #d4d4d4; background: #171717; }
+.dark .funding-tabs > button[aria-pressed="true"] { background: #262626; color: #fff; border-color: #737373; box-shadow: 0 0 0 1px #737373; }
+.dark .funding-dialog[data-destination="gift"] .funding-tabs > button[aria-pressed="true"] { background: #7c3aed15; color: #c4b5fd; }
+.dark .funding-presets button[aria-pressed="true"] { background: #f5f5f5; color: #171717; border-color: #f5f5f5; }
+.dark .funding-dialog[data-destination="gift"] .funding-presets button[aria-pressed="true"] { color: #fff; }
+.dark .funding-summary { background: #ffffff03; }
+.dark .funding-field { background: #0a0a0a; color: #f5f5f5; border-color: #ffffff26; }
+.dark .funding-label { color: #d4d4d4; }
+.dark .funding-balance { background: #10b98108; border-color: #10b98133; }
+.dark .funding-amount-input,.dark .funding-currency { border-color: #ffffff26; }
+.dark .funding-close { background: #ffffff0a; color: #a3a3a3; }
+.dark .funding-checkout { background: #f5f5f5; color: #171717; }
+.dark .funding-dialog[data-destination="gift"] .funding-checkout { color: #fff; }
+@media (max-width: 767px) {
+  .funding-dialog { max-width: 560px; }
+  .funding-grid { grid-template-columns: minmax(0,1fr); }
+  .funding-summary { border-left: 0; border-top: 1px solid #e5e5e5; }
+}
+@media (max-width: 639px) {
+  .funding-overlay { padding: 12px; }
+  .funding-dialog { border-radius: 20px; }
+  .funding-header { padding: 24px 20px 20px; }
+  .funding-header h2 { font-size: 22px; line-height: 1.25; }
+  .funding-form,.funding-summary { padding: 24px 20px; }
+  .funding-tabs { margin-top: 20px; gap: 8px; }
+  .funding-tabs > button { padding: 12px 10px; gap: 8px; }
+  .funding-tabs > button > svg { width: 16px; height: 16px; }
+  .funding-tabs > button span span:last-child { display: none; }
+  .funding-radio { width: 16px; height: 16px; }
+  .funding-close { min-width: 36px; min-height: 36px; }
+  .funding-credit-card { padding: 20px; }
+  .funding-auto > summary { padding: 20px; }
+  .funding-auto > div { padding-inline: 20px; }
+  .funding-dialog input,.funding-dialog textarea { font-size: 16px; }
+  .funding-dialog input[type="checkbox"] { min-height: 0; }
+}
+.dark .funding-tabs [aria-pressed="true"] .funding-radio svg { color: #171717; }

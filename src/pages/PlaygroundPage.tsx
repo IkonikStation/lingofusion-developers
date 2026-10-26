@@ -7,13 +7,11 @@ import {
   Clapperboard,
   ClipboardCopy,
   Copy,
-  CreditCard,
   Download,
   FileText,
   Gauge,
   Gift,
   Globe,
-  HelpCircle,
   Image as ImageIcon,
   Link2,
   Loader2,
@@ -21,7 +19,6 @@ import {
   Music,
   Play,
   Plus,
-  ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   Square,
@@ -35,6 +32,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { WalletFundingPanel } from "../components/WalletFundingPanel";
 import { FeeBreakdownModal } from "../components/FeeBreakdownModal";
 import { LiveMarkdownEditor } from "../components/LiveMarkdownEditor";
 import { MarkdownView } from "../components/MarkdownView";
@@ -232,6 +230,39 @@ export function PlaygroundPage({
     claimUrl?: string;
   } | null>(null);
   const [claimCopied, setClaimCopied] = useState<boolean>(false);
+
+  const fundingDialogRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!depositModalOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    document.body.style.overflow = "hidden";
+    const frame = requestAnimationFrame(() => fundingDialogRef.current?.querySelector<HTMLButtonElement>('button')?.focus());
+    return () => {
+      cancelAnimationFrame(frame);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus({ preventScroll: true });
+    };
+  }, [depositModalOpen]);
+
+  useEffect(() => {
+    if (!depositModalOpen || showFeeModal) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !depositBusy) setDepositModalOpen(false);
+      if (event.key !== "Tab") return;
+      const controls = Array.from(fundingDialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input, textarea, summary') ?? [])
+        .filter((element) => element.getClientRects().length > 0);
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault(); last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault(); first?.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [depositModalOpen, depositBusy, showFeeModal]);
 
   // Auto Top-Up settings state
   const [autoTopUpEnabled, setAutoTopUpEnabled] = useState<boolean>(false);
@@ -1747,7 +1778,7 @@ export function PlaygroundPage({
       {depositModalOpen &&
         typeof document !== "undefined" &&
         createPortal(
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+          <div className="funding-overlay fixed inset-0 z-[9999] flex items-center justify-center p-4">
             {/* Full viewport dark out-of-focus backdrop covering Header, Sidebar and entire browser page */}
             <div
               className="fixed inset-0 bg-neutral-950/60 backdrop-blur-sm transition-opacity"
@@ -1760,366 +1791,34 @@ export function PlaygroundPage({
             <div
               role="dialog"
               aria-modal="true"
-              className="relative z-10 my-auto max-h-[92vh] w-full max-w-4xl lg:max-w-5xl overflow-y-auto rounded-2xl border border-neutral-200/90 bg-white font-sans shadow-2xl transition-all duration-200 dark:border-white/10 dark:bg-neutral-900"
+              aria-labelledby="wallet-funding-title"
+              ref={fundingDialogRef}
+              data-testid="wallet-funding-dialog"
+              data-destination={depositTab}
+              className="funding-dialog relative z-10 my-auto w-full overflow-y-auto rounded-3xl border border-neutral-200/90 bg-white font-sans shadow-2xl dark:border-white/10 dark:bg-neutral-900"
             >
-          {/* Header */}
-          <div className="border-b border-neutral-200/80 px-6 py-4 dark:border-white/10 sm:px-7">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-neutral-100 text-neutral-900 dark:bg-white/10 dark:text-white">
-                  {depositTab === "gift" ? (
-                    <Gift className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                  ) : (
-                    <Wallet className="h-4 w-4" />
-                  )}
-                </div>
-                <div>
-                  <h2 className="text-base font-semibold tracking-tight text-neutral-950 dark:text-white">
-                    {depositTab === "gift" ? "Gift LingoFusion Credits" : "Add Funds"}
-                  </h2>
-                  <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                    {depositTab === "gift"
-                      ? "Send credits directly to any email address"
-                      : "Top up your LingoFusion credit balance ($1 – $50,000 USD)"}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                disabled={depositBusy}
-                onClick={() => setDepositModalOpen(false)}
-                className="rounded-lg p-1.5 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-white/10 dark:hover:text-white"
+              <WalletFundingPanel
+                tab={depositTab}
+                onTabChange={setDepositTab}
+                amount={depositAmount}
+                onAmountChange={setDepositAmount}
+                balance={liveBalance}
+                credit={depositBreakdown.netDepositedUsd}
+                fee={depositBreakdown.estimatedStripeFeeUsd}
+                total={depositBreakdown.grossChargedUsd}
+                recipient={giftRecipientEmail}
+                onRecipientChange={setGiftRecipientEmail}
+                sender={giftSenderName}
+                onSenderChange={setGiftSenderName}
+                message={giftMessage}
+                onMessageChange={setGiftMessage}
+                busy={depositBusy}
+                status={depositStatusMessage}
+                autoTopUpEnabled={autoTopUpEnabled}
+                onClose={() => setDepositModalOpen(false)}
+                onFeeDetails={() => setShowFeeModal(true)}
+                onCheckout={handleDepositCredit}
               >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            {/* Mode Switcher: Top-Up Myself vs Gift to Someone Else */}
-            <div className="mt-3.5 inline-flex rounded-xl border border-neutral-200 bg-neutral-100/70 p-0.5 dark:border-white/10 dark:bg-neutral-950">
-              <button
-                type="button"
-                onClick={() => setDepositTab("self")}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition ${
-                  depositTab === "self"
-                    ? "bg-white text-neutral-950 shadow-xs dark:bg-neutral-800 dark:text-white"
-                    : "text-neutral-500 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white"
-                }`}
-              >
-                <Wallet className="h-3 w-3" />
-                <span>My Balance</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setDepositTab("gift")}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition ${
-                  depositTab === "gift"
-                    ? "bg-purple-600 text-white shadow-xs"
-                    : "text-neutral-500 hover:text-purple-600 dark:text-neutral-400 dark:hover:text-purple-400"
-                }`}
-              >
-                <Gift className="h-3 w-3" />
-                <span>Gift to Someone</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Body: Two-Column Layout on Mac/PC Web */}
-            <div
-              className="grid divide-y divide-neutral-200/80 dark:divide-white/10 md:grid-cols-[1.25fr_0.95fr] md:divide-x md:divide-y-0"
-            >
-              {/* Left Column: Presets + Custom Input + Info/Gift fields */}
-              <div className="space-y-4 p-6 sm:p-7">
-                {depositTab === "gift" && (
-                  <div className="space-y-3.5 rounded-2xl border border-purple-200/80 bg-purple-50/50 p-4 sm:p-5 dark:border-purple-500/20 dark:bg-purple-500/[0.05]">
-                    <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-                      <div>
-                        <label className="block text-xs font-semibold text-purple-950 dark:text-purple-200">
-                          Recipient Email <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                          type="email"
-                          placeholder="recipient@example.com"
-                          value={giftRecipientEmail}
-                          onChange={(e) => setGiftRecipientEmail(e.target.value)}
-                          className="mt-1 h-10 w-full rounded-xl border border-purple-200 bg-white px-3 text-xs text-neutral-900 outline-none transition focus:border-purple-600 focus:ring-1 focus:ring-purple-600 dark:border-white/15 dark:bg-neutral-950 dark:text-white dark:focus:border-purple-400"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-purple-950 dark:text-purple-200">
-                          Your Name (optional)
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Your name or nickname"
-                          value={giftSenderName}
-                          onChange={(e) => setGiftSenderName(e.target.value)}
-                          className="mt-1 h-10 w-full rounded-xl border border-purple-200 bg-white px-3 text-xs text-neutral-900 outline-none transition focus:border-purple-600 focus:ring-1 focus:ring-purple-600 dark:border-white/15 dark:bg-neutral-950 dark:text-white dark:focus:border-purple-400"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between">
-                        <label className="block text-xs font-semibold text-purple-950 dark:text-purple-200">
-                          Personal Gift Message (optional)
-                        </label>
-                        <span className="font-sans text-[11px] font-medium text-purple-700/70 dark:text-purple-300/70">
-                          {giftMessage.length} / 500 characters
-                        </span>
-                      </div>
-                      <textarea
-                        rows={4}
-                        maxLength={500}
-                        placeholder="Write a personalized note to accompany your gift (e.g. 'Enjoy translating your new project with LingoFusion!')..."
-                        value={giftMessage}
-                        onChange={(e) => setGiftMessage(e.target.value.slice(0, 500))}
-                        className="mt-1.5 w-full resize-y rounded-xl border border-purple-200 bg-white p-3 text-xs leading-relaxed text-neutral-900 outline-none transition focus:border-purple-600 focus:ring-1 focus:ring-purple-600 dark:border-white/15 dark:bg-neutral-950 dark:text-white dark:focus:border-purple-400"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div>
-                  <div className="mb-2.5 flex items-center justify-between">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                      {depositTab === "gift" ? "Gift Amount" : "Select Credit Tier"}
-                    </label>
-                    <span className="font-sans text-[11px] font-medium text-neutral-400">USD</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2.5">
-                    {[5, 10, 25, 50, 100, 250].map((preset) => {
-                      const selected = depositAmount === preset;
-                      return (
-                        <button
-                          key={preset}
-                          type="button"
-                          onClick={() => setDepositAmount(preset)}
-                          className={`flex h-12 flex-col items-center justify-center rounded-xl border font-sans tabular-nums text-sm font-semibold transition ${
-                            selected
-                              ? depositTab === "gift"
-                                ? "border-purple-600 bg-purple-600 text-white shadow-xs"
-                                : "border-neutral-950 bg-neutral-950 text-white shadow-xs dark:border-white dark:bg-white dark:text-neutral-950"
-                              : "border-neutral-200 bg-neutral-50/50 text-neutral-800 hover:border-neutral-300 hover:bg-neutral-100/80 dark:border-white/10 dark:bg-white/[0.02] dark:text-neutral-200 dark:hover:bg-white/[0.06]"
-                          }`}
-                        >
-                          <span>${preset}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Custom Amount Input */}
-                <div>
-                  <div className="mb-2 flex items-center justify-between">
-                    <label
-                      htmlFor="deposit-amount-input"
-                      className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400"
-                    >
-                      Custom Amount
-                    </label>
-                    <span className="text-[11px] text-neutral-400">Min $1 • Max $50,000 USD</span>
-                  </div>
-                  <div className="relative flex items-center">
-                    <span className="pointer-events-none absolute left-4 font-sans text-base font-medium text-neutral-400">
-                      $
-                    </span>
-                    <input
-                      id="deposit-amount-input"
-                      type="number"
-                      min={1}
-                      max={50000}
-                      step={1}
-                      aria-label="Custom amount in USD"
-                      data-testid="deposit-amount-input"
-                      value={depositAmount || ""}
-                      onChange={(e) => {
-                        const val = Number(e.target.value);
-                        setDepositAmount(val > 50000 ? 50000 : val);
-                      }}
-                      className="h-12 w-full rounded-xl border border-neutral-200 bg-white pl-8 pr-16 font-sans tabular-nums text-base font-semibold text-neutral-950 outline-none transition focus:border-neutral-950 dark:border-white/15 dark:bg-neutral-950 dark:text-white dark:focus:border-white"
-                    />
-                    <span className="pointer-events-none absolute right-4 font-sans text-xs font-semibold text-neutral-400">
-                      USD
-                    </span>
-                  </div>
-                </div>
-
-                {/* Balance Preview or Gift Notice */}
-                {depositTab === "self" ? (
-                  <div className="flex items-center justify-between rounded-xl border border-neutral-200/80 bg-neutral-50/80 px-4 py-3 text-xs dark:border-white/10 dark:bg-white/[0.03]">
-                    <span className="font-medium text-neutral-600 dark:text-neutral-400">Balance after deposit</span>
-                    <div className="flex items-center gap-2 font-sans tabular-nums">
-                      <span className="text-neutral-400 dark:text-neutral-500">${formatUsd(liveBalance)}</span>
-                      <span className="text-neutral-400">→</span>
-                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                        ${formatUsd(liveBalance + depositBreakdown.netDepositedUsd)} USD
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-purple-200/70 bg-purple-50/40 p-3 text-xs text-purple-900 dark:border-purple-500/20 dark:bg-purple-500/[0.04] dark:text-purple-200">
-                    <p className="font-semibold">🎁 Recipient receives 100% of the credits</p>
-                    <p className="mt-0.5 text-[11px] opacity-80">
-                      You won't receive credits on your account. The recipient can claim them anytime using their email address.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Right Column: Order Summary & Checkout CTA */}
-              <div className="flex flex-col justify-between bg-neutral-50/60 p-6 dark:bg-white/[0.02] sm:p-7">
-                <div>
-                  {/* Gift Card Preview (for gifting someone - purple gradient) */}
-                  {depositTab === "gift" && (
-                    <div className="mb-5 overflow-hidden rounded-2xl border border-purple-200/90 bg-gradient-to-br from-purple-900 via-purple-950 to-neutral-950 p-4 text-white shadow-lg dark:border-purple-500/30">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 backdrop-blur-xs">
-                            <Gift className="h-4 w-4 text-purple-300" />
-                          </div>
-                          <span className="text-[11px] font-semibold uppercase tracking-wider text-purple-200">
-                            Gift Card Preview
-                          </span>
-                        </div>
-                        <span className="rounded-full bg-purple-500/25 px-2 py-0.5 text-[10px] font-medium text-purple-200">
-                          Recipient View
-                        </span>
-                      </div>
-
-                      <div className="mt-3.5">
-                        <div className="font-sans text-2xl font-extrabold tracking-tight text-white">
-                          +${formatUsd(depositBreakdown.netDepositedUsd)} USD
-                        </div>
-                        <p className="mt-1 text-[11px] text-purple-200/80">
-                          To: <span className="font-medium text-white">{giftRecipientEmail || "recipient@example.com"}</span>
-                        </p>
-                        {giftSenderName && (
-                          <p className="text-[11px] text-purple-200/80">
-                            From: <span className="font-medium text-white">{giftSenderName}</span>
-                          </p>
-                        )}
-                      </div>
-
-                      {giftMessage ? (
-                        <div className="mt-3 max-h-24 overflow-y-auto rounded-xl bg-white/10 p-2.5 text-[11px] italic leading-relaxed text-purple-100 backdrop-blur-xs">
-                          "{giftMessage}"
-                        </div>
-                      ) : (
-                        <div className="mt-3 rounded-xl border border-dashed border-white/20 p-2.5 text-center text-[10px] italic text-purple-300/60">
-                          Your personalized note will preview here
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                      Summary
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowFeeModal(true);
-                      }}
-                      className="inline-flex items-center gap-1 text-[11px] font-medium text-neutral-500 underline transition hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white"
-                    >
-                      <HelpCircle className="h-3 w-3" /> Where is the extra cost coming from?
-                    </button>
-                  </div>
-
-                  <div
-                    data-testid="gross-charge-preview"
-                    className="mt-4 space-y-3 text-xs"
-                  >
-                    <div className="flex items-center justify-between text-neutral-600 dark:text-neutral-300">
-                      <span>{depositTab === "gift" ? "Gift credit" : "Net credit added"}</span>
-                      <span className="font-sans tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
-                        +${formatUsd(depositBreakdown.netDepositedUsd)} USD
-                      </span>
-                    </div>
-                    {depositTab === "gift" && giftRecipientEmail && (
-                      <div className="flex items-center justify-between text-neutral-500 dark:text-neutral-400">
-                        <span>Recipient</span>
-                        <span className="max-w-[130px] truncate font-medium text-neutral-800 dark:text-neutral-200">
-                          {giftRecipientEmail}
-                        </span>
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between text-neutral-500 dark:text-neutral-400">
-                      <span>Included card handling</span>
-                      <span className="font-sans tabular-nums">
-                        ${formatUsd(depositBreakdown.estimatedStripeFeeUsd)} USD
-                      </span>
-                    </div>
-                    <div className="border-t border-neutral-200/80 pt-3 dark:border-white/10">
-                      <div className="flex items-baseline justify-between">
-                        <span className="text-lg font-bold tracking-tight text-neutral-950 dark:text-white">
-                          Total
-                        </span>
-                        <span className="font-sans tabular-nums text-lg font-bold tracking-tight text-neutral-950 dark:text-white">
-                          ${formatUsd(depositBreakdown.grossChargedUsd)}{" "}
-                          <span className="text-xs font-medium text-neutral-500">USD</span>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-6 space-y-3">
-                  {depositStatusMessage && (
-                    <p className="text-center text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                      {depositStatusMessage}
-                    </p>
-                  )}
-
-                  <button
-                    type="button"
-                    disabled={
-                      depositBusy ||
-                      !Number.isFinite(depositAmount) ||
-                      depositAmount < 1 ||
-                      depositAmount > 50000 ||
-                      (depositTab === "gift" && !giftRecipientEmail)
-                    }
-                    data-testid="simulate-webhook-btn"
-                    onClick={handleDepositCredit}
-                    className={`pressable inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold text-white shadow-sm transition disabled:opacity-50 ${
-                      depositTab === "gift"
-                        ? "bg-purple-600 hover:bg-purple-700"
-                        : "bg-neutral-950 hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
-                    }`}
-                  >
-                    {depositBusy ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Redirecting to Stripe...
-                      </>
-                    ) : (
-                      <>
-                        {depositTab === "gift" ? (
-                          <>
-                            <Gift className="h-4 w-4" />
-                            Continue to Checkout
-                          </>
-                        ) : (
-                          <>
-                            <CreditCard className="h-4 w-4" />
-                            Continue to Checkout
-                          </>
-                        )}
-                      </>
-                    )}
-                  </button>
-
-                  <div className="flex items-center justify-center gap-1.5 text-[11px] text-neutral-400 dark:text-neutral-500">
-                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                    <span>Secured by Stripe • Instant credit</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
           {/* Auto Top-Up Section (Shown when funding own balance) */}
           {depositTab === "self" && (
             <div
@@ -2310,6 +2009,7 @@ export function PlaygroundPage({
             )}
           </div>
           )}
+              </WalletFundingPanel>
             </div>
           </div>,
           document.body,
