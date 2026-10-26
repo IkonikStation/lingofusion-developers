@@ -1162,3 +1162,17 @@ a {
   .funding-dialog input[type="checkbox"] { min-height: 0; }
 }
 .dark .funding-tabs [aria-pressed="true"] .funding-radio svg { color: #171717; }
+
+.gift-receiver-preview { max-width: 760px; margin-inline: auto; }
+.gift-email-headers { margin: 0 24px 16px; padding: 16px; background: #fafafa; border: 1px solid #e5e5e5; border-radius: 12px; font-size: 12px; }
+.gift-email-headers > div { display: grid; grid-template-columns: 48px minmax(0,1fr); gap: 12px; margin-block: 6px; }
+.gift-email-headers dt { color: #a3a3a3; }
+.gift-email-headers dd { overflow-wrap: anywhere; }
+.gift-email-frame { display: block; width: 100%; height: 800px; border: 0; background: #f5f3f8; }
+.gift-claim-card { margin-inline: auto; padding: 32px 28px; max-width: 460px; text-align: center; }
+.dark .gift-email-headers { background: #ffffff05; border-color: #ffffff1a; }
+.funding-sender { padding: 16px; border: 1px solid #e5e5e5; border-radius: 12px; margin-bottom: 24px; }
+.dark .funding-sender { border-color: #ffffff1a; }
+.funding-preview-button { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 44px; padding: 10px; border: 1px solid #c4b5fd; border-radius: 12px; color: #7c3aed; font-size: 12px; font-weight: 600; }
+.dark .funding-preview-button { color: #c4b5fd; border-color: #8b5cf64d; }
+@media (max-width: 639px) { .gift-claim-card { padding: 28px 20px; } .gift-email-headers { margin-inline: 16px; } .gift-email-frame { height: 900px; } }

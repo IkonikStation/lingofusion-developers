@@ -387,6 +387,7 @@ export default function App() {
                   <ModelsPage onOpenModel={navigate} />
                 ) : activePage === "Playground" ? (
                   <PlaygroundPage
+                    onOpenAuth={() => setAuthModalOpen(true)}
                     onOpenDashboard={() => setDashboardOpen(true)}
                     onNavigate={navigate}
                     balanceUsd={balanceUsd}

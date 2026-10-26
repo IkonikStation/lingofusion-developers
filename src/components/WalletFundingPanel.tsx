@@ -23,6 +23,12 @@ type WalletFundingPanelProps = {
   onClose: () => void;
   onFeeDetails: () => void;
   onCheckout: () => void;
+  senderEmail?: string;
+  gmailReady: boolean;
+  gmailConnected: boolean;
+  gmailBusy: boolean;
+  onConnectGmail: () => void;
+  onPreview: () => void;
   children: ReactNode;
 };
 
@@ -63,6 +69,13 @@ export function WalletFundingPanel(props: WalletFundingPanelProps) {
 
       <div className="funding-grid">
         <div className="funding-form">
+          {gift && <div className="funding-sender">
+            <p className="funding-label">From your Google account</p>
+            <p className="mt-2 break-all text-sm font-semibold">{props.senderEmail || "Sign in with Google"}</p>
+            <p className="mt-2 text-xs leading-5 text-neutral-500 dark:text-neutral-400">{props.gmailConnected ? "Gifts will be emailed from this Gmail account after payment." : "Connect Gmail to allow LingoFusion to send your gift from this email address."}</p>
+            {!props.gmailConnected && <button type="button" onClick={props.onConnectGmail} disabled={props.gmailBusy || (!!props.senderEmail && !props.gmailReady)} className="mt-3 min-h-10 rounded-lg border border-neutral-300 px-3 text-xs font-semibold disabled:opacity-50 dark:border-white/15">{props.gmailBusy ? "Connecting…" : props.senderEmail ? "Connect Gmail" : "Sign in with Google"}</button>}
+            {props.senderEmail && !props.gmailReady && <p className="mt-2 text-xs text-neutral-500">Gmail sending is being set up. You can preview the recipient experience below.</p>}
+          </div>}
           <section aria-labelledby="funding-amount-title">
             <div className="flex items-center justify-between gap-3">
               <h3 id="funding-amount-title" className="text-sm font-semibold text-neutral-950 dark:text-white">Choose {gift ? "a gift" : "an"} amount</h3>
@@ -92,7 +105,7 @@ export function WalletFundingPanel(props: WalletFundingPanelProps) {
                 <div>
                   <label htmlFor="funding-recipient" className="funding-label">Recipient email <span className="text-neutral-400">(required)</span></label>
                   <input id="funding-recipient" type="email" required placeholder="someone@example.com" value={props.recipient} onChange={(event) => props.onRecipientChange(event.target.value)} className="funding-field" aria-describedby="funding-recipient-hint" />
-                  <p id="funding-recipient-hint" className="mt-2 text-xs leading-5 text-neutral-400">They can claim their credits using this email address.</p>
+                  <p id="funding-recipient-hint" className="mt-2 text-xs leading-5 text-neutral-400">The gift email goes to this inbox after payment. They can sign in with this address and claim whenever they like.</p>
                 </div>
                 <div>
                   <label htmlFor="funding-sender" className="funding-label">Your name <span className="text-neutral-400">(optional)</span></label>
@@ -119,7 +132,7 @@ export function WalletFundingPanel(props: WalletFundingPanelProps) {
             <div className="flex items-center justify-between gap-3"><span className="funding-card-brand">LingoFusion</span>{gift ? <Gift className="h-5 w-5" /> : <Wallet className="h-5 w-5" />}</div>
             <p className="mt-7 text-xs opacity-70">{gift ? "A gift of possibility" : "Credits for your next project"}</p>
             <p className="mt-1 text-4xl font-semibold tracking-tight tabular-nums">${formatUsd(props.credit)} <span className="text-sm font-normal opacity-60">USD</span></p>
-            {gift ? <div className="funding-gift-copy mt-5 border-t border-white/15 pt-4"><p className="text-xs opacity-70">To <span className="font-medium text-white">{props.recipient || "someone special"}</span></p>{props.sender && <p className="mt-1 text-xs opacity-70">From {props.sender}</p>}<p className={`mt-3 whitespace-pre-wrap text-sm leading-6 ${props.message ? "text-white/90" : "text-white/50"}`}>{props.message || "Your personal note will appear here."}</p></div> : <p className="mt-5 text-xs opacity-65">Available in your prepaid wallet after payment.</p>}
+            {gift ? <div className="funding-gift-copy mt-5 border-t border-white/15 pt-4"><p className="text-xs opacity-70">To <span className="font-medium text-white">{props.recipient || "someone special"}</span></p>{(props.senderEmail || props.sender) && <p className="mt-1 text-xs opacity-70">From {props.senderEmail || props.sender}</p>}<p className={`mt-3 whitespace-pre-wrap text-sm leading-6 ${props.message ? "text-white/90" : "text-white/50"}`}>{props.message || "Your personal note will appear here."}</p></div> : <p className="mt-5 text-xs opacity-65">Available in your prepaid wallet after payment.</p>}
           </div>
 
           <div className="mt-6 flex items-center justify-between gap-3"><h3 className="text-sm font-semibold text-neutral-950 dark:text-white">Order summary</h3><button type="button" onClick={props.onFeeDetails} className="funding-fee-link"><HelpCircle className="h-3.5 w-3.5" /> About fees</button></div>
@@ -130,7 +143,8 @@ export function WalletFundingPanel(props: WalletFundingPanelProps) {
           </dl>
           <p className="mt-3 text-xs leading-5 text-neutral-500 dark:text-neutral-400">{gift ? "Your recipient gets the full gift amount. Processing is added to your total." : "The full credit amount goes to your wallet. Processing is added to your total."}</p>
           {props.status && <p role="status" className="mt-4 text-sm text-emerald-700 dark:text-emerald-400">{props.status}</p>}
-          <button type="button" disabled={props.busy || invalidAmount || (gift && !props.recipient)} data-testid="simulate-webhook-btn" onClick={props.onCheckout} className="funding-checkout mt-6">
+          {gift && <button type="button" onClick={props.onPreview} className="funding-preview-button mt-5"><Gift className="h-4 w-4" /> Preview recipient experience · Free</button>}
+          <button type="button" disabled={props.busy || invalidAmount || (gift && (!props.recipient || !props.gmailConnected || !props.gmailReady))} data-testid="simulate-webhook-btn" onClick={props.onCheckout} className="funding-checkout mt-6">
             {props.busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
             {props.busy ? "Redirecting to Stripe…" : "Continue to checkout"}
           </button>

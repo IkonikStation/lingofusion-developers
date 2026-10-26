@@ -1601,7 +1601,7 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
       try {
         const edgeRes = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/create-checkout-session`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(getCurrentUser().sessionToken ? { Authorization: `Bearer ${getCurrentUser().sessionToken}` } : {}) },
           body: JSON.stringify({
             amount: depositAmount,
             userId,
@@ -1614,6 +1614,10 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
             returnUrl: body.returnUrl || returnPlaygroundUrl,
           }),
         });
+        if (!edgeRes.ok && body.isGift) {
+          const error = await edgeRes.json().catch(() => ({}));
+          throw new Error(error.message || "Gift checkout is unavailable.");
+        }
         if (edgeRes.ok) {
           const edgeSession = (await edgeRes.json()) as { id?: string; sessionId?: string; url?: string; checkoutUrl?: string };
           const sessionUrl = edgeSession.url || edgeSession.checkoutUrl;
@@ -1636,11 +1640,13 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
             };
           }
         }
-      } catch {
+      } catch (error) {
+        if (body.isGift) throw error;
         // Fallback to local checkout simulator if offline
       }
     }
 
+    if (body.isGift && !result) throw new Error("Gift checkout requires the live gift gateway.");
     if (!result) {
       const sessionId = randomId("cs_test");
       const checkoutUrl = `${basePath}/checkout?stripe_session_id=${sessionId}&net_usd=${netDepositedUsd.toFixed(2)}&gross_cents=${grossAmountCents}&user_id=${encodeURIComponent(userId)}&currency=${encodeURIComponent(currency)}`;
@@ -2065,7 +2071,7 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
     if (DEFAULT_EDGE_GATEWAY_URL) {
       const claimRes = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/gifts/claim`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(getCurrentUser().sessionToken ? { Authorization: `Bearer ${getCurrentUser().sessionToken}` } : {}) },
         body: JSON.stringify({ email, code }),
       });
       const claimData = await claimRes.json();
@@ -2110,7 +2116,7 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
     if (DEFAULT_EDGE_GATEWAY_URL) {
       const checkRes = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/gifts/check`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(getCurrentUser().sessionToken ? { Authorization: `Bearer ${getCurrentUser().sessionToken}` } : {}) },
         body: JSON.stringify({ email }),
       });
       result = await checkRes.json();

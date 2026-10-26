@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { GiftClaimCard, GiftReceiverPreview } from "../components/GiftReceiverPreview";
 import { WalletFundingPanel } from "../components/WalletFundingPanel";
 import { FeeBreakdownModal } from "../components/FeeBreakdownModal";
 import { LiveMarkdownEditor } from "../components/LiveMarkdownEditor";
@@ -104,14 +105,16 @@ const ALLOWED_LINGOFUSION_MODELS = [
 ];
 
 async function callApi<T>(path: string, options?: RequestInit): Promise<T> {
-  if (shouldUseBrowserApi()) {
+  if (!path.startsWith("/api/gifts/") && shouldUseBrowserApi()) {
     return browserApi<T>(path, options);
   }
-  const baseUrl = getApiBaseUrl();
+  const baseUrl = path.startsWith("/api/gifts/") ? DEFAULT_EDGE_GATEWAY_URL : getApiBaseUrl();
+  const user = getCurrentUser();
   const res = await fetch(`${baseUrl}${path}`, {
     ...options,
     headers: {
       "content-type": "application/json",
+      ...(user.sessionToken ? { Authorization: `Bearer ${user.sessionToken}` } : {}),
       ...(options?.headers || {}),
     },
   });
@@ -162,8 +165,10 @@ function formatFileSize(bytes: number): string {
 export function PlaygroundPage({
   balanceUsd,
   onBalanceChange,
+  onOpenAuth,
 }: {
   onOpenDashboard?: () => void;
+  onOpenAuth?: () => void;
   onNavigate?: (page: string) => void;
   balanceUsd?: number;
   onBalanceChange?: (newBalance: number) => void;
@@ -200,11 +205,38 @@ export function PlaygroundPage({
   const [currentUserEmail, setCurrentUserEmail] = useState<string>(() => getCurrentUser().email);
 
   // Deposit & Gift Drawer state
-  const [depositModalOpen, setDepositModalOpen] = useState<boolean>(false);
-  const [depositTab, setDepositTab] = useState<"self" | "gift">("self");
+  const [depositModalOpen, setDepositModalOpen] = useState<boolean>(() => pageQuery().has("gift_preview") || pageQuery().has("gmail"));
+  const [depositTab, setDepositTab] = useState<"self" | "gift">(() => pageQuery().has("gift_preview") || pageQuery().has("gmail") ? "gift" : "self");
   const [giftRecipientEmail, setGiftRecipientEmail] = useState<string>("");
   const [giftSenderName, setGiftSenderName] = useState<string>("");
   const [giftMessage, setGiftMessage] = useState<string>("");
+
+  const [receiverPreviewOpen, setReceiverPreviewOpen] = useState(() => pageQuery().has("gift_preview"));
+  const [gmail, setGmail] = useState({ configured: false, connected: false, paymentNotificationsReady: false });
+  const [gmailBusy, setGmailBusy] = useState(false);
+  const resumeClaimRef = useRef(false);
+
+  useEffect(() => {
+    if (!depositModalOpen || depositTab !== "gift") return;
+    let cancelled = false;
+    void callApi<typeof gmail>("/api/gifts/config").then((status) => { if (!cancelled) setGmail(status); }).catch(() => { if (!cancelled) setGmail({ configured: false, connected: false, paymentNotificationsReady: false }); });
+    return () => { cancelled = true; };
+  }, [depositModalOpen, depositTab, currentUserEmail]);
+
+  const connectSenderGmail = async () => {
+    if (getCurrentUser().provider !== "google") {
+      setDepositModalOpen(false);
+      onOpenAuth?.();
+      return;
+    }
+    setGmailBusy(true);
+    try {
+      const result = await callApi<{ url: string }>("/api/gifts/gmail/connect", { method: "POST" });
+      window.location.assign(result.url);
+    } catch (error) {
+      setDepositStatusMessage(error instanceof Error ? error.message : "Gmail could not be connected.");
+    } finally { setGmailBusy(false); }
+  };
 
   // Claim Gift Modal state
   const [claimModalOpen, setClaimModalOpen] = useState<boolean>(false);
@@ -456,6 +488,11 @@ export function PlaygroundPage({
     const unsub = subscribeAuth((user) => {
       setActiveUserId(user.id);
       setCurrentUserEmail(user.email);
+      if (resumeClaimRef.current && user.provider !== "guest") {
+        resumeClaimRef.current = false;
+        setClaimModalOpen(true);
+        void handleCheckGifts(user.email);
+      }
       if (typeof user.balance_usd === "number") {
         updateBalance(user.balance_usd);
       }
@@ -504,7 +541,7 @@ export function PlaygroundPage({
       if (claimCodeParam) setClaimCode(claimCodeParam);
       if (recipientEmailParam) {
         setClaimEmail(recipientEmailParam);
-        void handleCheckGifts(recipientEmailParam);
+        if (getCurrentUser().email.toLowerCase() === recipientEmailParam.toLowerCase()) void handleCheckGifts(recipientEmailParam);
       }
       setClaimModalOpen(true);
       params.delete("claim_gift");
@@ -1469,6 +1506,10 @@ export function PlaygroundPage({
       return;
     }
     if (depositTab === "gift") {
+      if (getCurrentUser().provider !== "google" || !gmail.connected || !gmail.paymentNotificationsReady) {
+        setDepositStatusMessage("Connect Gmail before sending a gift. Recipient previews are free.");
+        return;
+      }
       const email = giftRecipientEmail.trim().toLowerCase();
       if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         setErrorBanner("Please enter a valid recipient email address for the gift.");
@@ -1797,7 +1838,21 @@ export function PlaygroundPage({
               data-destination={depositTab}
               className="funding-dialog relative z-10 my-auto w-full overflow-y-auto rounded-3xl border border-neutral-200/90 bg-white font-sans shadow-2xl dark:border-white/10 dark:bg-neutral-900"
             >
-              <WalletFundingPanel
+              {receiverPreviewOpen ? <GiftReceiverPreview
+                amount={Number.isFinite(depositAmount) && depositAmount >= 1 ? depositAmount : 25}
+                senderEmail={getCurrentUser().provider === "google" ? currentUserEmail : undefined}
+                senderName={giftSenderName}
+                recipientEmail={giftRecipientEmail}
+                message={giftMessage}
+                onBack={() => setReceiverPreviewOpen(false)}
+                onClose={() => { setReceiverPreviewOpen(false); setDepositModalOpen(false); }}
+              /> : <WalletFundingPanel
+                senderEmail={getCurrentUser().provider === "google" ? currentUserEmail : undefined}
+                gmailReady={gmail.configured && gmail.paymentNotificationsReady}
+                gmailConnected={gmail.connected}
+                gmailBusy={gmailBusy}
+                onConnectGmail={() => void connectSenderGmail()}
+                onPreview={() => setReceiverPreviewOpen(true)}
                 tab={depositTab}
                 onTabChange={setDepositTab}
                 amount={depositAmount}
@@ -2009,7 +2064,7 @@ export function PlaygroundPage({
             )}
           </div>
           )}
-              </WalletFundingPanel>
+              </WalletFundingPanel>}
             </div>
           </div>,
           document.body,
@@ -2042,160 +2097,22 @@ export function PlaygroundPage({
             <div
               role="dialog"
               aria-modal="true"
+              aria-labelledby="gift-claim-heading"
               className="relative z-10 my-auto max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-neutral-200/90 bg-white p-6 font-sans shadow-2xl transition-all animate-in fade-in zoom-in-95 duration-150 dark:border-white/10 dark:bg-neutral-900 sm:p-7"
             >
-              <div className="flex items-center justify-between border-b border-neutral-200/80 pb-4 dark:border-white/10">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-100 text-purple-700 dark:bg-purple-500/20 dark:text-purple-300">
-                    <Gift className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-semibold tracking-tight text-neutral-950 dark:text-white">
-                      Claim Gift Credits
-                    </h2>
-                    <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                      Redeem LingoFusion credits gifted to you
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  disabled={claimBusy}
-                  onClick={() => setClaimModalOpen(false)}
-                  className="rounded-lg p-1.5 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-white/10 dark:hover:text-white"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              <div className="mt-5 space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300">
-                    Your Email Address
-                  </label>
-                  <div className="mt-1 flex gap-2">
-                    <input
-                      type="email"
-                      placeholder="you@example.com"
-                      value={claimEmail}
-                      onChange={(e) => {
-                        setClaimEmail(e.target.value);
-                        setClaimError(null);
-                        setClaimSuccess(null);
-                      }}
-                      className="h-10 flex-1 rounded-xl border border-neutral-200 bg-white px-3 text-xs text-neutral-900 outline-none focus:border-neutral-900 dark:border-white/15 dark:bg-neutral-950 dark:text-white dark:focus:border-white"
-                    />
-                    <button
-                      type="button"
-                      disabled={checkingGifts || !claimEmail.trim()}
-                      onClick={() => void handleCheckGifts(claimEmail)}
-                      className="pressable inline-flex h-10 items-center justify-center rounded-xl border border-neutral-300 bg-white px-3.5 text-xs font-semibold text-neutral-800 transition hover:bg-neutral-50 disabled:opacity-50 dark:border-white/15 dark:bg-neutral-950 dark:text-neutral-200 dark:hover:bg-white/10"
-                    >
-                      {checkingGifts ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Check"}
-                    </button>
-                  </div>
-                  <p className="mt-1 text-[11px] text-neutral-400">
-                    Enter the email someone gifted credits to.
-                  </p>
-                </div>
-
-                {pendingGifts.length > 0 && (
-                  <div className="space-y-3">
-                    {pendingGifts.map((g, idx) => (
-                      <div
-                        key={idx}
-                        className="overflow-hidden rounded-2xl border border-purple-200 bg-gradient-to-br from-purple-900 via-purple-950 to-neutral-950 p-4 text-white shadow-lg dark:border-purple-500/30"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 backdrop-blur-xs">
-                              <Gift className="h-4 w-4 text-purple-300" />
-                            </div>
-                            <span className="text-[11px] font-semibold uppercase tracking-wider text-purple-200">
-                              LingoFusion Gift
-                            </span>
-                          </div>
-                          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
-                            Ready to Claim
-                          </span>
-                        </div>
-
-                        <div className="mt-3">
-                          <div className="font-sans text-2xl font-extrabold tracking-tight text-white">
-                            +${formatUsd(g.amountUsd)} USD
-                          </div>
-                          <p className="mt-1 text-[11px] text-purple-200/80">
-                            From: <span className="font-medium text-white">{g.senderName || "A friend"}</span>
-                          </p>
-                        </div>
-
-                        {g.giftMessage && (
-                          <div className="mt-3 rounded-xl bg-white/10 p-2.5 text-[11px] italic leading-relaxed text-purple-100 backdrop-blur-xs">
-                            "{g.giftMessage}"
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="relative flex items-center py-1">
-                  <div className="flex-grow border-t border-neutral-200 dark:border-white/10" />
-                  <span className="mx-3 text-[11px] font-medium uppercase tracking-wider text-neutral-400">
-                    Or enter gift code
-                  </span>
-                  <div className="flex-grow border-t border-neutral-200 dark:border-white/10" />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300">
-                    Gift Code (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="gft_..."
-                    value={claimCode}
-                    onChange={(e) => {
-                      setClaimCode(e.target.value);
-                      setClaimError(null);
-                      setClaimSuccess(null);
-                    }}
-                    className="mt-1 h-10 w-full rounded-xl border border-neutral-200 bg-white px-3 font-mono text-xs text-neutral-900 outline-none focus:border-neutral-900 dark:border-white/15 dark:bg-neutral-950 dark:text-white dark:focus:border-white"
-                  />
-                </div>
-
-                {claimError && (
-                  <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-900 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
-                    {claimError}
-                  </div>
-                )}
-
-                {claimSuccess && (
-                  <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-medium text-emerald-900 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
-                    <Check className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                    <span>{claimSuccess}</span>
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  disabled={claimBusy || (!claimEmail.trim() && !claimCode.trim())}
-                  onClick={handleClaimGift}
-                  className="pressable mt-2 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-purple-600 px-5 text-sm font-semibold text-white shadow-xs transition hover:bg-purple-700 disabled:opacity-50"
-                >
-                  {claimBusy ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Claiming credits...
-                    </>
-                  ) : (
-                    <>
-                      <Gift className="h-4 w-4" />
-                      Claim Gift Credits
-                    </>
-                  )}
-                </button>
-              </div>
+              <div className="flex justify-end"><button type="button" aria-label="Close gift claim" onClick={() => setClaimModalOpen(false)} className="funding-close"><X className="h-4 w-4" /></button></div>
+              <GiftClaimCard
+                amount={claimSuccess ? undefined : claimCode ? pendingGifts.find((gift) => gift.code === claimCode)?.amountUsd : pendingGifts.length ? pendingGifts.reduce((sum, gift) => sum + Number(gift.amountUsd || 0), 0) : undefined}
+                sender={(pendingGifts.find((gift) => gift.code === claimCode) || pendingGifts[0])?.senderEmail || (pendingGifts.find((gift) => gift.code === claimCode) || pendingGifts[0])?.senderName}
+                recipient={claimEmail || currentUserEmail}
+                message={(pendingGifts.find((gift) => gift.code === claimCode) || pendingGifts[0])?.giftMessage}
+                claimed={Boolean(claimSuccess)}
+                signedInEmail={getCurrentUser().provider === "guest" ? undefined : currentUserEmail}
+                busy={claimBusy || checkingGifts}
+                error={claimError}
+                onClaim={() => void handleClaimGift()}
+                onSignIn={() => { resumeClaimRef.current = true; setClaimModalOpen(false); onOpenAuth?.(); }}
+              />
             </div>
           </div>,
           document.body,

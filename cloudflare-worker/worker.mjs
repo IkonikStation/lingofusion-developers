@@ -1,3 +1,7 @@
+import { fulfillGiftThroughVault, verifyGiftWebhook } from "./gifts.mjs";
+import { connectGmail, gmailCallback, gmailConfigured, gmailStatus } from "./gmail.mjs";
+export { GiftClaims } from "./gifts.mjs";
+
 // LingoFusion Private Cloudflare Worker Gateway
 // Secrets (stored encrypted in Cloudflare — never in code or GitHub):
 //   - STRIPE_SECRET_KEY
@@ -201,6 +205,35 @@ export default {
         );
       }
 
+      const signedInUser = async () => {
+        const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+        return env.SESSION_SECRET ? verifySession(token, env.SESSION_SECRET).catch(() => null) : null;
+      };
+      if (request.method === "GET" && path === "/api/gifts/gmail/callback") return gmailCallback(request, env);
+      if (request.method === "GET" && path === "/api/gifts/config") {
+        return jsonResponse(await gmailStatus(env, await signedInUser()), 200, requestOrigin);
+      }
+      if (request.method === "POST" && path === "/api/gifts/gmail/connect") {
+        const user = await signedInUser();
+        if (!user) return jsonResponse({ message: "Sign in with Google first." }, 401, requestOrigin);
+        const response = await connectGmail(request, env, user);
+        return jsonResponse(await response.json(), response.status, requestOrigin);
+      }
+      if (request.method === "POST" && path === "/api/gifts/gmail/disconnect") {
+        const user = await signedInUser();
+        if (!user) return jsonResponse({ message: "Sign in first." }, 401, requestOrigin);
+        await env.GIFTS?.delete(`gmail:${user.email.toLowerCase()}`);
+        return jsonResponse({ connected: false }, 200, requestOrigin);
+      }
+      if (request.method === "POST" && path === "/api/gifts/stripe-webhook") {
+        const raw = await request.text();
+        if (!await verifyGiftWebhook(raw, request.headers.get("stripe-signature"), env.STRIPE_GIFT_WEBHOOK_SECRET)) return jsonResponse({ error: "invalid_signature" }, 400, requestOrigin);
+        const event = JSON.parse(raw);
+        const session = event.data?.object;
+        if (["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type) && session?.payment_status === "paid" && session.metadata?.isGift === "true") await fulfillGiftThroughVault(session, env);
+        return jsonResponse({ received: true }, 200, requestOrigin);
+      }
+
       // 2. Create Stripe Checkout Session (server-side only using env.STRIPE_SECRET_KEY)
       if (request.method === "POST" && (path === "/api/create-checkout-session" || path === "/api/billing/deposit")) {
         const stripeKey = env.STRIPE_SECRET_KEY;
@@ -220,8 +253,11 @@ export default {
         const currency = "usd";
         const { netDepositedUsd, grossAmountCents, grossChargedUsd, estimatedStripeFeeUsd } =
           calculateGrossDeposit(depositAmount);
-        const userId = String(body.userId || "00000000-0000-4000-8000-000000000001");
-        const userEmail = String(body.userEmail || body.email || "").trim().toLowerCase();
+        const giftSender = body.isGift ? await signedInUser() : null;
+        if (body.isGift && (!giftSender || giftSender.provider !== "google")) return jsonResponse({ message: "Sign in with Google before sending a gift." }, 401, requestOrigin);
+        if (body.isGift && (!gmailConfigured(env) || !env.STRIPE_GIFT_WEBHOOK_SECRET || !env.GIFT_CLAIMS || !await env.GIFTS.get(`gmail:${giftSender.email.toLowerCase()}`))) return jsonResponse({ message: "Connect Gmail and enable gift delivery before checkout. You can preview the recipient experience without buying." }, 503, requestOrigin);
+        const userId = giftSender?.id || String(body.userId || "00000000-0000-4000-8000-000000000001");
+        const userEmail = String(giftSender?.email || body.userEmail || body.email || "").trim().toLowerCase();
         const returnPlaygroundUrl = String(
           body.returnUrl || env.APP_URL || "https://ikonikstation.github.io/lingofusion-developers/playground"
         ).replace(/\/+$/, "");
@@ -241,7 +277,7 @@ export default {
         const params = new URLSearchParams();
         params.append("mode", "payment");
         params.append("payment_intent_data[setup_future_usage]", "off_session");
-        if (!isGift && userEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userEmail) && userEmail !== "developer@lingofusion.dev") {
+        if (userEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userEmail) && userEmail !== "developer@lingofusion.dev") {
           params.append("customer_email", userEmail);
         }
         params.append("line_items[0][price_data][currency]", currency);
@@ -269,6 +305,7 @@ export default {
         params.append("metadata[isGift]", isGift ? "true" : "false");
         if (isGift) {
           params.append("metadata[recipientEmail]", recipientEmail);
+          params.append("metadata[senderEmail]", userEmail);
           if (giftMessage) params.append("metadata[giftMessage]", giftMessage);
           if (senderName) params.append("metadata[senderName]", senderName);
         }
@@ -473,100 +510,10 @@ export default {
         const giftMessage = String(metadata.giftMessage || "").trim();
         const senderName = String(metadata.senderName || "").trim();
 
-        // If this was a gift payment that succeeded, persist it into KV so the recipient can claim it!
         let giftCode = "";
-        if (paid && isGift && recipientEmail && env.GIFTS) {
-          giftCode = `gft_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
-          const existingGiftsRaw = await env.GIFTS.get(`gifts_for:${recipientEmail}`);
-          const recipientGifts = existingGiftsRaw ? JSON.parse(existingGiftsRaw) : [];
-          
-          // Check if already stored for this stripe session
-          const alreadyStored = recipientGifts.find((g) => g.stripeSessionId === stripeSession.id);
-          if (!alreadyStored) {
-            const giftRecord = {
-              code: giftCode,
-              stripeSessionId: stripeSession.id,
-              recipientEmail,
-              amountUsd: netDepositUsd,
-              giftMessage,
-              senderName: senderName || "A generous friend",
-              claimed: false,
-              createdAt: new Date().toISOString(),
-            };
-            recipientGifts.unshift(giftRecord);
-            await env.GIFTS.put(`gifts_for:${recipientEmail}`, JSON.stringify(recipientGifts));
-            await env.GIFTS.put(`gift:${giftCode}`, JSON.stringify(giftRecord));
-
-            // If Resend API key is configured, dispatch automated gift notification email directly to recipient
-            if (env.RESEND_API_KEY) {
-              const appBase = String(env.APP_URL || "https://ikonikstation.github.io/lingofusion-developers").replace(/\/+$/, "");
-              const claimUrl = `${appBase}/playground?claim_gift=${giftCode}&gift_email=${encodeURIComponent(recipientEmail)}`;
-              try {
-                await fetch("https://api.resend.com/emails", {
-                  method: "POST",
-                  headers: {
-                    Authorization: `Bearer ${env.RESEND_API_KEY}`,
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({
-                    from: env.EMAIL_FROM || "LingoFusion Gifts <gifts@lingofusion.dev>",
-                    to: [recipientEmail],
-                    subject: `${senderName || "A friend"} sent you $${netDepositUsd.toFixed(2)} USD in LingoFusion credits!`,
-                    html: `
-                      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 40px 20px; background-color: #fafafa; color: #18181b;">
-                        <div style="text-align: center; margin-bottom: 24px;">
-                          <h1 style="font-size: 22px; font-weight: 700; color: #09090b; margin: 0 0 6px;">You've Received a LingoFusion Gift!</h1>
-                          <p style="font-size: 14px; color: #71717a; margin: 0;">${senderName ? `<strong>${senderName}</strong> has sent you` : "Someone sent you"} translation credits.</p>
-                        </div>
-
-                        <!-- Exact Gift Card Styling matching the in-app preview -->
-                        <div style="background: linear-gradient(135deg, #4c1d95 0%, #3b0764 55%, #18181b 100%); border: 1px solid #7e22ce; border-radius: 20px; padding: 26px 24px; text-align: left; color: #ffffff; box-shadow: 0 10px 25px -5px rgba(76, 29, 149, 0.35); margin: 24px 0;">
-                          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px;">
-                            <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #d8b4fe;">
-                              🎁 &nbsp;LINGOFUSION GIFT
-                            </div>
-                            <span style="background: rgba(168, 85, 247, 0.25); border: 1px solid rgba(192, 132, 252, 0.3); border-radius: 9999px; padding: 3px 10px; font-size: 10px; font-weight: 600; color: #e9d5ff;">
-                              Recipient View
-                            </span>
-                          </div>
-
-                          <div style="font-size: 36px; font-weight: 800; color: #ffffff; letter-spacing: -0.02em; margin-bottom: 6px;">
-                            +$${netDepositUsd.toFixed(2)} USD
-                          </div>
-
-                          <div style="font-size: 12px; color: #e9d5ff; margin-bottom: 4px;">
-                            To: <strong style="color: #ffffff;">${recipientEmail}</strong>
-                          </div>
-                          ${senderName ? `<div style="font-size: 12px; color: #e9d5ff; margin-bottom: 12px;">From: <strong style="color: #ffffff;">${senderName}</strong></div>` : ""}
-
-                          ${giftMessage ? `
-                            <div style="margin-top: 14px; padding: 12px 16px; background: rgba(255, 255, 255, 0.12); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 12px; font-style: italic; font-size: 13px; line-height: 1.5; color: #f5f3ff;">
-                              &ldquo;${giftMessage.replace(/</g, "&lt;").replace(/>/g, "&gt;")}&rdquo;
-                            </div>
-                          ` : ""}
-                        </div>
-
-                        <div style="text-align: center; margin: 32px 0;">
-                          <a href="${claimUrl}" style="display: inline-block; background: #9333ea; color: #ffffff; padding: 15px 36px; border-radius: 14px; font-size: 15px; font-weight: 600; text-decoration: none; box-shadow: 0 4px 16px rgba(147, 51, 234, 0.35);">
-                            Claim Gift Credits
-                          </a>
-                        </div>
-
-                        <div style="border-top: 1px solid #e4e4e7; padding-top: 24px; text-align: center; font-size: 12px; color: #71717a; line-height: 1.6;">
-                          <p style="margin: 0 0 8px;">Gift Code: <code style="background: #f4f4f5; border: 1px solid #e4e4e7; padding: 3px 8px; border-radius: 6px; font-family: monospace; font-size: 12px; color: #3f3f46;">${giftCode}</code></p>
-                          <p style="margin: 0;">Or open directly in your browser: <br /><a href="${claimUrl}" style="color: #9333ea; word-break: break-all;">${claimUrl}</a></p>
-                        </div>
-                      </div>
-                    `,
-                  }),
-                });
-              } catch (emailErr) {
-                console.error("Resend automated email dispatch failed:", emailErr);
-              }
-            }
-          } else {
-            giftCode = alreadyStored.code;
-          }
+        if (paid && isGift && recipientEmail) {
+          const gift = await fulfillGiftThroughVault(stripeSession, env);
+          giftCode = gift?.code || "";
         }
 
         // If this was a self-deposit that succeeded, persist and sync the user's cloud balance across all devices
@@ -1067,104 +1014,21 @@ export default {
         }, 200, requestOrigin);
       }
 
-      // 9. Gifts: check available gifts for an email address
-      if (request.method === "POST" && path === "/api/gifts/check") {
+      // Gifts belong to the verified recipient, never an email supplied by the browser.
+      if (request.method === "POST" && ["/api/gifts/check", "/api/gifts/claim"].includes(path)) {
+        const user = await signedInUser();
+        if (!user?.email) return jsonResponse({ message: "Sign in with the recipient's email address to claim this gift." }, 401, requestOrigin);
         const body = await request.json().catch(() => ({}));
-        const email = String(body.email || "").trim().toLowerCase();
-        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-          return jsonResponse({ gifts: [], totalAvailableUsd: 0 }, 200, requestOrigin);
+        const email = user.email.toLowerCase();
+        if (body.email && String(body.email).trim().toLowerCase() !== email) return jsonResponse({ message: "This gift belongs to a different email address. Sign in with the recipient's account." }, 403, requestOrigin);
+        if (!env.GIFTS || !env.GIFT_CLAIMS) return jsonResponse({ message: "Gift storage is not configured." }, 503, requestOrigin);
+        if (path === "/api/gifts/check") {
+          const gifts = JSON.parse(await env.GIFTS.get(`gifts_for:${email}`) || "[]").filter((gift) => !gift.claimed);
+          return jsonResponse({ email, gifts, totalAvailableUsd: Number(gifts.reduce((sum, gift) => sum + Number(gift.amountUsd), 0).toFixed(2)) }, 200, requestOrigin);
         }
-        if (!env.GIFTS) {
-          return jsonResponse({ gifts: [], totalAvailableUsd: 0 }, 200, requestOrigin);
-        }
-        const existingGiftsRaw = await env.GIFTS.get(`gifts_for:${email}`);
-        const allGifts = existingGiftsRaw ? JSON.parse(existingGiftsRaw) : [];
-        const unclaimed = allGifts.filter((g) => !g.claimed);
-        const total = unclaimed.reduce((sum, g) => sum + (Number(g.amountUsd) || 0), 0);
-        return jsonResponse({
-          email,
-          gifts: unclaimed,
-          totalAvailableUsd: Number(total.toFixed(2)),
-        }, 200, requestOrigin);
-      }
-
-      // 10. Gifts: claim a specific gift or all gifts for an email
-      if (request.method === "POST" && path === "/api/gifts/claim") {
-        const body = await request.json().catch(() => ({}));
-        const email = String(body.email || "").trim().toLowerCase();
-        const code = String(body.code || "").trim();
-        if (!email && !code) {
-          return jsonResponse({ error: "missing_identifier", message: "Email or gift code is required." }, 400, requestOrigin);
-        }
-        if (!env.GIFTS) {
-          return jsonResponse({ error: "not_available", message: "Gift vault is not connected." }, 503, requestOrigin);
-        }
-
-        let claimedAmount = 0;
-        const claimedGifts = [];
-
-        if (code) {
-          const giftRaw = await env.GIFTS.get(`gift:${code}`);
-          if (!giftRaw) {
-            return jsonResponse({ error: "invalid_gift_code", message: "Gift code not found or already redeemed." }, 404, requestOrigin);
-          }
-          const gift = JSON.parse(giftRaw);
-          if (gift.claimed) {
-            return jsonResponse({ error: "already_claimed", message: "This gift has already been claimed." }, 400, requestOrigin);
-          }
-          gift.claimed = true;
-          gift.claimedAt = new Date().toISOString();
-          await env.GIFTS.put(`gift:${code}`, JSON.stringify(gift));
-
-          // Also update in gifts_for list
-          const existingGiftsRaw = await env.GIFTS.get(`gifts_for:${gift.recipientEmail}`);
-          if (existingGiftsRaw) {
-            const list = JSON.parse(existingGiftsRaw).map((g) => g.code === code ? { ...g, claimed: true, claimedAt: gift.claimedAt } : g);
-            await env.GIFTS.put(`gifts_for:${gift.recipientEmail}`, JSON.stringify(list));
-          }
-          claimedAmount = Number(gift.amountUsd) || 0;
-          claimedGifts.push(gift);
-        } else if (email) {
-          const existingGiftsRaw = await env.GIFTS.get(`gifts_for:${email}`);
-          if (!existingGiftsRaw) {
-            return jsonResponse({ error: "no_gifts_found", message: `No unclaimed gifts found for ${email}.` }, 404, requestOrigin);
-          }
-          const list = JSON.parse(existingGiftsRaw);
-          const nowIso = new Date().toISOString();
-          for (const g of list) {
-            if (!g.claimed) {
-              g.claimed = true;
-              g.claimedAt = nowIso;
-              claimedAmount += Number(g.amountUsd) || 0;
-              claimedGifts.push(g);
-              await env.GIFTS.put(`gift:${g.code}`, JSON.stringify(g));
-            }
-          }
-          if (claimedGifts.length === 0) {
-            return jsonResponse({ error: "no_unclaimed_gifts", message: `All gifts for ${email} have already been claimed.` }, 400, requestOrigin);
-          }
-          await env.GIFTS.put(`gifts_for:${email}`, JSON.stringify(list));
-        }
-
-        // Update recipient's cloud balance in KV so it syncs across all their devices immediately
-        let newBalance = undefined;
-        const recipientEmail = email || (claimedGifts[0]?.recipientEmail);
-        if (recipientEmail && env.GIFTS && claimedAmount > 0) {
-          const syncKey = `user_balance:${recipientEmail.toLowerCase()}`;
-          const currentBalRaw = await env.GIFTS.get(syncKey);
-          let currentBal = currentBalRaw !== null ? Number(currentBalRaw) : 0;
-          currentBal = Number((currentBal + claimedAmount).toFixed(6));
-          await env.GIFTS.put(syncKey, currentBal.toString());
-          newBalance = currentBal;
-        }
-
-        return jsonResponse({
-          success: true,
-          claimedAmountUsd: Number(claimedAmount.toFixed(2)),
-          newBalance,
-          claimedCount: claimedGifts.length,
-          gifts: claimedGifts,
-        }, 200, requestOrigin);
+        const vault = env.GIFT_CLAIMS.get(env.GIFT_CLAIMS.idFromName(email));
+        const response = await vault.fetch("https://gift-claims/claim", { method: "POST", body: JSON.stringify({ email, code: String(body.code || "").trim() }) });
+        return jsonResponse(await response.json(), response.status, requestOrigin);
       }
 
       return jsonResponse({ error: "not_found" }, 404);

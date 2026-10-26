@@ -36,3 +36,10 @@ Enterprise forms for 1,000 or more seats send an automatic acknowledgement to th
 ## Deployment
 
 Pushes to `main` deploy the static frontend to GitHub Pages. The Pages build includes an SPA fallback for `/models`, `/playground`, and subscription routes.
+
+## Gift delivery and receiver preview
+
+Gifts use the signed-in sender's Gmail account after separate Google consent.
+See [gift delivery setup](docs/gift-delivery.md) for Gmail OAuth and payment webhook
+configuration. The [receiver preview](https://ikonikstation.github.io/lingofusion-developers/playground/?gift_preview=1)
+works without purchasing or sending anything.
