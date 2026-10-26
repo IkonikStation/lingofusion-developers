@@ -179,9 +179,26 @@ export default {
     const path = url.pathname;
 
     try {
-      // 1. Health check
+      // Helper to detect if client IP is on whitelisted network (e.g. your home Wi-Fi)
+      const clientIp = request.headers.get("cf-connecting-ip") || request.headers.get("x-real-ip") || "";
+      const whitelistedIps = (env.WHITELISTED_IPS || "99.217.190.136")
+        .split(",")
+        .map((ip) => ip.trim())
+        .filter(Boolean);
+      const isWhitelistedIp = Boolean(clientIp && whitelistedIps.includes(clientIp));
+
+      // 1. Health check & Client network access status
       if (request.method === "GET" && (path === "/" || path === "/api/health")) {
         return jsonResponse({ status: "ok", gateway: "lingofusion-edge" }, 200, requestOrigin);
+      }
+
+      if (request.method === "GET" && path === "/api/network-status") {
+        return jsonResponse({
+          ip: clientIp,
+          is_free_access: isWhitelistedIp,
+          is_whitelisted: isWhitelistedIp,
+          network_name: isWhitelistedIp ? "Home Wi-Fi Network" : "Public Network",
+        }, 200, requestOrigin);
       }
 
       // Security check for browser playground actions:
