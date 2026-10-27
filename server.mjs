@@ -2605,6 +2605,9 @@ async function handleChatCompletions({ req, res, body, user, apiKeyId, source, d
     messages: upstreamMessages,
     stream: isStream,
     ...(upstreamReasoningEffort ? { reasoning_effort: upstreamReasoningEffort } : {}),
+    ...(modelPricing.model_id === "LingoFusion" && !routing.webSearch && Number.isFinite(temperature)
+      ? { temperature: Math.min(2, Math.max(0, temperature)) }
+      : {}),
     ...(isStream ? { stream_options: { ...(body.stream_options || {}), include_usage: true } } : {}),
   };
 

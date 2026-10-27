@@ -12,6 +12,7 @@ import {
   Gauge,
   Gift,
   Globe,
+  HelpCircle,
   Image as ImageIcon,
   Link2,
   Loader2,
@@ -190,6 +191,7 @@ export function PlaygroundPage({
 
   // Speed / pricing mode for text models: "default" | "fast" | "ultrafast"
   const [speedMode, setSpeedMode] = useState<"default" | "fast" | "ultrafast">("default");
+  const [temperature, setTemperature] = useState<number>(0.7);
   const [proReasoningEnabled, setProReasoningEnabled] = useState<boolean>(false);
   const [ultraMaxEnabled, setUltraMaxEnabled] = useState<boolean>(false);
   const [allowWebSearch, setAllowWebSearch] = useState<boolean>(false);
@@ -752,6 +754,7 @@ export function PlaygroundPage({
       messages: [{ role: "user", content: currentInput }],
       stream: streamToggle,
       pricing_mode: effectiveSpeedMode,
+      ...(activeModel.model_id === "LingoFusion" ? { temperature } : {}),
       ...(allowWebSearch ? { allow_web_search: true } : {}),
       ...(activeModel.model_id === "LingoFusion Pro" && proReasoningEnabled
         ? { reasoning_enabled: true, reasoning_effort: "medium" }
@@ -2468,6 +2471,36 @@ export function PlaygroundPage({
                 >
                   {() => (
                     <>
+                      {activeModel.model_id === "LingoFusion" && (
+                        <div className="mb-1 rounded-lg border border-neutral-200 p-3 dark:border-white/10" data-testid="playground-temperature-control">
+                          <div className="flex items-center justify-between gap-3">
+                            <label htmlFor="playground-temperature" className="text-xs font-semibold text-neutral-900 dark:text-white">Temperature</label>
+                            <span className="font-mono text-xs tabular-nums text-neutral-500 dark:text-neutral-400">{temperature.toFixed(1)}</span>
+                          </div>
+                          <div className="mt-2 flex items-center gap-2">
+                            <input
+                              id="playground-temperature"
+                              type="range"
+                              min="0"
+                              max="2"
+                              step="0.1"
+                              value={temperature}
+                              onChange={(event) => setTemperature(Number(event.target.value))}
+                              aria-describedby="playground-temperature-help"
+                              className="h-2 min-w-0 flex-1 cursor-pointer accent-neutral-950 dark:accent-white"
+                            />
+                            <span className="text-[10px] text-neutral-400">0–2</span>
+                            <span className="group relative inline-flex">
+                              <button type="button" aria-label="What is temperature?" className="inline-flex h-6 w-6 items-center justify-center rounded-full text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-neutral-500 dark:hover:bg-white/10 dark:hover:text-neutral-200">
+                                <HelpCircle className="h-4 w-4" />
+                              </button>
+                              <span id="playground-temperature-help" role="tooltip" className="pointer-events-none absolute bottom-full right-0 z-50 mb-2 hidden w-56 rounded-lg bg-neutral-950 p-2.5 text-left text-[11px] leading-relaxed text-white shadow-lg group-hover:block group-focus-within:block">
+                                Temperature controls how varied the wording can be. Lower values tend to be more consistent; higher values allow more variation. For translation, a lower setting usually keeps phrasing more predictable.
+                              </span>
+                            </span>
+                          </div>
+                        </div>
+                      )}
                       <SwitchRow
                         icon={Waves}
                         label="Stream responses"

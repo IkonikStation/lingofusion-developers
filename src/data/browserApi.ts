@@ -750,6 +750,9 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
           },
         ],
         ...(effort ? { reasoning_effort: effort } : {}),
+        ...(modelPricing.model_id === "LingoFusion" && !routing.webSearch && Number.isFinite(Number(body.temperature))
+          ? { temperature: Math.min(2, Math.max(0, Number(body.temperature))) }
+          : {}),
         ...(serviceTier ? { service_tier: serviceTier } : {}),
         stream: false,
       }),
@@ -1035,6 +1038,9 @@ export async function streamChatCompletionBrowser(
       stream: true,
       stream_options: { include_usage: true },
       ...(effort ? { reasoning_effort: effort } : {}),
+      ...(modelPricing.model_id === "LingoFusion" && !routing.webSearch && Number.isFinite(Number(body.temperature))
+        ? { temperature: Math.min(2, Math.max(0, Number(body.temperature))) }
+        : {}),
       ...(serviceTier ? { service_tier: serviceTier } : {}),
     }),
     signal,
