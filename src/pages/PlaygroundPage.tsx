@@ -2552,22 +2552,32 @@ export function PlaygroundPage({
                 <Popover
                   trigger={<><SlidersHorizontal className="h-3.5 w-3.5 text-neutral-400" />Options</>}
                   badge={dubbingCloningStrength !== 7 ? 1 : 0}
+                  label="Dubbing options"
+                  panelClassName="sm:w-80"
                 >
                   {() => (
-                    <div className="p-3" data-testid="playground-dubbing-options">
-                      <div className="mb-3 flex items-center justify-between gap-3">
+                    <div className="p-3.5" data-testid="playground-dubbing-options">
+                      <div className="flex items-center justify-between gap-4">
                         <label htmlFor="dubbing-speaker-similarity" className="text-xs font-semibold text-neutral-900 dark:text-white">Speaker similarity</label>
-                        <output htmlFor="dubbing-speaker-similarity" className="font-mono text-xs tabular-nums text-neutral-500">{dubbingCloningStrength}/10</output>
+                        <output htmlFor="dubbing-speaker-similarity" className="rounded-md bg-neutral-100 px-2 py-1 font-mono text-xs font-medium tabular-nums text-neutral-700 dark:bg-white/10 dark:text-neutral-200">{dubbingCloningStrength}<span className="text-neutral-400"> / 10</span></output>
                       </div>
-                      <input id="dubbing-speaker-similarity" type="range" min="0" max="10" step="1"
-                        value={dubbingCloningStrength} disabled={dubbingRunning}
-                        onChange={(event) => setDubbingCloningStrength(Number(event.target.value))}
-                        aria-describedby="dubbing-speaker-similarity-help"
-                        className="h-2 w-full cursor-pointer accent-neutral-950 disabled:cursor-not-allowed disabled:opacity-40 dark:accent-white" />
-                      <div className="mt-2 flex justify-between gap-4 text-[10px] leading-snug text-neutral-500 dark:text-neutral-400">
-                        <span>More natural</span><span className="text-right">More like original speaker</span>
+                      <p id="dubbing-speaker-similarity-help" className="mt-1 text-[11px] leading-relaxed text-neutral-500 dark:text-neutral-400">Balance natural delivery with voice likeness.</p>
+                      <div className="mt-4">
+                        <input id="dubbing-speaker-similarity" type="range" min="0" max="10" step="1"
+                          value={dubbingCloningStrength} disabled={dubbingRunning}
+                          onChange={(event) => setDubbingCloningStrength(Number(event.target.value))}
+                          aria-describedby="dubbing-speaker-similarity-help"
+                          className="dubbing-similarity-slider block w-full" />
+                        <div className="mt-1 flex justify-between gap-6 text-[11px] leading-snug text-neutral-500 dark:text-neutral-400">
+                          <span className="max-w-24">More natural</span><span className="max-w-32 text-right">More like original speaker</span>
+                        </div>
                       </div>
-                      <p id="dubbing-speaker-similarity-help" className="mt-3 text-[11px] leading-relaxed text-neutral-500 dark:text-neutral-400">Lower values favor natural delivery. Higher values preserve more of the original voice and accent. Default: 7.</p>
+                      <div className="mt-4 flex items-center justify-between border-t border-neutral-100 pt-3 dark:border-white/10">
+                        <span className="text-[10px] text-neutral-400">Recommended: 7</span>
+                        <button type="button" disabled={dubbingRunning || dubbingCloningStrength === 7}
+                          onClick={() => setDubbingCloningStrength(7)}
+                          className="rounded-md px-2 py-1 text-[11px] font-medium text-neutral-600 transition hover:bg-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-neutral-500 disabled:cursor-default disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-white/10">Reset</button>
+                      </div>
                     </div>
                   )}
                 </Popover>

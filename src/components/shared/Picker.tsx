@@ -206,9 +206,13 @@ export function Popover({
   trigger,
   badge,
   children,
+  panelClassName,
+  label = "Response options",
 }: {
   trigger: ReactNode;
   badge?: number;
+  panelClassName?: string;
+  label?: string;
   children: (close: () => void) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -250,8 +254,8 @@ export function Popover({
       {open && (
         <div
           role="dialog"
-          aria-label="Response options"
-          className="picker-panel absolute left-0 top-[calc(100%+6px)] z-40 w-[min(19rem,calc(100vw-2.5rem))] rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl dark:border-white/15 dark:bg-neutral-900 sm:left-auto sm:right-0 sm:w-64"
+          aria-label={label}
+          className={`picker-panel absolute left-0 top-[calc(100%+6px)] z-40 w-[min(19rem,calc(100vw-2.5rem))] rounded-xl border border-neutral-200 bg-white p-1.5 shadow-xl dark:border-white/15 dark:bg-neutral-900 sm:left-auto sm:right-0 ${panelClassName ?? "sm:w-64"}`}
         >
           {children(close)}
         </div>

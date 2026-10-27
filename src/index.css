@@ -1176,3 +1176,49 @@ a {
 .funding-preview-button { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 44px; padding: 10px; border: 1px solid #c4b5fd; border-radius: 12px; color: #7c3aed; font-size: 12px; font-weight: 600; }
 .dark .funding-preview-button { color: #c4b5fd; border-color: #8b5cf64d; }
 @media (max-width: 639px) { .gift-claim-card { padding: 28px 20px; } .gift-email-headers { margin-inline: 16px; } .gift-email-frame { height: 900px; } }
+
+/* Keep the similarity control light, with a generous pointer/touch target. */
+.dubbing-similarity-slider {
+  appearance: none;
+  height: 28px;
+  background: transparent;
+  cursor: pointer;
+  --similarity-track: #e5e5e5;
+  --similarity-thumb: #171717;
+}
+.dark .dubbing-similarity-slider {
+  --similarity-track: #404040;
+  --similarity-thumb: #f5f5f5;
+}
+.dubbing-similarity-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--similarity-track);
+}
+.dubbing-similarity-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--similarity-track);
+}
+.dubbing-similarity-slider::-webkit-slider-thumb {
+  appearance: none;
+  margin-top: -5px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--similarity-thumb);
+  border-radius: 50%;
+  background: var(--similarity-thumb);
+}
+.dubbing-similarity-slider::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--similarity-thumb);
+  border-radius: 50%;
+  background: var(--similarity-thumb);
+}
+.dubbing-similarity-slider:focus-visible {
+  outline: 2px solid var(--similarity-thumb);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.dubbing-similarity-slider:disabled { opacity: .4; cursor: not-allowed; }
