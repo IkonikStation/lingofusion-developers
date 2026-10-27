@@ -754,7 +754,7 @@ export function PlaygroundPage({
       messages: [{ role: "user", content: currentInput }],
       stream: streamToggle,
       pricing_mode: effectiveSpeedMode,
-      ...(["LingoFusion", "LingoFusion Lite"].includes(activeModel.model_id) ? { temperature } : {}),
+      ...(["LingoFusion", "LingoFusion Lite"].includes(activeModel.model_id) && !allowWebSearch ? { temperature } : {}),
       ...(allowWebSearch ? { allow_web_search: true } : {}),
       ...(activeModel.model_id === "LingoFusion Pro" && proReasoningEnabled
         ? { reasoning_enabled: true, reasoning_effort: "medium" }
@@ -2474,8 +2474,8 @@ export function PlaygroundPage({
                       {["LingoFusion", "LingoFusion Lite"].includes(activeModel.model_id) && (
                         <div className="mb-1 rounded-lg border border-neutral-200 p-3 dark:border-white/10" data-testid="playground-temperature-control">
                           <div className="flex items-center justify-between gap-3">
-                            <label htmlFor="playground-temperature" className="text-xs font-semibold text-neutral-900 dark:text-white">Temperature</label>
-                            <span className="font-mono text-xs tabular-nums text-neutral-500 dark:text-neutral-400">{temperature.toFixed(1)}</span>
+                            <label htmlFor="playground-temperature" className={`text-xs font-semibold ${allowWebSearch ? "text-neutral-400 dark:text-neutral-500" : "text-neutral-900 dark:text-white"}`}>Temperature</label>
+                            <span className="font-mono text-xs tabular-nums text-neutral-500 dark:text-neutral-400">{allowWebSearch ? "Default" : temperature.toFixed(1)}</span>
                           </div>
                           <div className="mt-2 flex items-center gap-2">
                             <input
@@ -2484,10 +2484,11 @@ export function PlaygroundPage({
                               min="0"
                               max="2"
                               step="0.1"
-                              value={temperature}
+                              value={allowWebSearch ? 1 : temperature}
+                              disabled={allowWebSearch}
                               onChange={(event) => setTemperature(Number(event.target.value))}
                               aria-describedby="playground-temperature-help"
-                              className="h-2 min-w-0 flex-1 cursor-pointer accent-neutral-950 dark:accent-white"
+                              className="h-2 min-w-0 flex-1 cursor-pointer accent-neutral-950 disabled:cursor-not-allowed disabled:accent-neutral-400 disabled:opacity-40 dark:accent-white"
                             />
                             <span className="text-[10px] text-neutral-400">0–2</span>
                             <span className="group relative inline-flex">
@@ -2495,7 +2496,9 @@ export function PlaygroundPage({
                                 <HelpCircle className="h-4 w-4" />
                               </button>
                               <span id="playground-temperature-help" role="tooltip" className="pointer-events-none absolute bottom-full right-0 z-50 mb-2 hidden w-56 rounded-lg bg-neutral-950 p-2.5 text-left text-[11px] leading-relaxed text-white shadow-lg group-hover:block group-focus-within:block">
-                                Temperature controls how varied the wording can be. Lower values tend to be more consistent; higher values allow more variation. For translation, a lower setting usually keeps phrasing more predictable.
+                                {allowWebSearch
+                                  ? "Web Search uses the model’s default temperature. Turn off Web Search to adjust it."
+                                  : "Temperature controls how varied the wording can be. Lower values tend to be more consistent; higher values allow more variation. For translation, a lower setting usually keeps phrasing more predictable."}
                               </span>
                             </span>
                           </div>
