@@ -1,3 +1,4 @@
+import { waitForDubbing } from "../data/dubbingApi";
 import {
   Activity,
   AlertCircle,
@@ -333,6 +334,7 @@ export function PlaygroundPage({
   const [dubbingMediaType, setDubbingMediaType] = useState<"video" | "audio">("video");
   const [dubbingPreviewUrl, setDubbingPreviewUrl] = useState<string | null>(null);
   const [dubbingTargetLang, setDubbingTargetLang] = useState<string>("Spanish (Spain)");
+  const [dubbingCloningStrength, setDubbingCloningStrength] = useState(7);
   const [dubbingRunning, setDubbingRunning] = useState<boolean>(false);
   const [dubbingDragActive, setDubbingDragActive] = useState<boolean>(false);
   const [dubbingValidationError, setDubbingValidationError] = useState<string | null>(null);
@@ -1317,11 +1319,11 @@ export function PlaygroundPage({
     setDubbingValidationError(null);
     setErrorBanner(null);
 
-    // 1. Capacity limit: max 2 GB (2,147,483,648 bytes)
-    const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024;
-    if (file.size > MAX_FILE_SIZE) {
+    // Playground uploads are currently transported as base64 JSON.
+    const MAX_FILE_SIZE = 25 * 1024 * 1024;
+    if (file.size >= MAX_FILE_SIZE) {
       setDubbingValidationError(
-        `File capacity limit exceeded: selected file is ${(file.size / (1024 * 1024 * 1024)).toFixed(2)} GB (maximum allowed is 2 GB).`
+        "Please use a file smaller than 25 MB for Playground dubbing."
       );
       return;
     }
@@ -1401,14 +1403,10 @@ export function PlaygroundPage({
     const estimatedCostUsd = Number(((durationToUse / 60) * (selectedModelRecord.priceUsd ?? 3.50)).toFixed(4));
 
     try {
-      let fileBase64 = "";
-      if (dubbingFile.size < 25 * 1024 * 1024) {
-        try {
-          fileBase64 = await readFileAsDataUrl(dubbingFile);
-        } catch (_err) {
-          // ignore if base64 conversion fails
-        }
+      if (dubbingFile.size >= 25 * 1024 * 1024) {
+        throw new Error("Please use a file smaller than 25 MB for Playground dubbing.");
       }
+      const fileBase64 = await readFileAsDataUrl(dubbingFile);
 
       const payload = {
         model: selectedDubbingModel,
@@ -1419,6 +1417,7 @@ export function PlaygroundPage({
         media_type: dubbingMediaType === "video" ? (dubbingFile.type || "video/mp4") : (dubbingFile.type || "audio/mpeg"),
         file_name: dubbingFileName || "media.mp4",
         file_base64: fileBase64,
+        voice_settings: { cloning_strength: dubbingCloningStrength },
       };
 
       if (shouldUseBrowserApi()) {
@@ -1436,7 +1435,8 @@ export function PlaygroundPage({
           body: JSON.stringify(payload),
         });
 
-        const resultUrl = response.media_url || dubbingPreviewUrl || fileBase64;
+        const resultUrl = response.media_url;
+        if (!resultUrl) throw new Error("Dubbing completed without an audio download.");
         setDubbedMediaUrl(resultUrl);
         setDubbedRun({
           id: response.id || runId,
@@ -1444,7 +1444,7 @@ export function PlaygroundPage({
           targetLang: dubbingTargetLang,
           durationSeconds: response.duration_seconds || durationToUse,
           costUsd: response.cost_usd ?? estimatedCostUsd,
-          mediaType: dubbingMediaType,
+          mediaType: response.media_type?.startsWith("video/") ? "video" : "audio",
           fileName: response.file_name || `dubbed-${dubbingTargetLang.toLowerCase()}-${dubbingFileName}`,
         });
       } else {
@@ -1464,8 +1464,15 @@ export function PlaygroundPage({
           throw new Error(msg);
         }
 
-        const data = await res.json().catch(() => ({}));
-        const resultUrl = data.media_url || dubbingPreviewUrl || fileBase64;
+        const initial = await res.json();
+        const completed = await waitForDubbing(initial, async (projectId, languageId) => {
+          const status = await fetch(`${baseUrl}/api/playground/dubbing?${new URLSearchParams({ project_id: projectId, language_id: languageId })}`);
+          const result = await status.json();
+          if (!status.ok) throw new Error(result.message || "Dubbing failed.");
+          return result;
+        });
+        const data = { ...initial, ...completed };
+        const resultUrl = data.media_url;
         setDubbedMediaUrl(resultUrl);
         setDubbedRun({
           id: data.id || runId,
@@ -1473,7 +1480,7 @@ export function PlaygroundPage({
           targetLang: dubbingTargetLang,
           durationSeconds: data.duration_seconds || durationToUse,
           costUsd: data.cost_usd ?? estimatedCostUsd,
-          mediaType: dubbingMediaType,
+          mediaType: data.media_type?.startsWith("video/") ? "video" : "audio",
           fileName: data.file_name || `dubbed-${dubbingTargetLang.toLowerCase()}-${dubbingFileName}`,
         });
       }
@@ -2541,6 +2548,31 @@ export function PlaygroundPage({
                 </Popover>
               )}
 
+              {mode === "dubbing" && (
+                <Popover
+                  trigger={<><SlidersHorizontal className="h-3.5 w-3.5 text-neutral-400" />Options</>}
+                  badge={dubbingCloningStrength !== 7 ? 1 : 0}
+                >
+                  {() => (
+                    <div className="p-3" data-testid="playground-dubbing-options">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <label htmlFor="dubbing-speaker-similarity" className="text-xs font-semibold text-neutral-900 dark:text-white">Speaker similarity</label>
+                        <output htmlFor="dubbing-speaker-similarity" className="font-mono text-xs tabular-nums text-neutral-500">{dubbingCloningStrength}/10</output>
+                      </div>
+                      <input id="dubbing-speaker-similarity" type="range" min="0" max="10" step="1"
+                        value={dubbingCloningStrength} disabled={dubbingRunning}
+                        onChange={(event) => setDubbingCloningStrength(Number(event.target.value))}
+                        aria-describedby="dubbing-speaker-similarity-help"
+                        className="h-2 w-full cursor-pointer accent-neutral-950 disabled:cursor-not-allowed disabled:opacity-40 dark:accent-white" />
+                      <div className="mt-2 flex justify-between gap-4 text-[10px] leading-snug text-neutral-500 dark:text-neutral-400">
+                        <span>More natural</span><span className="text-right">More like original speaker</span>
+                      </div>
+                      <p id="dubbing-speaker-similarity-help" className="mt-3 text-[11px] leading-relaxed text-neutral-500 dark:text-neutral-400">Lower values favor natural delivery. Higher values preserve more of the original voice and accent. Default: 7.</p>
+                    </div>
+                  )}
+                </Popover>
+              )}
+
               {mode === "dubbing" ? (
                 <button
                   type="button"
@@ -3221,7 +3253,7 @@ export function PlaygroundPage({
                       Source Media
                     </label>
                     <span className="rounded-full bg-neutral-100 px-2 py-0.5 font-mono text-[10px] text-neutral-500 dark:bg-white/10 dark:text-neutral-400">
-                      15s – 180m • Max 2 GB
+                      15s – 180m • Under 25 MB
                     </span>
                   </div>
 
@@ -3314,7 +3346,7 @@ export function PlaygroundPage({
                         Audio or video (MP4, MOV, WebM, MP3, WAV, M4A)
                       </p>
                       <p className="mt-1 font-mono text-[10px] text-neutral-400 dark:text-neutral-500">
-                        Duration: 15s – 180 min • Capacity: Up to 2 GB
+                        Duration: 15s – 180 min • Capacity: Under 25 MB
                       </p>
                     </div>
                   </label>
@@ -3373,7 +3405,7 @@ export function PlaygroundPage({
                           <div className="flex items-center gap-2">
                             <Clapperboard className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                             <span className="text-xs font-semibold text-neutral-900 dark:text-white">
-                              Dubbed {dubbingMediaType === "video" ? "Video" : "Audio"} • {dubbingTargetLang}
+                              Dubbed {dubbedRun?.mediaType === "video" ? "Video" : "Audio"} • {dubbingTargetLang}
                             </span>
                           </div>
                           {dubbedRun && (
@@ -3383,7 +3415,7 @@ export function PlaygroundPage({
                           )}
                         </div>
 
-                        {dubbingMediaType === "video" ? (
+                        {dubbedRun?.mediaType === "video" ? (
                           <div className="mb-4 overflow-hidden rounded-xl bg-black">
                             <video
                               src={dubbedMediaUrl}
@@ -3404,7 +3436,7 @@ export function PlaygroundPage({
                           className="pressable inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-neutral-950 px-5 text-xs font-semibold text-white shadow-xs transition hover:bg-neutral-800 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
                         >
                           <Download className="h-4 w-4" />
-                          Download Dubbed {dubbingMediaType === "video" ? "Video" : "Audio"}
+                          Download Dubbed {dubbedRun?.mediaType === "video" ? "Video" : "Audio"}
                         </a>
                       </div>
                     ) : dubbingRunning ? (

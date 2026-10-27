@@ -1,3 +1,4 @@
+import { waitForDubbing } from "./dubbingApi";
 import { dubbingModels, musicModels, resolveImageModel, textModelsByPricingMode } from "./pricing";
 import type { TextPricingMode } from "./pricing";
 import { buildImageTranslationInstruction, buildModelSystemPrompt } from "./systemPrompts";
@@ -1486,42 +1487,21 @@ async function runDubbingBrowser(state: BrowserState, options?: RequestInit) {
     fail("Insufficient balance. Please deposit credits.");
   }
 
-  let mediaUrl = "";
-  try {
-    const upstreamRes = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/playground/dubbing`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-LingoFusion-Client-Token": "lf_play_secure_649f7",
-      },
-      body: JSON.stringify({
-        model: model.model,
-        target_lang: targetLang,
-        source_lang: sourceLang,
-        duration_seconds: durationSeconds,
-        media_type: mediaType,
-        file_name: fileName,
-        file_base64: fileBase64,
-      }),
-    });
-
-    const data = (await upstreamRes.json().catch(() => ({}))) as Record<string, any>;
-    if (upstreamRes.ok && data.media_url) {
-      mediaUrl = String(data.media_url);
-    }
-  } catch (_err) {
-    // Fallback if network/gateway unavailable
-  }
-
-  if (!mediaUrl) {
-    if (fileBase64) {
-      mediaUrl = fileBase64.startsWith("data:") ? fileBase64 : `data:${mediaType};base64,${fileBase64}`;
-    } else {
-      mediaUrl = mediaType.startsWith("video")
-        ? "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
-        : "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
-    }
-  }
+  const headers = { "Content-Type": "application/json", "X-LingoFusion-Client-Token": "lf_play_secure_649f7" };
+  const readResponse = async (response: Response) => {
+    const data = await response.json();
+    if (!response.ok) fail(data.message || "Dubbing failed.");
+    return data;
+  };
+  const initial = await readResponse(await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/playground/dubbing`, {
+    method: "POST", headers,
+    body: JSON.stringify({ ...body, model: model.model, target_lang: targetLang, source_lang: sourceLang,
+      duration_seconds: durationSeconds, media_type: mediaType, file_name: fileName, file_base64: fileBase64 }),
+  }));
+  const completed = await waitForDubbing(initial, async (projectId, languageId) =>
+    readResponse(await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/playground/dubbing?${new URLSearchParams({ project_id: projectId, language_id: languageId })}`, { headers })),
+  );
+  const mediaUrl = completed.media_url;
 
   const requestId = randomId("req");
   applyCharge(state, cost);
@@ -1552,8 +1532,8 @@ async function runDubbingBrowser(state: BrowserState, options?: RequestInit) {
     upstream_model: "dubbing_v2",
     status: "dubbed",
     media_url: mediaUrl,
-    file_name: fileName.startsWith("dubbed-") ? fileName : `dubbed-${targetLang.toLowerCase()}-${fileName}`,
-    media_type: mediaType,
+    file_name: fileName.startsWith("dubbed-") ? fileName : `dubbed-${targetLang.toLowerCase()}-${fileName.replace(/\.[^.]+$/, "")}.flac`,
+    media_type: "audio/flac",
     target_lang: targetLang,
     source_lang: sourceLang,
     duration_seconds: durationSeconds,

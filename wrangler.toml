@@ -16,3 +16,6 @@ class_name = "GiftClaims"
 [[migrations]]
 tag = "gift-claims-v1"
 new_sqlite_classes = ["GiftClaims"]
+
+[observability.logs]
+enabled = true

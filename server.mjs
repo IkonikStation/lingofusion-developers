@@ -1,3 +1,4 @@
+import { dubbingRequest } from "./cloudflare-worker/dubbing.mjs";
 import { createDecipheriv, createHash, createHmac, pbkdf2Sync, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
@@ -3129,6 +3130,16 @@ async function route(req, res) {
     // =========================================================================
     // 3d. Dubbing Endpoint: POST /v1/dubbing and /api/playground/dubbing
     // =========================================================================
+    if (req.method === "GET" && ["/v1/dubbing", "/api/playground/dubbing"].includes(url.pathname)) {
+      if (url.pathname === "/v1/dubbing" && authenticateBearerApiKey(req, db).error) {
+        return send(res, 401, { message: "Invalid API key." });
+      }
+      try {
+        return send(res, 200, await dubbingRequest("GET", Object.fromEntries(url.searchParams), process.env.VOICE_API_KEY));
+      } catch (error) {
+        return send(res, 400, { message: error.message });
+      }
+    }
     if (req.method === "POST" && (url.pathname === "/v1/dubbing" || url.pathname === "/api/playground/dubbing")) {
       const isPlayground = url.pathname.startsWith("/api/playground");
       let user;
@@ -3157,7 +3168,6 @@ async function route(req, res) {
       const durationSeconds = Math.max(15, Math.min(10800, Number(body.duration_seconds || 30)));
       const mediaType = String(body.media_type || "video/mp4");
       const fileName = String(body.file_name || (mediaType.startsWith("video") ? "dubbed_video.mp4" : "dubbed_audio.mp3"));
-      const mediaBase64 = String(body.file_base64 || "");
 
       const costUsd = Number(((durationSeconds / 60) * 3.50).toFixed(4));
       const balanceUsd = getUserBalance(user.id, db);
@@ -3172,6 +3182,12 @@ async function route(req, res) {
         });
       }
 
+      let job;
+      try {
+        job = await dubbingRequest("POST", body, process.env.VOICE_API_KEY);
+      } catch (error) {
+        return send(res, 400, { message: error.message });
+      }
       deductUserBalance(user.id, costUsd, db);
       const requestId = id("req");
       logUsage({
@@ -3189,20 +3205,11 @@ async function route(req, res) {
         durationSeconds,
       }, db);
 
-      let mediaUrl = mediaBase64
-        ? (mediaBase64.startsWith("data:") ? mediaBase64 : `data:${mediaType};base64,${mediaBase64}`)
-        : (mediaType.startsWith("video")
-            ? "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
-            : "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=");
-
       return send(res, 200, {
-        id: requestId,
+        ...job,
         model: "LingoFusion Dubbing",
         upstream_model: "dubbing_v2",
-        status: "dubbed",
-        media_url: mediaUrl,
-        file_name: fileName.startsWith("dubbed-") ? fileName : `dubbed-${targetLang}-${fileName}`,
-        media_type: mediaType,
+        file_name: `dubbed-${targetLang}-${fileName.replace(/\.[^.]+$/, "")}.flac`,
         target_lang: targetLang,
         source_lang: sourceLang,
         duration_seconds: durationSeconds,
