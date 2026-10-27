@@ -754,7 +754,7 @@ export function PlaygroundPage({
       messages: [{ role: "user", content: currentInput }],
       stream: streamToggle,
       pricing_mode: effectiveSpeedMode,
-      ...(activeModel.model_id === "LingoFusion" ? { temperature } : {}),
+      ...(["LingoFusion", "LingoFusion Lite"].includes(activeModel.model_id) ? { temperature } : {}),
       ...(allowWebSearch ? { allow_web_search: true } : {}),
       ...(activeModel.model_id === "LingoFusion Pro" && proReasoningEnabled
         ? { reasoning_enabled: true, reasoning_effort: "medium" }
@@ -2471,7 +2471,7 @@ export function PlaygroundPage({
                 >
                   {() => (
                     <>
-                      {activeModel.model_id === "LingoFusion" && (
+                      {["LingoFusion", "LingoFusion Lite"].includes(activeModel.model_id) && (
                         <div className="mb-1 rounded-lg border border-neutral-200 p-3 dark:border-white/10" data-testid="playground-temperature-control">
                           <div className="flex items-center justify-between gap-3">
                             <label htmlFor="playground-temperature" className="text-xs font-semibold text-neutral-900 dark:text-white">Temperature</label>
