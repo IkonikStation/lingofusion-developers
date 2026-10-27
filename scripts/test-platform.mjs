@@ -173,8 +173,8 @@ async function runTests() {
     assert.ok(modelsPayload.data.length >= 6, "Must have LingoFusion Nano to Ultra models");
     const nanoModel = modelsPayload.data.find((m) => m.model_id === "LingoFusion Nano");
     assert.ok(nanoModel, "LingoFusion Nano must be in model_pricing");
-    assert.equal(nanoModel.input_per_million, 0.08, "Nano input price must be $0.08/1M");
-    assert.equal(nanoModel.output_per_million, 0.60, "Nano output price must be $0.60/1M");
+    assert.equal(nanoModel.input_per_million, 0.05, "Nano input price must be $0.05/1M");
+    assert.equal(nanoModel.output_per_million, 0.10, "Nano output price must be $0.10/1M");
     const lfModel = modelsPayload.data.find((m) => m.model_id === "LingoFusion");
     assert.ok(lfModel, "LingoFusion must be in model_pricing");
     assert.equal(lfModel.upstream_model_name, "gpt-6-luna");
