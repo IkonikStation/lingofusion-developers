@@ -1183,11 +1183,11 @@ a {
   height: 28px;
   background: transparent;
   cursor: pointer;
-  --similarity-track: #e5e5e5;
+  --similarity-track: #a3a3a3;
   --similarity-thumb: #171717;
 }
 .dark .dubbing-similarity-slider {
-  --similarity-track: #404040;
+  --similarity-track: #737373;
   --similarity-thumb: #f5f5f5;
 }
 .dubbing-similarity-slider::-webkit-slider-runnable-track {

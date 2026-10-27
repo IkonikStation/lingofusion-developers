@@ -2573,10 +2573,10 @@ export function PlaygroundPage({
                         </div>
                       </div>
                       <div className="mt-4 flex items-center justify-between border-t border-neutral-100 pt-3 dark:border-white/10">
-                        <span className="text-[10px] text-neutral-400">Recommended: 7</span>
+                        <span className="text-[10px] text-neutral-500 dark:text-neutral-400">Recommended: 7</span>
                         <button type="button" disabled={dubbingRunning || dubbingCloningStrength === 7}
                           onClick={() => setDubbingCloningStrength(7)}
-                          className="rounded-md px-2 py-1 text-[11px] font-medium text-neutral-600 transition hover:bg-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-neutral-500 disabled:cursor-default disabled:opacity-40 dark:text-neutral-300 dark:hover:bg-white/10">Reset</button>
+                          className="rounded-md px-2 py-1 text-[11px] font-medium text-neutral-600 transition hover:bg-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-neutral-500 disabled:cursor-default disabled:opacity-60 dark:text-neutral-300 dark:hover:bg-white/10">Reset</button>
                       </div>
                     </div>
                   )}
