@@ -6,7 +6,9 @@
     "dev:all": "node scripts/dev-all.mjs",
     "build": "tsc -b && vite build && node scripts/generate-spa-fallbacks.mjs",
     "preview": "vite preview",
-    "test": "node scripts/test-platform.mjs"
+    "test": "node scripts/test-platform.mjs",
+    "test:billing": "node --test scripts/test-billing.mjs && node scripts/test-gifts.mjs && node scripts/test-billing-node.mjs",
+    "test:stripe-sandbox": "node scripts/test-stripe-sandbox.mjs"
   },
   "dependencies": {
     "@lmstudio/sdk": "^1.5.0",

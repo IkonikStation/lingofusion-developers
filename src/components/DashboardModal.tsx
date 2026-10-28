@@ -1433,11 +1433,11 @@ export function DashboardModal({
                 )}
 
                 {tab === "Auto-Recharge" && (
-                  <Panel title="Auto top-up" description="Automatically charge your saved payment method and bring your balance back up when your credit balance drops below your threshold.">
+                  <Panel title="Auto top-up" description="Automatic top-up is temporarily unavailable. Add funds manually to top up your balance.">
                     <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                       <SelectInput label="Auto top-up" value={autoRecharge.enabled ? "Enabled" : "Disabled"} onChange={(value) => setAutoRecharge({ ...autoRecharge, enabled: value === "Enabled" })}>
                         <option value="Disabled">{tc("Disabled")}</option>
-                        <option value="Enabled">{tc("Enabled")}</option>
+                        <option value="Enabled" disabled>{tc("Unavailable")}</option>
                       </SelectInput>
                       <NumberInput label="When my balance reaches ($1 – $999)" value={autoRecharge.threshold} min={1} max={999} step={1} onChange={(value) => setAutoRecharge({ ...autoRecharge, threshold: value })} />
                       <NumberInput label="Bring my balance back up to ($1 – $50,000)" value={autoRecharge.amount} min={1} max={50000} step={1} onChange={(value) => setAutoRecharge({ ...autoRecharge, amount: value })} />

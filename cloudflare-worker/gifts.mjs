@@ -1,8 +1,12 @@
+import { billing } from "./billing.mjs";
+import { assertCharge, retrieveCheckout } from "../shared/billing.mjs";
 import { sendGiftFromGmail } from "./gmail.mjs";
 import { giftClaimUrl, renderGiftEmail } from "../shared/giftEmail.mjs";
 
 export async function fulfillPaidGift(session, env) {
-  if (session.payment_status !== "paid" || session.metadata?.isGift !== "true") return null;
+  if (session.payment_status !== "paid" || session.currency !== "usd" || session.metadata?.isGift !== "true") return null;
+  const evidence = assertCharge(session);
+  if (evidence.amount_refunded) throw new Error("Refunded gift requires review.");
   if (!env.GIFTS) throw new Error("Gift storage is not configured.");
   const metadata = session.metadata;
   const recipientEmail = String(metadata.recipientEmail || "").trim().toLowerCase();
@@ -39,7 +43,7 @@ export async function fulfillPaidGift(session, env) {
 
 export async function verifyGiftWebhook(raw, signature, secret, now = Date.now()) {
   if (!secret) return false;
-  const parts = String(signature || "").split(",");
+  const parts = String(signature || "").split(",").map(part => part.trim());
   const timestamp = Number(parts.find((part) => part.startsWith("t="))?.slice(2));
   if (!Number.isFinite(timestamp) || Math.abs(now / 1000 - timestamp) > 300) return false;
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
@@ -78,7 +82,13 @@ export class GiftClaims {
       }
       if (!unclaimed.length) return Response.json({ message: "No unclaimed gift was found for this account." }, { status: 404 });
       const amount = Number(unclaimed.reduce((sum, gift) => sum + Number(gift.amountUsd), 0).toFixed(2));
-      const balance = Number((Number(await kv.get(`user_balance:${email}`) || 0) + amount).toFixed(6));
+      for (const gift of unclaimed) {
+        const evidence = await retrieveCheckout(gift.stripeSessionId, this.env.STRIPE_SECRET_KEY);
+        if (evidence.livemode !== /^(sk|rk)_live_/.test(this.env.STRIPE_SECRET_KEY || "")) throw new Error("Wrong Stripe mode.");
+        await billing(this.env, { action: "adoptGift", email, gift, session: evidence });
+      }
+      const credited = await billing(this.env, { action: "giftCredit", email, gifts: unclaimed });
+      const balance = credited.balance_usd;
       const now = new Date().toISOString();
       const result = { success: true, claimedAmountUsd: amount, newBalance: balance, claimedCount: unclaimed.length, gifts: unclaimed };
       // Persist a projection job with the claim markers. Retrying a failed KV write
@@ -99,7 +109,7 @@ export class GiftClaims {
   }
   async project(pending) {
     const kv = this.env.GIFTS;
-    await kv.put(`user_balance:${pending.email}`, String(pending.balance));
+    // Balance is committed by the billing ledger before this gift projection.
     for (const gift of pending.gifts) await kv.put(`gift:${gift.code}`, JSON.stringify(gift));
     const listKey = `gifts_for:${pending.email}`;
     const list = JSON.parse(await kv.get(listKey) || "[]");

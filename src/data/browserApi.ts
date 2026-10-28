@@ -547,50 +547,7 @@ function applyCharge(state: BrowserState, cost: number) {
   }
   syncCloudBalanceUpdate(account.paidBalance, -paidCharge);
 
-  // Check Auto Top-Up trigger when balance drops to or below threshold
-  const auto = state.dashboard.autoRecharge;
-  if (
-    auto?.enabled &&
-    Number.isFinite(auto.threshold) &&
-    auto.threshold >= 1 &&
-    auto.threshold <= 999 &&
-    Number.isFinite(auto.amount) &&
-    auto.amount >= 1 &&
-    auto.amount <= 50000 &&
-    auto.amount > auto.threshold &&
-    account.paidBalance <= auto.threshold
-  ) {
-    const neededUsd = Number((auto.amount - account.paidBalance).toFixed(2));
-    if (neededUsd > 0) {
-      const { grossChargedUsd } = calculateGrossDeposit(neededUsd);
-      account.paidBalance = Number((account.paidBalance + neededUsd).toFixed(6));
-      account.totalPaidCreditPurchased = Number(
-        (account.totalPaidCreditPurchased + neededUsd).toFixed(6),
-      );
-      if (state.dashboard.user) {
-        state.dashboard.user.balance_usd = account.paidBalance;
-      }
-      const now = new Date().toISOString();
-      const autoSessionId = randomId("cs_auto");
-      state.dashboard.depositLedger?.unshift({
-        id: randomId("dep"),
-        user_id: state.dashboard.user?.id || "00000000-0000-4000-8000-000000000001",
-        stripe_session_id: autoSessionId,
-        net_deposited_usd: neededUsd,
-        gross_charged_usd: grossChargedUsd,
-        status: "auto_top_up",
-        created_at: now,
-      });
-      state.dashboard.ledger.unshift({
-        id: randomId("auto"),
-        type: "auto_top_up",
-        amount: neededUsd,
-        description: `Auto Top-Up (+$${neededUsd.toFixed(2)} USD to bring balance to $${auto.amount.toFixed(2)} USD / Gross charged $${grossChargedUsd.toFixed(2)} USD)`,
-        status: "completed",
-        createdAt: now,
-      });
-    }
-  }
+
 }
 
 function logRequest(state: BrowserState, log: BrowserRequestLog) {
@@ -650,12 +607,12 @@ export function syncCloudBalanceUpdate(newBalance: number, deltaUsd?: number) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "Idempotency-Key": crypto.randomUUID(),
       ...(currentUser.sessionToken ? { Authorization: `Bearer ${currentUser.sessionToken}` } : {}),
     },
     body: JSON.stringify({
       email,
       userId: currentUser.id,
-      balance_usd: newBalance,
       delta_usd: deltaUsd,
     }),
   }).catch(() => {});
@@ -1559,6 +1516,7 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
   let result: unknown;
 
   if (method === "GET" && path === "/api/dashboard") {
+    state.dashboard.autoRecharge.enabled = false;
     result = state.dashboard;
   } else if (method === "GET" && path === "/v1/models") {
     result = {
@@ -1600,7 +1558,7 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
             returnUrl: body.returnUrl || returnPlaygroundUrl,
           }),
         });
-        if (!edgeRes.ok && body.isGift) {
+        if (!edgeRes.ok) {
           const error = await edgeRes.json().catch(() => ({}));
           throw new Error(error.message || "Gift checkout is unavailable.");
         }
@@ -1611,7 +1569,7 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
             result = {
               url: sessionUrl,
               checkoutUrl: sessionUrl,
-              sessionId: edgeSession.sessionId || edgeSession.id || randomId("cs_live"),
+              sessionId: edgeSession.sessionId || edgeSession.id,
               currency,
               netDepositUsd: netDepositedUsd,
               grossAmountCents,
@@ -1627,148 +1585,13 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
           }
         }
       } catch (error) {
-        if (body.isGift) throw error;
-        // Fallback to local checkout simulator if offline
+        throw error;
       }
     }
 
-    if (body.isGift && !result) throw new Error("Gift checkout requires the live gift gateway.");
-    if (!result) {
-      const sessionId = randomId("cs_test");
-      const checkoutUrl = `${basePath}/checkout?stripe_session_id=${sessionId}&net_usd=${netDepositedUsd.toFixed(2)}&gross_cents=${grossAmountCents}&user_id=${encodeURIComponent(userId)}&currency=${encodeURIComponent(currency)}`;
-      result = {
-        url: checkoutUrl,
-        checkoutUrl,
-        sessionId,
-        currency,
-        netDepositUsd: netDepositedUsd,
-        grossAmountCents,
-        grossChargedUsd,
-        estimatedStripeFeeUsd,
-        metadata: {
-          userId,
-          topUpAmount: netDepositedUsd.toString(),
-          netDepositUsd: netDepositedUsd.toString(),
-          currency,
-        },
-      };
-    }
+    if (!result) fail("Checkout is unavailable. Please try again later.");
   } else if (method === "POST" && (path === "/api/stripe-webhook" || path === "/api/webhooks/stripe")) {
-    const body = requestBody(options);
-    const sessionObj = ((body.data as Record<string, unknown>)?.object as Record<string, unknown>) || {};
-    const metadata =
-      ((sessionObj.metadata as Record<string, string>) ||
-      (sessionObj.subscription_details as Record<string, unknown>)?.metadata as Record<string, string> ||
-      ((sessionObj.lines as Record<string, unknown>)?.data as Array<Record<string, unknown>>)?.[0]?.metadata as Record<string, string>) ||
-      {};
-    const planId = metadata.planId;
-    const userId = String(metadata.userId || state.dashboard.user?.id || "00000000-0000-4000-8000-000000000001");
-
-    if (planId) {
-      let dubbingMins = Number(metadata.dubbing_mins || 0);
-      let voiceCredits = Number(metadata.voice_credits || 25000);
-      let textChars = Number(metadata.text_chars || 2200000);
-      let transcribeMins = Number(metadata.transcribe_mins || 30);
-      let imageCount = Number(metadata.image_count || 50);
-      let monthlyPriceUsd = 19.99;
-      let yearlyPriceUsd = 204.0;
-
-      if (planId === "pro-max-750k" || planId === "pro-max") {
-        monthlyPriceUsd = 39.99;
-        yearlyPriceUsd = 408.0;
-        voiceCredits = Number(metadata.voice_credits || 75000);
-        textChars = Number(metadata.text_chars || 4800000);
-        transcribeMins = Number(metadata.transcribe_mins || 75);
-        imageCount = Number(metadata.image_count || 150);
-      } else if (planId === "ultra-custom") {
-        monthlyPriceUsd = Number(metadata.monthly_price_usd || 256.04);
-        yearlyPriceUsd = Number(metadata.yearly_price_usd || Math.round(monthlyPriceUsd * 12 * 0.85 * 100) / 100);
-        dubbingMins = Number(metadata.dubbing_mins || 30);
-        voiceCredits = Number(metadata.voice_credits || 1200000);
-        textChars = Number(metadata.text_chars || 5000000);
-        transcribeMins = Number(metadata.transcribe_mins || 120);
-        imageCount = Number(metadata.image_count || 50);
-      }
-
-      const billing = String(metadata.billing || "monthly").toLowerCase();
-      const isYearly = billing === "yearly";
-      const billedAmountUsd = isYearly ? yearlyPriceUsd : monthlyPriceUsd;
-
-      (state.dashboard as any).workspaceSubscription = {
-        id: randomId("sub"),
-        planId,
-        status: "active",
-        billing,
-        monthlyPriceUsd,
-        yearlyPriceUsd,
-        billedAmountUsd,
-        dubbingMinsAllocated: dubbingMins,
-        dubbingMinsUsed: 0,
-        voiceCreditsAllocated: voiceCredits,
-        voiceCreditsUsed: 0,
-        textCharsAllocated: textChars,
-        textCharsUsed: 0,
-        transcribeMinsAllocated: transcribeMins,
-        transcribeMinsUsed: 0,
-        imagesAllocated: imageCount,
-        imagesUsed: 0,
-        currentPeriodEnd: new Date(Date.now() + (isYearly ? 365 : 30) * 24 * 60 * 60 * 1000).toISOString(),
-      };
-
-      result = {
-        received: true,
-        type: "subscription_provisioned",
-        subscription: (state.dashboard as any).workspaceSubscription,
-      };
-    } else {
-      const netDepositUsd = Number(metadata.topUpAmount ?? metadata.netDepositUsd ?? 0);
-      const stripeSessionId = String(sessionObj.id || randomId("cs_test"));
-      const { grossChargedUsd } = calculateGrossDeposit(netDepositUsd);
-
-      const alreadyProcessed = state.dashboard.depositLedger?.some(
-        (entry) => entry.stripe_session_id === stripeSessionId,
-      );
-
-      if (alreadyProcessed) {
-        result = {
-          received: true,
-          duplicate: true,
-          balance_usd: state.dashboard.account.paidBalance,
-          net_deposited_usd: netDepositUsd,
-          gross_charged_usd: grossChargedUsd,
-        };
-      } else {
-        state.dashboard.account.paidBalance = Number((state.dashboard.account.paidBalance + netDepositUsd).toFixed(6));
-        state.dashboard.account.totalPaidCreditPurchased = Number((state.dashboard.account.totalPaidCreditPurchased + netDepositUsd).toFixed(6));
-        if (state.dashboard.user) {
-          state.dashboard.user.balance_usd = state.dashboard.account.paidBalance;
-        }
-        state.dashboard.depositLedger?.unshift({
-          id: randomId("dep"),
-          user_id: userId,
-          stripe_session_id: stripeSessionId,
-          net_deposited_usd: netDepositUsd,
-          gross_charged_usd: grossChargedUsd,
-          status: "completed",
-          created_at: new Date().toISOString(),
-        });
-        state.dashboard.ledger.unshift({
-          id: randomId("dep"),
-          type: "stripe_deposit",
-          amount: netDepositUsd,
-          description: `Stripe Deposit (Net $${netDepositUsd.toFixed(2)} / Gross charged $${grossChargedUsd.toFixed(2)})`,
-          status: "completed",
-          createdAt: new Date().toISOString(),
-        });
-        result = {
-          received: true,
-          duplicate: false,
-          balance_usd: state.dashboard.account.paidBalance,
-          net_deposited_usd: netDepositUsd,
-          gross_charged_usd: grossChargedUsd,
-        };
-      }
-    }
+    fail("Payment notifications must be verified by the server.");
   } else if (method === "POST" && path === "/api/verify-checkout-session") {
     const body = requestBody(options);
     const sessionId = String(body.sessionId || body.session_id || "").trim();
@@ -1778,12 +1601,15 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            ...(getCurrentUser().sessionToken ? { Authorization: `Bearer ${getCurrentUser().sessionToken}` } : {}),
           },
           body: JSON.stringify({ sessionId }),
         });
         if (stripeRes.ok) {
           const verifiedData = (await stripeRes.json()) as {
             verified?: boolean;
+            mode?: string;
+            subscription?: unknown;
             sessionId?: string;
             payment_status?: string;
             net_deposited_usd?: number;
@@ -1794,6 +1620,11 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
             giftCode?: string;
           };
           if (verifiedData.verified && verifiedData.payment_status === "paid") {
+            if (verifiedData.mode === "subscription") {
+              (state.dashboard as any).workspaceSubscription = verifiedData.subscription;
+              saveState(state);
+              return structuredClone(verifiedData) as T;
+            }
             const userId = String(state.dashboard.user?.id || "00000000-0000-4000-8000-000000000001");
             const netDepositUsd = Number(verifiedData.net_deposited_usd ?? 0);
             const grossChargedUsd = Number(
@@ -1817,9 +1648,8 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
                   createdAt: new Date().toISOString(),
                 });
               } else {
-                const updatedBalance = typeof verifiedData.balance_usd === "number" && Number.isFinite(verifiedData.balance_usd)
-                  ? verifiedData.balance_usd
-                  : Number((state.dashboard.account.paidBalance + netDepositUsd).toFixed(6));
+                if (typeof verifiedData.balance_usd !== "number" || !Number.isFinite(verifiedData.balance_usd)) fail("Server balance verification is unavailable.");
+                const updatedBalance = verifiedData.balance_usd;
                 state.dashboard.account.paidBalance = updatedBalance;
                 state.dashboard.account.totalPaidCreditPurchased = Number((state.dashboard.account.totalPaidCreditPurchased + netDepositUsd).toFixed(6));
                 if (state.dashboard.user) {
@@ -1869,10 +1699,7 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
       }
     }
     if (!result) {
-      result = {
-        verified: true,
-        balance_usd: state.dashboard.account.paidBalance,
-      };
+      result = { verified: false, balance_usd: state.dashboard.account.paidBalance };
     }
   } else if (method === "POST" && path === "/api/projects") {
     const body = requestBody(options);
@@ -1921,94 +1748,15 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
     key.key_prefix = secret.slice(0, 14);
     result = { secret, dashboard: state.dashboard };
   } else if (method === "POST" && path === "/api/billing/subscription-checkout") {
-    const body = requestBody(options);
-    const plan = String(body.plan || "ultra-custom");
-    const billing = String(body.billing || "monthly").toLowerCase();
-    const isYearly = billing === "yearly";
-
-    let dubbingMins = 0;
-    let voiceCredits = 25000;
-    let textChars = 2200000;
-    let transcribeMins = 30;
-    let imageCount = 50;
-    let monthlyPriceUsd = 19.99;
-    let yearlyPriceUsd = 204.0;
-    let desc = `LingoFusion Pro (${isYearly ? "Annual" : "Monthly"}) — flat $19.99/mo with zero checkout fees`;
-
-    if (plan === "pro-max-750k" || plan === "pro-max") {
-      monthlyPriceUsd = 39.99;
-      yearlyPriceUsd = 408.0;
-      voiceCredits = 75000;
-      textChars = 4800000;
-      transcribeMins = 75;
-      imageCount = 150;
-      desc = `LingoFusion Pro Max (${isYearly ? "Annual" : "Monthly"}) — flat $39.99/mo with zero checkout fees`;
-    } else if (plan === "ultra-custom") {
-      dubbingMins = Number(body.dubbing_mins || 30);
-      voiceCredits = Number(body.voice_credits || 1200000);
-      textChars = Number(body.text_chars || 5000000);
-      transcribeMins = Number(body.transcribe_mins || 120);
-      imageCount = Number(body.image_count || 50);
-      monthlyPriceUsd = Number(body.monthly_price_usd || 256.04);
-      yearlyPriceUsd = Number(body.yearly_price_usd || Math.round(monthlyPriceUsd * 12 * 0.85 * 100) / 100);
-      desc = `Ultra Custom Subscription (${isYearly ? "Annual" : "Monthly"}): ${dubbingMins}m dubbing, ${(voiceCredits / 1e6).toFixed(1)}M voice, ${(textChars / 1e6).toFixed(1)}M text, ${transcribeMins}m transcribe, ${imageCount} imgs`;
-    }
-
-    const billedAmountUsd = isYearly ? yearlyPriceUsd : monthlyPriceUsd;
-
-    (state.dashboard as any).workspaceSubscription = {
-      id: randomId("sub"),
-      planId: plan,
-      status: "active",
-      billing,
-      monthlyPriceUsd,
-      yearlyPriceUsd,
-      billedAmountUsd,
-      dubbingMinsAllocated: dubbingMins,
-      dubbingMinsUsed: 0,
-      voiceCreditsAllocated: voiceCredits,
-      voiceCreditsUsed: 0,
-      textCharsAllocated: textChars,
-      textCharsUsed: 0,
-      transcribeMinsAllocated: transcribeMins,
-      transcribeMinsUsed: 0,
-      imagesAllocated: imageCount,
-      imagesUsed: 0,
-      currentPeriodEnd: new Date(Date.now() + (isYearly ? 365 : 30) * 24 * 60 * 60 * 1000).toISOString(),
-    };
-
-    state.dashboard.ledger.unshift({
-      id: randomId("sub"),
-      type: "paid_credit_purchase",
-      amount: billedAmountUsd,
-      description: desc,
-      status: "succeeded",
-      createdAt: new Date().toISOString(),
+    const response = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/billing/subscription-checkout`, {
+      method: "POST", headers: { "Content-Type": "application/json", ...(getCurrentUser().sessionToken ? { Authorization: `Bearer ${getCurrentUser().sessionToken}` } : {}) },
+      body: JSON.stringify({ ...requestBody(options), returnUrl: `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}/playground` }),
     });
-
-    result = {
-      success: true,
-      subscription: (state.dashboard as any).workspaceSubscription,
-    };
+    const data = await response.json();
+    if (!response.ok) fail(data.message || "Subscription checkout is unavailable.");
+    result = data;
   } else if (method === "POST" && path === "/api/billing/recharge") {
-    const body = requestBody(options);
-    const amount = Number(body.amount);
-    if (body.confirm !== "ADD_LOCAL_TEST_BALANCE") fail("recharge_confirmation_required");
-    if (amount < 1 || amount > 50000) fail("recharge_amount_out_of_range");
-    state.dashboard.account.paidBalance = Number((state.dashboard.account.paidBalance + amount).toFixed(6));
-    state.dashboard.account.totalPaidCreditPurchased = Number((state.dashboard.account.totalPaidCreditPurchased + amount).toFixed(6));
-    if (state.dashboard.user) {
-      state.dashboard.user.balance_usd = state.dashboard.account.paidBalance;
-    }
-    state.dashboard.ledger.unshift({
-      id: randomId("rch"),
-      type: "paid_credit_purchase",
-      amount,
-      description: "Browser test balance purchase",
-      status: "succeeded",
-      createdAt: new Date().toISOString(),
-    });
-    result = state.dashboard;
+    fail("Simulated credit purchases are unavailable. Please use Stripe Checkout.");
   } else if (method === "POST" && path === "/api/billing/reset-local-data") {
     const body = requestBody(options);
     if (body.confirm !== "RESET_LOCAL_TEST_DATA") fail("reset_confirmation_required");
@@ -2029,6 +1777,7 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
     result = state.dashboard;
   } else if (method === "POST" && path === "/api/auto-recharge") {
     const body = requestBody(options);
+    if (body.enabled) fail("Automatic top-up is temporarily unavailable. Please add funds manually.");
     const amount = Number(body.amount ?? body.targetBalance);
     const threshold = Number(body.threshold);
     if (!Number.isFinite(threshold) || threshold < 1 || threshold > 999) {
@@ -2068,9 +1817,8 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
       // Credit this user's balance with the claimed gift amount!
       const claimedAmount = Number(claimData.claimedAmountUsd || 0);
       if (claimedAmount > 0) {
-        const updatedBalance = typeof claimData.newBalance === "number" && Number.isFinite(claimData.newBalance)
-          ? claimData.newBalance
-          : Number((state.dashboard.account.paidBalance + claimedAmount).toFixed(6));
+        if (typeof claimData.newBalance !== "number" || !Number.isFinite(claimData.newBalance)) fail("Gift balance confirmation is unavailable.");
+        const updatedBalance = claimData.newBalance;
         state.dashboard.account.paidBalance = updatedBalance;
         state.dashboard.account.totalPaidCreditPurchased = Number((state.dashboard.account.totalPaidCreditPurchased + claimedAmount).toFixed(6));
         if (state.dashboard.user) {

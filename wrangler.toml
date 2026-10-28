@@ -19,3 +19,11 @@ new_sqlite_classes = ["GiftClaims"]
 
 [observability.logs]
 enabled = true
+
+[[durable_objects.bindings]]
+name = "BILLING"
+class_name = "BillingLedger"
+
+[[migrations]]
+tag = "billing-ledger-v1"
+new_sqlite_classes = ["BillingLedger"]

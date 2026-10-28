@@ -474,7 +474,7 @@ export function PlaygroundPage({
       }
       updateBalance(bal);
       if (dash.autoRecharge) {
-        setAutoTopUpEnabled(Boolean(dash.autoRecharge.enabled));
+        setAutoTopUpEnabled(false);
         if (typeof dash.autoRecharge.threshold === "number" && dash.autoRecharge.threshold > 0) {
           setAutoTopUpThreshold(dash.autoRecharge.threshold);
         }
@@ -560,19 +560,20 @@ export function PlaygroundPage({
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const paymentStatus = params.get("payment") || params.get("deposit");
+    const paymentStatus = params.get("payment") || params.get("deposit") || params.get("subscription");
     const sessionId = params.get("session_id");
     if (paymentStatus === "success" || paymentStatus === "cancelled") {
       if (paymentStatus === "success") {
         setPaymentNotice({
           type: "success",
-          message: "Payment received! Updating balance...",
+          message: "Checking payment confirmation with Stripe…",
         });
         void (async () => {
           if (sessionId) {
             try {
               const verified = await callApi<{
                 verified?: boolean;
+                mode?: string;
                 balance_usd?: number;
                 net_deposited_usd?: number;
                 isGift?: boolean;
@@ -582,7 +583,10 @@ export function PlaygroundPage({
                 method: "POST",
                 body: JSON.stringify({ sessionId }),
               });
-              if (verified.isGift) {
+              if (!verified.verified) throw new Error("Payment is still awaiting confirmation. Sign in and check again shortly.");
+              if (verified.mode === "subscription") {
+                setPaymentNotice({ type: "success", message: "Your USD subscription payment is confirmed." });
+              } else if (verified.isGift) {
                 const claimUrl = `${window.location.origin}${window.location.pathname}?claim_gift=${encodeURIComponent(
                   verified.giftCode || "",
                 )}&gift_email=${encodeURIComponent(verified.recipientEmail || "")}`;
@@ -606,8 +610,8 @@ export function PlaygroundPage({
                   });
                 }
               }
-            } catch {
-              // Fall back to dashboard balance refresh
+            } catch (error) {
+              setPaymentNotice({ type: "cancelled", message: error instanceof Error ? error.message : "Payment confirmation is unavailable. Please sign in and check your balance shortly." });
             }
           }
           await loadModelsAndState();
@@ -620,6 +624,7 @@ export function PlaygroundPage({
       }
       params.delete("payment");
       params.delete("deposit");
+      params.delete("subscription");
       params.delete("session_id");
       const remainingQuery = params.toString();
       const cleanUrl = `${window.location.pathname}${remainingQuery ? `?${remainingQuery}` : ""}${window.location.hash}`;
@@ -1907,7 +1912,7 @@ export function PlaygroundPage({
                   </span>
                 </div>
                 <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
-                  Automatically charge your payment method and restore your balance when your credit runs low.
+                  Temporarily unavailable. Add funds manually to top up your balance.
                 </p>
               </div>
 
@@ -1916,7 +1921,7 @@ export function PlaygroundPage({
                 role="switch"
                 aria-checked={autoTopUpEnabled}
                 data-testid="auto-topup-toggle"
-                disabled={autoTopUpBusy}
+                disabled={true}
                 onClick={() => {
                   const next = !autoTopUpEnabled;
                   setAutoTopUpEnabled(next);
@@ -2047,7 +2052,7 @@ export function PlaygroundPage({
               <button
                 type="button"
                 data-testid="save-auto-topup-btn"
-                disabled={autoTopUpBusy}
+                disabled={true}
                 onClick={() => void handleSaveAutoTopUp()}
                 className="pressable inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-4 text-xs font-semibold text-neutral-900 shadow-2xs transition hover:bg-neutral-50 disabled:opacity-50 dark:border-white/15 dark:bg-neutral-950 dark:text-white dark:hover:bg-white/10"
               >

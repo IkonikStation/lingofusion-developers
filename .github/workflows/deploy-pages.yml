@@ -32,6 +32,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check billing security
+        run: |
+          node --test scripts/test-billing.mjs
+          node scripts/test-gifts.mjs
+          node scripts/test-billing-node.mjs
+
       - name: Build site
         env:
           VITE_LINGOFUSION_GATEWAY_URL: ${{ vars.VITE_LINGOFUSION_GATEWAY_URL }}

@@ -36,7 +36,7 @@ export function CheckoutPage({
     transcribeMins: customTranscribe,
     imageCount: customImages,
   });
-  const ultraMonthlyPrice = Number(query.get("monthly_price_usd")) || ultraBreakdown.totalMonthlyPrice;
+  const ultraMonthlyPrice = ultraBreakdown.totalMonthlyPrice;
 
   // Plan pricing resolution for standard tiers
   const getStandardPlanPricing = (id: string) => {
@@ -108,8 +108,7 @@ export function CheckoutPage({
         return;
       }
 
-      setSettled(true);
-      window.location.href = withBasePath("/playground?subscription=active");
+      throw new Error("A Stripe Checkout session could not be created. Your subscription has not been activated.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to activate subscription");
     } finally {
@@ -128,38 +127,8 @@ export function CheckoutPage({
       setBusy(true);
       setError(null);
       try {
-        const webhookPayload = {
-          id: `evt_${Date.now()}`,
-          type: "checkout.session.completed",
-          data: {
-            object: {
-              id: stripeSessionId,
-              amount_total: grossCents,
-              payment_status: "paid",
-              metadata: {
-                userId: userIdParam,
-                topUpAmount: netUsd.toString(),
-                netDepositUsd: netUsd.toString(),
-              },
-            },
-          },
-        };
-
-        let result: { balance_usd?: number };
-        if (shouldUseBrowserApi()) {
-          result = await browserApi("/api/stripe-webhook", {
-            method: "POST",
-            body: JSON.stringify(webhookPayload),
-          });
-        } else {
-          const res = await fetch(`${getApiBaseUrl()}/api/stripe-webhook`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(webhookPayload),
-          });
-          result = await res.json();
-          if (!res.ok) throw new Error("Failed to settle Stripe webhook");
-        }
+        const result = await browserApi<{ balance_usd?: number; verified?: boolean }>("/api/verify-checkout-session", { method: "POST", body: JSON.stringify({ sessionId: stripeSessionId }) });
+        if (!result.verified) throw new Error("Payment has not been verified by Stripe.");
 
         if (typeof result.balance_usd === "number") {
           onBalanceChange?.(result.balance_usd);

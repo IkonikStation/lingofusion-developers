@@ -1,3 +1,4 @@
+import { BILLING_POLICY, STRIPE_API_VERSION, depositQuote, requireUsd, subscriptionQuote, assertSession, assertCharge, netCreditCents, retrieveCheckout } from "./shared/billing.mjs";
 import { dubbingRequest } from "./cloudflare-worker/dubbing.mjs";
 import { createDecipheriv, createHash, createHmac, pbkdf2Sync, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
@@ -27,22 +28,25 @@ async function loadLocalEnv() {
   }
 }
 
-await loadLocalEnv();
+if (process.env.LINGOFUSION_SKIP_LOCAL_ENV !== "true") await loadLocalEnv();
 
-const dbPath = join(rootDir, "data", "api-platform.json");
-const sqlitePath = join(rootDir, "data", "platform.sqlite");
+const dataDir = process.env.LINGOFUSION_DATA_DIR || join(rootDir, "data");
+const dbPath = join(dataDir, "api-platform.json");
+const sqlitePath = join(dataDir, "platform.sqlite");
 const port = Number(process.env.LINGOFUSION_API_PORT || 8787);
 const MICRO_CENTS_PER_DOLLAR = 100_000_000;
 const DEFAULT_USER_ID = "00000000-0000-4000-8000-000000000001";
 const DEFAULT_USER_EMAIL = "developer@lingofusion.dev";
 
-await mkdir(join(rootDir, "data"), { recursive: true });
+await mkdir(dataDir, { recursive: true });
 const sqlDb = new DatabaseSync(sqlitePath);
 sqlDb.exec("PRAGMA journal_mode = WAL;");
 sqlDb.exec("PRAGMA foreign_keys = ON;");
 
 const schemaSql = await readFile(join(rootDir, "schema.sql"), "utf8");
 sqlDb.exec(schemaSql);
+sqlDb.exec("CREATE TABLE IF NOT EXISTS billing_invoices (id TEXT PRIMARY KEY, subscription_id TEXT NOT NULL)");
+sqlDb.exec("CREATE TABLE IF NOT EXISTS billing_orders (id TEXT PRIMARY KEY, body TEXT NOT NULL, refunded_cents INTEGER NOT NULL DEFAULT 0, credited_cents INTEGER NOT NULL DEFAULT 0)");
 
 const textModels = [
   { model: "LingoFusion Nano", input: 0.05, output: 0.10 },
@@ -142,19 +146,7 @@ seedDatabase();
 // Stripe Fee Gross-Up Formula:
 // Gross (in dollars) = (NetDeposit + 0.30) / (1 - 0.029)
 // Convert to integer cents using Math.ceil(Gross * 100).
-export function calculateGrossDepositCents(netDepositUsd) {
-  const net = Number(netDepositUsd);
-  const grossDollars = (net + 0.30) / (1 - 0.029);
-  const grossAmountCents = Math.ceil(grossDollars * 100);
-  const grossChargedUsd = Number((grossAmountCents / 100).toFixed(2));
-  const estimatedStripeFeeUsd = Number((grossChargedUsd - net).toFixed(2));
-  return {
-    netDepositedUsd: Number(net.toFixed(2)),
-    grossAmountCents,
-    grossChargedUsd,
-    estimatedStripeFeeUsd,
-  };
-}
+export const calculateGrossDepositCents = depositQuote;
 
 // Token Pricing Engine:
 // cost = (prompt_tokens * (input_per_million / 1,000,000)) + (completion_tokens * (output_per_million / 1,000,000))
@@ -239,41 +231,6 @@ function deductUserBalanceAndLogUsage({
     let autoTopUpApplied = false;
     let autoTopUpAmount = 0;
 
-    if (db?.autoRecharge?.enabled) {
-      const thresholdUsd = microCentsToDollars(db.autoRecharge.thresholdMicroCents);
-      const targetBalanceUsd = microCentsToDollars(db.autoRecharge.amountMicroCents);
-      if (
-        Number.isFinite(thresholdUsd) &&
-        thresholdUsd >= 1 &&
-        thresholdUsd <= 999 &&
-        Number.isFinite(targetBalanceUsd) &&
-        targetBalanceUsd >= 5 &&
-        targetBalanceUsd <= 50000 &&
-        targetBalanceUsd > thresholdUsd &&
-        currentBalance <= thresholdUsd
-      ) {
-        const neededUsd = Number((targetBalanceUsd - currentBalance).toFixed(2));
-        if (neededUsd > 0) {
-          const { grossChargedUsd } = calculateGrossDepositCents(neededUsd);
-          const autoSessionId = `cs_auto_topup_${randomBytes(10).toString("hex")}`;
-          const settlement = creditUserDeposit({
-            userId,
-            stripeSessionId: autoSessionId,
-            netDepositUsd: neededUsd,
-            grossChargedUsd,
-            status: "auto_top_up",
-          });
-          if (!settlement.alreadyProcessed && settlement.user) {
-            currentBalance = settlement.user.balance_usd;
-            autoTopUpApplied = true;
-            autoTopUpAmount = neededUsd;
-            db.account.paidBalanceMicroCents = dollarsToMicroCents(currentBalance);
-            db.account.totalPaidCreditPurchasedMicroCents += dollarsToMicroCents(neededUsd);
-            db.autoRecharge.lastAttemptAt = new Date().toISOString();
-          }
-        }
-      }
-    }
 
     return {
       success: true,
@@ -336,6 +293,9 @@ function creditUserDeposit({ userId, stripeSessionId, netDepositUsd, grossCharge
 }
 
 function provisionWorkspaceSubscription({
+  invoiceId = null,
+  periodStart = null,
+  periodEnd = null,
   userId,
   stripeSubscriptionId,
   planId = "ultra-custom",
@@ -356,7 +316,13 @@ function provisionWorkspaceSubscription({
       ? sqlDb.prepare("SELECT id FROM workspace_subscriptions WHERE stripe_subscription_id = ?").get(stripeSubscriptionId)
       : null;
 
+    if (invoiceId && sqlDb.prepare("SELECT id FROM billing_invoices WHERE id = ?").get(invoiceId)) {
+      sqlDb.exec("ROLLBACK");
+      return { id: existing?.id, alreadyProcessed: true };
+    }
+    if (invoiceId) sqlDb.prepare("INSERT INTO billing_invoices (id, subscription_id) VALUES (?, ?)").run(invoiceId, stripeSubscriptionId);
     if (existing) {
+      if (invoiceId) sqlDb.prepare("UPDATE workspace_subscriptions SET dubbing_mins_used=0, voice_credits_used=0, text_chars_used=0, transcribe_mins_used=0, images_used=0, current_period_start=?, current_period_end=? WHERE id=?").run(periodStart || now, periodEnd || nextMonth, existing.id);
       sqlDb.prepare(`
         UPDATE workspace_subscriptions
         SET dubbing_mins_allocated = ?, voice_credits_allocated = ?, text_chars_allocated = ?,
@@ -383,7 +349,7 @@ function provisionWorkspaceSubscription({
       subId, userId, stripeSubscriptionId || `sub_${randomBytes(12).toString("hex")}`,
       planId, Number(monthlyPriceUsd) || 0,
       dubbingMins, voiceCredits, textChars, transcribeMins, imageCount,
-      now, nextMonth, now, now
+      periodStart || now, periodEnd || nextMonth, now, now
     );
 
     sqlDb.exec("COMMIT");
@@ -397,8 +363,8 @@ function provisionWorkspaceSubscription({
 function getActiveWorkspaceSubscription(userId) {
   try {
     return sqlDb.prepare(
-      "SELECT * FROM workspace_subscriptions WHERE user_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1"
-    ).get(userId);
+      "SELECT * FROM workspace_subscriptions WHERE user_id = ? AND status = 'active' AND current_period_end > ? ORDER BY created_at DESC LIMIT 1"
+    ).get(userId, new Date().toISOString());
   } catch {
     return null;
   }
@@ -1901,7 +1867,7 @@ function publicDashboard(db) {
       totalRewardCreditEarned: microCentsToDollars(db.account.totalRewardCreditEarnedMicroCents),
     },
     autoRecharge: {
-      enabled: db.autoRecharge.enabled,
+      enabled: false,
       threshold: microCentsToDollars(db.autoRecharge.thresholdMicroCents),
       amount: microCentsToDollars(db.autoRecharge.amountMicroCents),
       monthlyLimit: microCentsToDollars(db.autoRecharge.monthlyLimitMicroCents),
@@ -2972,33 +2938,80 @@ async function handleChatCompletions({ req, res, body, user, apiKeyId, source, d
 
 // Verify Stripe Webhook Signature (compatible with stripe.webhooks.constructEvent format `t=...,v1=...`)
 function verifyStripeWebhookEvent(rawBuffer, sigHeader, webhookSecret) {
-  const payloadStr = rawBuffer.toString("utf8");
-  if (!webhookSecret) {
-    return JSON.parse(payloadStr);
+  if (!webhookSecret || !sigHeader) throw new Error("Signed Stripe webhooks must be configured.");
+  return new Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_placeholder").webhooks.constructEvent(rawBuffer, sigHeader, webhookSecret);
+}
+function billingBuyer(req, db) {
+  const api = authenticateBearerApiKey(req, db);
+  if (!api.error && api.user) return api.user;
+  const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+  const [body, sig, extra] = token.split(".");
+  if (!body || !sig || extra || !process.env.SESSION_SECRET) return null;
+  try {
+    const expected = createHmac("sha256", process.env.SESSION_SECRET).update(body).digest("base64url");
+    if (!safeEqualHash(expected, sig)) return null;
+    const claims = JSON.parse(Buffer.from(body, "base64url").toString());
+    if (!Number.isFinite(claims.exp) || claims.exp <= Date.now() / 1000 || !claims.email || !claims.id) return null;
+    const email = String(claims.email).toLowerCase();
+    sqlDb.prepare("INSERT OR IGNORE INTO users (id,email,balance_usd) VALUES (?,?,0)").run(claims.id, email);
+    return sqlDb.prepare("SELECT * FROM users WHERE email = ?").get(email);
+  } catch { return null; }
+}
+function recordBillingOrder(order) {
+  sqlDb.prepare("INSERT INTO billing_orders (id, body) VALUES (?, ?)").run(order.id, JSON.stringify(order));
+}
+async function settleNodeCheckout(id, owner) {
+  const session = await retrieveCheckout(id, process.env.STRIPE_SECRET_KEY);
+  if (session.livemode !== /^(sk|rk)_live_/.test(process.env.STRIPE_SECRET_KEY || "")) throw new Error("Wrong Stripe mode.");
+  const row = sqlDb.prepare("SELECT * FROM billing_orders WHERE id = ?").get(id);
+  const order = row ? JSON.parse(row.body) : null;
+  assertSession(session, order);
+  if (owner && order.userId !== owner.id) throw new Error("Checkout owner mismatch.");
+  if (row.refunded_cents || order.disputed) throw new Error("Refunded or disputed payment requires review.");
+  const charge = assertCharge(session);
+  sqlDb.prepare("UPDATE billing_orders SET body = ? WHERE id = ?").run(JSON.stringify({ ...order, chargeId: charge.id }), id);
+  if (charge.amount_refunded) throw new Error("Refunded payment requires review.");
+  if (session.mode === "subscription") {
+    const q = order.subscription;
+    const invoice = session.subscription.latest_invoice;
+    const sub = provisionWorkspaceSubscription({ invoiceId: invoice.id, periodStart: new Date(invoice.period_start * 1000 || Date.now()).toISOString(), periodEnd: new Date((invoice.lines?.data?.[0]?.period?.end || invoice.period_end) * 1000 || Date.now() + 30*86400000).toISOString(), userId: order.userId, stripeSubscriptionId: session.subscription.id, planId: q.plan, monthlyPriceUsd: q.monthly, dubbingMins: q.quotas[0], voiceCredits: q.quotas[1], textChars: q.quotas[2], transcribeMins: q.quotas[3], imageCount: q.quotas[4] });
+    return { verified: true, mode: "subscription", subscription: sub, payment_status: "paid", currency: "usd" };
   }
-  if (!sigHeader) {
-    const err = new Error("Missing stripe-signature header");
-    err.status = 400;
-    throw err;
+  if (order.isGift) throw new Error("Gift fulfillment requires the cloud gateway.");
+  const settlement = creditUserDeposit({ userId: order.userId, stripeSessionId: id, netDepositUsd: order.netCents / 100, grossChargedUsd: order.amountCents / 100 });
+  return { verified: true, payment_status: "paid", currency: "usd", alreadyProcessed: settlement.alreadyProcessed, balance_usd: settlement.user.balance_usd, net_deposited_usd: order.netCents / 100, gross_charged_usd: order.amountCents / 100 };
+}
+
+async function reconcileNodeRefund(object, hold) {
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: STRIPE_API_VERSION });
+  let chargeId = object.id;
+  if (hold !== undefined) {
+    const dispute = await stripe.disputes.retrieve(object.id);
+    chargeId = dispute.charge;
+    hold = dispute.status !== "won";
   }
-  const parts = String(sigHeader).split(",").reduce((acc, part) => {
-    const [k, v] = part.trim().split("=");
-    if (k && v) acc[k] = v;
-    return acc;
-  }, {});
-  if (!parts.t || !parts.v1) {
-    const err = new Error("Invalid stripe-signature format");
-    err.status = 400;
-    throw err;
+  const charge = await stripe.charges.retrieve(chargeId);
+  let row = sqlDb.prepare("SELECT * FROM billing_orders WHERE json_extract(body, '$.chargeId') = ?").get(charge.id);
+  if (!row) {
+    const sessions = await stripe.checkout.sessions.list({ payment_intent: typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent.id, limit: 1 });
+    if (sessions.data[0]) row = sqlDb.prepare("SELECT * FROM billing_orders WHERE id = ?").get(sessions.data[0].id);
   }
-  const signedPayload = `${parts.t}.${payloadStr}`;
-  const expectedSig = createHmac("sha256", webhookSecret).update(signedPayload, "utf8").digest("hex");
-  if (!safeEqualHash(expectedSig, parts.v1)) {
-    const err = new Error("Webhook signature verification failed");
-    err.status = 400;
-    throw err;
-  }
-  return JSON.parse(payloadStr);
+  if (!row) return { manualReview: true };
+  const order = JSON.parse(row.body);
+  if (charge.currency !== "usd" || charge.amount !== order.amountCents) throw new Error("Refund currency or amount mismatch.");
+  if (order.mode === "subscription") return { manualReview: true };
+  const cumulative = Math.max(row.refunded_cents, charge.amount_refunded);
+  const disputed = hold === undefined ? Boolean(order.disputed) : hold;
+  const priorDebit = order.disputed ? order.netCents : Math.ceil(order.netCents * row.refunded_cents / order.amountCents);
+  const nextDebit = disputed ? order.netCents : Math.ceil(order.netCents * cumulative / order.amountCents);
+  sqlDb.exec("BEGIN IMMEDIATE TRANSACTION");
+  try {
+    const fulfilled = sqlDb.prepare("SELECT id FROM deposit_ledger WHERE stripe_session_id = ?").get(order.id);
+    if (fulfilled) sqlDb.prepare("UPDATE users SET balance_usd = ROUND(balance_usd - ?, 6) WHERE id = ?").run((nextDebit - priorDebit) / 100, order.userId);
+    sqlDb.prepare("UPDATE billing_orders SET refunded_cents = ?, body = ? WHERE id = ?").run(cumulative, JSON.stringify({ ...order, disputed }), order.id);
+    sqlDb.exec("COMMIT");
+  } catch (error) { sqlDb.exec("ROLLBACK"); throw error; }
+  return { reconciled: true };
 }
 
 async function route(req, res) {
@@ -3007,6 +3020,7 @@ async function route(req, res) {
   const db = await loadDb();
 
   try {
+    if (req.method === "POST" && ["/api/billing/recharge", "/api/billing/reset-local-data"].includes(url.pathname)) return send(res, 403, { error: "simulated_billing_disabled" });
     // =========================================================================
     // 0. Health Endpoint: GET /api/health
     // =========================================================================
@@ -3222,6 +3236,12 @@ async function route(req, res) {
     // =========================================================================
     if (req.method === "POST" && (url.pathname === "/api/create-checkout-session" || url.pathname === "/api/billing/deposit")) {
       const body = await parseBody(req);
+      const buyer = billingBuyer(req, db);
+      if (!buyer) return send(res, 401, { error: "sign_in_required" });
+
+      try { requireUsd(body); } catch (error) { return send(res, 400, { message: error.message }); }
+      if (body.isGift) return send(res, 503, { message: "Gift checkout requires the cloud gateway." });
+
       const depositAmount = Number(body.amount ?? body.depositAmount);
       if (!Number.isFinite(depositAmount) || depositAmount < 1 || depositAmount > 50000) {
         return send(res, 400, {
@@ -3231,10 +3251,12 @@ async function route(req, res) {
       }
 
       const defaultUser = getDefaultUser();
-      const userId = String(body.userId || defaultUser.id).trim();
+      const userId = buyer.id;
       const currency = "usd";
       const { netDepositedUsd, grossAmountCents, grossChargedUsd, estimatedStripeFeeUsd } = calculateGrossDepositCents(depositAmount);
       const metadata = {
+        billingPolicy: BILLING_POLICY,
+        userEmail: buyer.email,
         userId,
         topUpAmount: netDepositedUsd.toString(),
         netDepositUsd: netDepositedUsd.toString(),
@@ -3254,19 +3276,18 @@ async function route(req, res) {
       // If live/test Stripe secret or restricted key is configured, create session with official Stripe SDK
       if (stripeSecretKey && /^(sk|rk)_(live|test)_/.test(stripeSecretKey) && !stripeSecretKey.includes("replace_with")) {
         try {
-          const stripe = new Stripe(stripeSecretKey);
+          const stripe = new Stripe(stripeSecretKey, { apiVersion: STRIPE_API_VERSION });
           const stripeSession = await stripe.checkout.sessions.create({
+            adaptive_pricing: { enabled: false },
+            custom_text: { submit: { message: "All payments are charged in USD. Your bank may convert USD to your local currency." } },
             mode: "payment",
-            payment_intent_data: {
-              setup_future_usage: "off_session",
-            },
             line_items: [
               {
                 price_data: {
                   currency,
                   unit_amount: grossAmountCents,
                   product_data: {
-                    name: `LingoFusion Balance — $${netDepositedUsd.toFixed(2)} API Credit`,
+                    name: `LingoFusion Balance — $${netDepositedUsd.toFixed(2)} USD API Credit`,
                     description: `Adds +$${netDepositedUsd.toFixed(2)} ${currency.toUpperCase()} to your usable API balance`,
                   },
                 },
@@ -3278,6 +3299,8 @@ async function route(req, res) {
             cancel_url: `${appUrl}?payment=cancelled`,
           });
 
+          if (stripeSession.currency !== "usd") throw new Error("Unexpected checkout currency.");
+          recordBillingOrder({ id: stripeSession.id, policy: BILLING_POLICY, mode: "payment", email: metadata.userEmail, userId, netCents: Math.round(netDepositedUsd * 100), amountCents: grossAmountCents, isGift: false });
           return send(res, 200, {
             url: stripeSession.url,
             checkoutUrl: stripeSession.url,
@@ -3297,23 +3320,11 @@ async function route(req, res) {
               message: err.message,
             });
           }
-          // In offline/placeholder test mode, fall back to interactive checkout page
+          return send(res, 502, { error: "stripe_checkout_failed" });
         }
       }
 
-      const checkoutBase = appUrl.replace(/\/playground$/, "");
-      const checkoutUrl = `${checkoutBase}/checkout?stripe_session_id=${sessionId}&net_usd=${netDepositedUsd.toFixed(2)}&gross_cents=${grossAmountCents}&user_id=${encodeURIComponent(userId)}&currency=${encodeURIComponent(currency)}`;
-      return send(res, 200, {
-        url: checkoutUrl,
-        checkoutUrl,
-        sessionId,
-        netDepositUsd: netDepositedUsd,
-        grossAmountCents,
-        grossChargedUsd,
-        estimatedStripeFeeUsd,
-        currency,
-        metadata,
-      });
+      return send(res, 503, { error: "stripe_not_configured" });
     }
 
     // =========================================================================
@@ -3322,6 +3333,9 @@ async function route(req, res) {
     if (req.method === "POST" && url.pathname === "/api/billing/subscription-checkout") {
       try {
         const body = await parseBody(req);
+      const buyer = billingBuyer(req, db);
+      if (!buyer) return send(res, 401, { error: "sign_in_required" });
+
       const plan = String(body.plan || "ultra-custom");
       const billing = String(body.billing || body.billing_interval || "monthly").toLowerCase();
       const isYearly = billing === "yearly";
@@ -3358,9 +3372,13 @@ async function route(req, res) {
         productDesc = `Custom quotas: ${dubbingMins}m dubbing, ${voiceCredits.toLocaleString()} voice credits, ${textChars.toLocaleString()} text chars, ${transcribeMins}m transcribe, ${imageCount} images (${isYearly ? "15% annual savings applied" : "Billed monthly"})`;
       }
 
+      let quote;
+      try { quote = subscriptionQuote(body); } catch (error) { return send(res, 400, { message: error.message }); }
+      [dubbingMins, voiceCredits, textChars, transcribeMins, imageCount] = quote.quotas;
+      monthlyPriceUsd = quote.monthly; yearlyPriceUsd = quote.yearly;
       const billedAmountUsd = isYearly ? yearlyPriceUsd : monthlyPriceUsd;
-      const userId = String(body.userId || DEFAULT_USER_ID);
-      const userEmail = String(body.userEmail || DEFAULT_USER_EMAIL);
+      const userId = buyer.id;
+      const userEmail = buyer.email;
 
       // If price >= 5000/mo, route to Enterprise Invoice / ACH Wire
       if (monthlyPriceUsd >= 5000) {
@@ -3378,6 +3396,7 @@ async function route(req, res) {
       const sessionId = `sub_session_${randomBytes(16).toString("hex")}`;
 
       const metadata = {
+        billingPolicy: BILLING_POLICY,
         planId: plan,
         userId,
         userEmail,
@@ -3394,8 +3413,10 @@ async function route(req, res) {
 
       if (stripeSecretKey && /^(sk|rk)_(live|test)_/.test(stripeSecretKey) && !stripeSecretKey.includes("replace_with")) {
         try {
-          const stripe = new Stripe(stripeSecretKey);
+          const stripe = new Stripe(stripeSecretKey, { apiVersion: STRIPE_API_VERSION });
           const session = await stripe.checkout.sessions.create({
+            adaptive_pricing: { enabled: false },
+            custom_text: { submit: { message: "All payments are charged in USD. Your bank may convert USD to your local currency." } },
             mode: "subscription",
             line_items: [
               {
@@ -3416,6 +3437,8 @@ async function route(req, res) {
             cancel_url: `${appUrl}?subscription=cancelled`,
           });
 
+          if (session.currency !== "usd") throw new Error("Unexpected checkout currency.");
+          recordBillingOrder({ id: session.id, policy: BILLING_POLICY, mode: "subscription", email: userEmail, userId, amountCents: quote.amountCents, subscription: quote });
           return send(res, 200, {
             url: session.url,
             checkoutUrl: session.url,
@@ -3427,36 +3450,11 @@ async function route(req, res) {
             metadata,
           });
         } catch (_err) {
-          // fall through to local developer testbed provisioning
+          return send(res, 502, { error: "stripe_checkout_failed" });
         }
       }
 
-      // Provision local workspace subscription in testbed mode
-      provisionWorkspaceSubscription({
-        userId,
-        stripeSubscriptionId: sessionId,
-        planId: plan,
-        monthlyPriceUsd,
-        dubbingMins,
-        voiceCredits,
-        textChars,
-        transcribeMins,
-        imageCount,
-      });
-
-      const checkoutBase = appUrl.replace(/\/playground$/, "");
-      const checkoutUrl = `${checkoutBase}/checkout?plan=${encodeURIComponent(plan)}&billing=${billing}&dubbing_mins=${dubbingMins}&voice_credits=${voiceCredits}&text_chars=${textChars}&transcribe_mins=${transcribeMins}&image_count=${imageCount}&monthly_price_usd=${monthlyPriceUsd.toFixed(2)}&yearly_price_usd=${yearlyPriceUsd.toFixed(2)}&user_id=${encodeURIComponent(userId)}`;
-
-      return send(res, 200, {
-        url: checkoutUrl,
-        checkoutUrl,
-        sessionId,
-        monthlyPriceUsd,
-        yearlyPriceUsd,
-        billedAmountUsd,
-        billing,
-        metadata,
-      });
+      return send(res, 503, { error: "stripe_not_configured" });
       } catch (err) {
         console.error("subscription-checkout error:", err);
         return send(res, 500, { error: err.message, stack: err.stack });
@@ -3484,185 +3482,25 @@ async function route(req, res) {
     // 5. Stripe Webhook Route: POST /api/stripe-webhook (and /api/webhooks/stripe)
     // =========================================================================
     if (req.method === "POST" && (url.pathname === "/api/stripe-webhook" || url.pathname === "/api/webhooks/stripe")) {
-      const rawBuffer = await readRawBuffer(req);
-      const sigHeader = req.headers["stripe-signature"];
-      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || "";
-      const stripeSecretKey = process.env.STRIPE_SECRET_KEY || "sk_test_placeholder";
-
+      const raw = await readRawBuffer(req);
       let event;
-      try {
-        if (webhookSecret && sigHeader) {
-          const stripe = new Stripe(stripeSecretKey);
-          event = stripe.webhooks.constructEvent(rawBuffer, sigHeader, webhookSecret);
-        } else {
-          event = verifyStripeWebhookEvent(rawBuffer, sigHeader, webhookSecret);
-        }
-      } catch (err) {
-        return send(res, 400, { error: "invalid_signature", message: err.message });
+      try { event = verifyStripeWebhookEvent(raw, req.headers["stripe-signature"], process.env.STRIPE_WEBHOOK_SECRET); }
+      catch (error) { return send(res, 400, { error: "invalid_signature" }); }
+      if (event.livemode !== /^(sk|rk)_live_/.test(process.env.STRIPE_SECRET_KEY || "")) return send(res, 400, { error: "wrong_stripe_mode" });
+      const object = event.data?.object;
+      if (["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type) && object?.payment_status === "paid") {
+        const settlement = await settleNodeCheckout(object.id);
+        return send(res, 200, { received: true, ...settlement });
       }
-
-      if (event.type === "checkout.session.completed") {
-        const sessionObj = event.data?.object || {};
-        const metadata = sessionObj.metadata || {};
-        const userId = metadata.userId || DEFAULT_USER_ID;
-
-        // Subscription Provisioning (Ultra or Pro / Pro Max)
-        if (metadata.planId) {
-          let dubbingMins = Number(metadata.dubbing_mins || 0);
-          let voiceCredits = Number(metadata.voice_credits || 25000);
-          let textChars = Number(metadata.text_chars || 2200000);
-          let transcribeMins = Number(metadata.transcribe_mins || 30);
-          let imageCount = Number(metadata.image_count || 50);
-          let monthlyPriceUsd = Number(metadata.monthly_price_usd || 19.99);
-
-          if (metadata.planId === "pro-max-750k" || metadata.planId === "pro-max") {
-            monthlyPriceUsd = 39.99;
-            voiceCredits = Number(metadata.voice_credits || 75000);
-            textChars = Number(metadata.text_chars || 4800000);
-            transcribeMins = Number(metadata.transcribe_mins || 75);
-            imageCount = Number(metadata.image_count || 150);
-          } else if (metadata.planId === "ultra-custom") {
-            monthlyPriceUsd = Number(metadata.monthly_price_usd || 256.04);
-            dubbingMins = Number(metadata.dubbing_mins || 30);
-            voiceCredits = Number(metadata.voice_credits || 1200000);
-            textChars = Number(metadata.text_chars || 5000000);
-            transcribeMins = Number(metadata.transcribe_mins || 120);
-            imageCount = Number(metadata.image_count || 50);
-          }
-
-          const subResult = provisionWorkspaceSubscription({
-            userId,
-            stripeSubscriptionId: sessionObj.subscription || sessionObj.id,
-            planId: metadata.planId,
-            monthlyPriceUsd,
-            dubbingMins,
-            voiceCredits,
-            textChars,
-            transcribeMins,
-            imageCount,
-          });
-
-          return send(res, 200, {
-            received: true,
-            type: "subscription_provisioned",
-            subscription: subResult,
-          });
+      if (["invoice.paid", "invoice.payment_succeeded"].includes(event.type)) {
+        const subscription = object.parent?.subscription_details?.subscription || object.subscription;
+        if (subscription) {
+          const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: STRIPE_API_VERSION });
+          const sessions = await stripe.checkout.sessions.list({ subscription, limit: 1 });
+          if (sessions.data[0]?.metadata?.billingPolicy === BILLING_POLICY) return send(res, 200, { received: true, ...await settleNodeCheckout(sessions.data[0].id) });
         }
-
-        const netDepositUsd = Number(metadata.topUpAmount ?? metadata.netDepositUsd ?? 0);
-        const stripeSessionId = sessionObj.id || `cs_webhook_${randomBytes(8).toString("hex")}`;
-        const grossCents = sessionObj.amount_total ?? calculateGrossDepositCents(netDepositUsd).grossAmountCents;
-        const grossChargedUsd = Number((grossCents / 100).toFixed(2));
-
-        if (!Number.isFinite(netDepositUsd) || netDepositUsd <= 0) {
-          return send(res, 400, { error: "invalid_metadata", message: "Valid metadata.topUpAmount is required" });
-        }
-
-        const settlement = creditUserDeposit({
-          userId,
-          stripeSessionId,
-          netDepositUsd,
-          grossChargedUsd,
-          status: "completed",
-        });
-
-        db.account.paidBalanceMicroCents = dollarsToMicroCents(settlement.user?.balance_usd || 0);
-        if (!settlement.alreadyProcessed) {
-          db.account.totalPaidCreditPurchasedMicroCents += dollarsToMicroCents(netDepositUsd);
-        }
-        await saveDb(db);
-
-        return send(res, 200, {
-          received: true,
-          alreadyProcessed: settlement.alreadyProcessed,
-          depositId: settlement.depositId,
-          balance_usd: settlement.user?.balance_usd,
-          net_deposited_usd: netDepositUsd,
-          gross_charged_usd: grossChargedUsd,
-        });
       }
-
-      if (event.type === "invoice.paid" || event.type === "invoice.payment_succeeded" || event.type === "customer.subscription.created") {
-        const invoiceOrSub = event.data?.object || {};
-        const metadata = invoiceOrSub.metadata || invoiceOrSub.subscription_details?.metadata || invoiceOrSub.lines?.data?.[0]?.metadata || {};
-        const userId = metadata.userId || DEFAULT_USER_ID;
-
-        // If this invoice is for a balance top-up
-        const netDepositUsd = Number(metadata.topUpAmount ?? metadata.netDepositUsd ?? 0);
-        if (Number.isFinite(netDepositUsd) && netDepositUsd > 0) {
-          const stripeSessionId = invoiceOrSub.id || `inv_paid_${randomBytes(8).toString("hex")}`;
-          const grossCents = invoiceOrSub.amount_paid ?? invoiceOrSub.amount_total ?? calculateGrossDepositCents(netDepositUsd).grossAmountCents;
-          const grossChargedUsd = Number((grossCents / 100).toFixed(2));
-
-          const settlement = creditUserDeposit({
-            userId,
-            stripeSessionId,
-            netDepositUsd,
-            grossChargedUsd,
-            status: "completed",
-          });
-
-          db.account.paidBalanceMicroCents = dollarsToMicroCents(settlement.user?.balance_usd || 0);
-          if (!settlement.alreadyProcessed) {
-            db.account.totalPaidCreditPurchasedMicroCents += dollarsToMicroCents(netDepositUsd);
-          }
-          await saveDb(db);
-
-          return send(res, 200, {
-            received: true,
-            alreadyProcessed: settlement.alreadyProcessed,
-            depositId: settlement.depositId,
-            balance_usd: settlement.user?.balance_usd,
-            net_deposited_usd: netDepositUsd,
-            gross_charged_usd: grossChargedUsd,
-          });
-        }
-
-        if (metadata.planId) {
-          let dubbingMins = Number(metadata.dubbing_mins || 0);
-          let voiceCredits = Number(metadata.voice_credits || 25000);
-          let textChars = Number(metadata.text_chars || 2200000);
-          let transcribeMins = Number(metadata.transcribe_mins || 30);
-          let imageCount = Number(metadata.image_count || 50);
-          let monthlyPriceUsd = Number(metadata.monthly_price_usd || 19.99);
-
-          if (metadata.planId === "pro-max-750k" || metadata.planId === "pro-max") {
-            monthlyPriceUsd = 39.99;
-            voiceCredits = Number(metadata.voice_credits || 75000);
-            textChars = Number(metadata.text_chars || 4800000);
-            transcribeMins = Number(metadata.transcribe_mins || 75);
-            imageCount = Number(metadata.image_count || 150);
-          } else if (metadata.planId === "ultra-custom") {
-            monthlyPriceUsd = Number(metadata.monthly_price_usd || 256.04);
-            dubbingMins = Number(metadata.dubbing_mins || 30);
-            voiceCredits = Number(metadata.voice_credits || 1200000);
-            textChars = Number(metadata.text_chars || 5000000);
-            transcribeMins = Number(metadata.transcribe_mins || 120);
-            imageCount = Number(metadata.image_count || 50);
-          }
-
-          const subResult = provisionWorkspaceSubscription({
-            userId,
-            stripeSubscriptionId: invoiceOrSub.subscription || invoiceOrSub.id,
-            planId: metadata.planId,
-            monthlyPriceUsd,
-            dubbingMins,
-            voiceCredits,
-            textChars,
-            transcribeMins,
-            imageCount,
-          });
-
-          return send(res, 200, {
-            received: true,
-            type: "subscription_provisioned",
-            subscription: subResult,
-          });
-        }
-
-        return send(res, 200, { received: true });
-      }
-
+      if (["charge.refunded", "charge.dispute.created", "charge.dispute.closed"].includes(event.type)) return send(res, 200, { received: true, ...await reconcileNodeRefund(object, event.type === "charge.refunded" ? undefined : object.status !== "won") });
       return send(res, 200, { received: true });
     }
 
@@ -3673,62 +3511,10 @@ async function route(req, res) {
     // =========================================================================
     if (req.method === "POST" && url.pathname === "/api/verify-checkout-session") {
       const body = await parseBody(req);
-      const sessionId = String(body.sessionId || body.session_id || "").trim();
-      if (!sessionId) {
-        return send(res, 400, { error: "missing_session_id", message: "sessionId is required" });
-      }
-
-      const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-      if (stripeSecretKey && /^(sk|rk)_(live|test)_/.test(stripeSecretKey) && !stripeSecretKey.includes("replace_with")) {
-        try {
-          const stripe = new Stripe(stripeSecretKey);
-          const stripeSession = await stripe.checkout.sessions.retrieve(sessionId);
-          if (stripeSession.payment_status === "paid") {
-            const metadata = stripeSession.metadata || {};
-            const userId = metadata.userId || DEFAULT_USER_ID;
-            const netDepositUsd = Number(
-              metadata.topUpAmount ??
-              metadata.netDepositUsd ??
-              ((stripeSession.amount_total || 0) / 100),
-            );
-            const grossCents = stripeSession.amount_total ?? calculateGrossDepositCents(netDepositUsd).grossAmountCents;
-            const grossChargedUsd = Number((grossCents / 100).toFixed(2));
-
-            if (Number.isFinite(netDepositUsd) && netDepositUsd > 0) {
-              const settlement = creditUserDeposit({
-                userId,
-                stripeSessionId: stripeSession.id,
-                netDepositUsd,
-                grossChargedUsd,
-                status: "completed",
-              });
-
-              db.account.paidBalanceMicroCents = dollarsToMicroCents(settlement.user?.balance_usd || 0);
-              if (!settlement.alreadyProcessed) {
-                db.account.totalPaidCreditPurchasedMicroCents += dollarsToMicroCents(netDepositUsd);
-              }
-              await saveDb(db);
-
-              return send(res, 200, {
-                verified: true,
-                payment_status: stripeSession.payment_status,
-                alreadyProcessed: settlement.alreadyProcessed,
-                balance_usd: settlement.user?.balance_usd,
-                net_deposited_usd: netDepositUsd,
-                gross_charged_usd: grossChargedUsd,
-              });
-            }
-          }
-          return send(res, 200, {
-            verified: false,
-            payment_status: stripeSession.payment_status,
-          });
-        } catch (err) {
-          return send(res, 400, { error: "stripe_session_lookup_failed", message: err.message });
-        }
-      }
-
-      return send(res, 200, { verified: false, mode: "local" });
+      const buyer = billingBuyer(req, db);
+      if (!buyer) return send(res, 401, { error: "sign_in_required" });
+      try { return send(res, 200, await settleNodeCheckout(String(body.sessionId || body.session_id || ""), buyer)); }
+      catch (error) { return send(res, 409, { verified: false, message: error.message }); }
     }
 
     // =========================================================================
@@ -3882,57 +3668,9 @@ async function route(req, res) {
       return send(res, 200, { secret, dashboard: publicDashboard(db) });
     }
 
-    if (req.method === "POST" && url.pathname === "/api/billing/recharge") {
-      const body = await parseBody(req);
-      if (body.confirm !== "ADD_LOCAL_TEST_BALANCE") {
-        return send(res, 409, { error: "recharge_confirmation_required" });
-      }
-      const amount = Number(body.amount);
-      if (amount < 1 || amount > 50000) return send(res, 400, { error: "recharge_amount_out_of_range" });
-      const user = getDefaultUser();
-      const { grossChargedUsd } = calculateGrossDepositCents(amount);
-      creditUserDeposit({
-        userId: user.id,
-        stripeSessionId: `cs_local_${randomBytes(10).toString("hex")}`,
-        netDepositUsd: amount,
-        grossChargedUsd,
-        status: "succeeded",
-      });
-      const updatedUser = getDefaultUser();
-      db.account.paidBalanceMicroCents = dollarsToMicroCents(updatedUser.balance_usd);
-      db.account.totalPaidCreditPurchasedMicroCents += dollarsToMicroCents(amount);
-      await saveDb(db);
-      return send(res, 200, publicDashboard(db));
-    }
-
-    if (req.method === "POST" && url.pathname === "/api/billing/reset-local-data") {
-      const body = await parseBody(req);
-      if (body.confirm !== "RESET_LOCAL_TEST_DATA") {
-        return send(res, 409, { error: "reset_confirmation_required" });
-      }
-
-      sqlDb.prepare("UPDATE users SET balance_usd = 0 WHERE id = ?").run(DEFAULT_USER_ID);
-      sqlDb.prepare("DELETE FROM usage_ledger WHERE user_id = ?").run(DEFAULT_USER_ID);
-      sqlDb.prepare("DELETE FROM deposit_ledger WHERE user_id = ?").run(DEFAULT_USER_ID);
-
-      db.account.paidBalanceMicroCents = 0;
-      db.account.rewardBalanceMicroCents = 0;
-      db.account.pendingChargesMicroCents = 0;
-      db.account.lifetimeSpendMicroCents = 0;
-      db.account.totalPaidCreditPurchasedMicroCents = 0;
-      db.account.totalRewardCreditEarnedMicroCents = 0;
-      db.ledger = [];
-      db.requestLogs = [];
-      db.idempotency = [];
-      db.jobs = [];
-      db.rewardClaims = [];
-      db.autoRecharge.lastAttemptAt = null;
-      await saveDb(db);
-      return send(res, 200, publicDashboard(db));
-    }
-
     if (req.method === "POST" && url.pathname === "/api/auto-recharge") {
       const body = await parseBody(req);
+      if (body.enabled) return send(res, 503, { error: "auto_top_up_unavailable", message: "Automatic top-up is temporarily unavailable. Please add funds manually." });
       const amount = Number(body.amount ?? body.targetBalance);
       const threshold = Number(body.threshold);
       if (!Number.isFinite(threshold) || threshold < 1 || threshold > 999) {
@@ -4306,8 +4044,10 @@ async function route(req, res) {
   }
 }
 
+export const createApiServer = () => createServer(route);
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  createServer(route).listen(port, "0.0.0.0", () => {
+  createApiServer().listen(port, "0.0.0.0", () => {
     console.log(`LingoFusion API backend listening on http://0.0.0.0:${port}`);
   });
 }

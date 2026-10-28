@@ -1,3 +1,6 @@
+import { BILLING_POLICY, STRIPE_API_VERSION, depositQuote, requireUsd, retrieveCheckout, subscriptionQuote } from "../shared/billing.mjs";
+import { billing as billingLedger } from "./billing.mjs";
+export { BillingLedger } from "./billing.mjs";
 import { dubbingRequest } from "./dubbing.mjs";
 import { fulfillGiftThroughVault, verifyGiftWebhook } from "./gifts.mjs";
 import { connectGmail, gmailCallback, gmailConfigured, gmailStatus } from "./gmail.mjs";
@@ -35,19 +38,7 @@ function jsonResponse(data, status = 200, origin = "") {
   });
 }
 
-function calculateGrossDeposit(netDepositUsd) {
-  const net = Number(netDepositUsd);
-  const grossDollars = (net + 0.30) / (1 - 0.029);
-  const grossAmountCents = Math.ceil(grossDollars * 100);
-  const grossChargedUsd = Number((grossAmountCents / 100).toFixed(2));
-  const estimatedStripeFeeUsd = Number((grossChargedUsd - net).toFixed(2));
-  return {
-    netDepositedUsd: Number(net.toFixed(2)),
-    grossAmountCents,
-    grossChargedUsd,
-    estimatedStripeFeeUsd,
-  };
-}
+const calculateGrossDeposit = depositQuote;
 
 // ---------------------------------------------------------------------------
 // OAuth sign-in (Google Identity Services + Sign in with Apple)
@@ -162,7 +153,7 @@ async function issueSession(env, provider, identity, nameOverride) {
   // Sync latest cloud credit balance across devices
   let balanceUsd = 0;
   if (env.GIFTS) {
-    const rawBal = await env.GIFTS.get(`user_balance:${email}`);
+    const rawBal = env.BILLING ? String((await billingLedger(env, { action: "balance", email })).balance_usd) : await env.GIFTS.get(`user_balance:${email}`);
     if (rawBal !== null) {
       balanceUsd = Number(rawBal);
     }
@@ -171,6 +162,17 @@ async function issueSession(env, provider, identity, nameOverride) {
 
   const token = await signSession({ ...user, iat: now, exp: now + SESSION_TTL_SECONDS }, env.SESSION_SECRET);
   return { user, sessionToken: token, expiresAt: (now + SESSION_TTL_SECONDS) * 1000 };
+}
+
+async function settleCheckout(env, id, supplied) {
+  const session = supplied || await retrieveCheckout(id, env.STRIPE_SECRET_KEY);
+  if (session.livemode !== /^(sk|rk)_live_/.test(env.STRIPE_SECRET_KEY || "")) throw new Error("Wrong Stripe mode.");
+  const result = await billingLedger(env, { action: "settle", session });
+  if (result.isGift) {
+    const gift = await fulfillGiftThroughVault(session, env);
+    result.giftCode = gift?.code;
+  }
+  return result;
 }
 
 export default {
@@ -226,13 +228,39 @@ export default {
         await env.GIFTS?.delete(`gmail:${user.email.toLowerCase()}`);
         return jsonResponse({ connected: false }, 200, requestOrigin);
       }
-      if (request.method === "POST" && path === "/api/gifts/stripe-webhook") {
+      if (request.method === "POST" && ["/api/gifts/stripe-webhook", "/api/stripe-webhook", "/api/webhooks/stripe"].includes(path)) {
         const raw = await request.text();
-        if (!await verifyGiftWebhook(raw, request.headers.get("stripe-signature"), env.STRIPE_GIFT_WEBHOOK_SECRET)) return jsonResponse({ error: "invalid_signature" }, 400, requestOrigin);
+        const secret = path === "/api/gifts/stripe-webhook" ? env.STRIPE_GIFT_WEBHOOK_SECRET : env.STRIPE_WEBHOOK_SECRET;
+        if (!await verifyGiftWebhook(raw, request.headers.get("stripe-signature"), secret)) return jsonResponse({ error: "invalid_signature" }, 400, requestOrigin);
         const event = JSON.parse(raw);
-        const session = event.data?.object;
-        if (["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type) && session?.payment_status === "paid" && session.metadata?.isGift === "true") await fulfillGiftThroughVault(session, env);
+        if (typeof event.livemode !== "boolean" || event.livemode !== /^(sk|rk)_live_/.test(env.STRIPE_SECRET_KEY || "")) return jsonResponse({ error: "wrong_stripe_mode" }, 400, requestOrigin);
+        const object = event.data?.object;
+        if (["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type) && object?.payment_status === "paid") {
+          await settleCheckout(env, object.id);
+        } else if (["charge.refunded", "charge.dispute.created", "charge.dispute.closed"].includes(event.type)) {
+          let dispute;
+          if (event.type !== "charge.refunded") {
+            const disputeResponse = await fetch(`https://api.stripe.com/v1/disputes/${encodeURIComponent(object.id)}`, { headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, "Stripe-Version": STRIPE_API_VERSION } });
+            if (!disputeResponse.ok) throw new Error("Stripe dispute lookup failed.");
+            dispute = await disputeResponse.json();
+          }
+          const chargeId = dispute?.charge || object.id;
+          const response = await fetch(`https://api.stripe.com/v1/charges/${encodeURIComponent(chargeId)}`, { headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, "Stripe-Version": STRIPE_API_VERSION } });
+          if (!response.ok) throw new Error("Stripe refund lookup failed.");
+          await billingLedger(env, { action: "refund", session: await response.json(), hold: event.type.startsWith("charge.dispute") ? dispute.status !== "won" : undefined });
+        } else if (["invoice.paid", "invoice.payment_succeeded"].includes(event.type)) {
+          const subscription = object.parent?.subscription_details?.subscription || object.subscription;
+          if (subscription) {
+            const response = await fetch(`https://api.stripe.com/v1/checkout/sessions?subscription=${encodeURIComponent(subscription)}&limit=1`, { headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, "Stripe-Version": STRIPE_API_VERSION } });
+            if (!response.ok) throw new Error("Stripe subscription lookup failed.");
+            const session = (await response.json()).data?.[0];
+            if (session?.metadata?.billingPolicy === BILLING_POLICY) await settleCheckout(env, session.id);
+          }
+        }
         return jsonResponse({ received: true }, 200, requestOrigin);
+      }
+      if (request.method === "POST" && ["/api/auto-recharge", "/api/billing/recharge", "/api/billing/reset-local-data"].includes(path)) {
+        return jsonResponse({ error: "unavailable", message: "Automatic top-up and simulated balance changes are unavailable. Please add funds manually." }, 503, requestOrigin);
       }
 
       // 2. Create Stripe Checkout Session (server-side only using env.STRIPE_SECRET_KEY)
@@ -243,6 +271,10 @@ export default {
         }
 
         const body = await request.json().catch(() => ({}));
+        const buyer = await signedInUser();
+        if (!buyer?.email) return jsonResponse({ error: "sign_in_required", message: "Sign in before checkout." }, 401, requestOrigin);
+        try { requireUsd(body); } catch (error) { return jsonResponse({ message: error.message }, 400, requestOrigin); }
+
         const depositAmount = Number(body.amount ?? body.depositAmount ?? body.topUpAmount);
         if (!Number.isFinite(depositAmount) || depositAmount < 1 || depositAmount > 50000) {
           return jsonResponse({
@@ -254,11 +286,11 @@ export default {
         const currency = "usd";
         const { netDepositedUsd, grossAmountCents, grossChargedUsd, estimatedStripeFeeUsd } =
           calculateGrossDeposit(depositAmount);
-        const giftSender = body.isGift ? await signedInUser() : null;
+        const giftSender = body.isGift ? buyer : null;
         if (body.isGift && (!giftSender || giftSender.provider !== "google")) return jsonResponse({ message: "Sign in with Google before sending a gift." }, 401, requestOrigin);
         if (body.isGift && (!gmailConfigured(env) || !env.STRIPE_GIFT_WEBHOOK_SECRET || !env.GIFT_CLAIMS || !await env.GIFTS.get(`gmail:${giftSender.email.toLowerCase()}`))) return jsonResponse({ message: "Connect Gmail and enable gift delivery before checkout. You can preview the recipient experience without buying." }, 503, requestOrigin);
-        const userId = giftSender?.id || String(body.userId || "00000000-0000-4000-8000-000000000001");
-        const userEmail = String(giftSender?.email || body.userEmail || body.email || "").trim().toLowerCase();
+        const userId = buyer.id;
+        const userEmail = buyer.email.toLowerCase();
         const returnPlaygroundUrl = String(
           body.returnUrl || env.APP_URL || "https://ikonikstation.github.io/lingofusion-developers/playground"
         ).replace(/\/+$/, "");
@@ -277,7 +309,8 @@ export default {
 
         const params = new URLSearchParams();
         params.append("mode", "payment");
-        params.append("payment_intent_data[setup_future_usage]", "off_session");
+        params.append("adaptive_pricing[enabled]", "false");
+        params.append("custom_text[submit][message]", "All payments are charged in USD. Your bank may convert USD to your local currency.");
         if (userEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userEmail) && userEmail !== "developer@lingofusion.dev") {
           params.append("customer_email", userEmail);
         }
@@ -286,8 +319,8 @@ export default {
         params.append(
           "line_items[0][price_data][product_data][name]",
           isGift
-            ? `Gift LingoFusion Balance to ${recipientEmail} — $${netDepositedUsd.toFixed(2)} API Credit`
-            : `LingoFusion Balance — $${netDepositedUsd.toFixed(2)} API Credit`,
+            ? `Gift LingoFusion Balance to ${recipientEmail} — $${netDepositedUsd.toFixed(2)} USD API Credit`
+            : `LingoFusion Balance — $${netDepositedUsd.toFixed(2)} USD API Credit`,
         );
         params.append(
           "line_items[0][price_data][product_data][description]",
@@ -297,6 +330,8 @@ export default {
         );
         params.append("line_items[0][quantity]", "1");
         params.append("metadata[userId]", userId);
+        params.append("metadata[userEmail]", userEmail);
+        params.append("metadata[billingPolicy]", BILLING_POLICY);
         if (userEmail) {
           params.append("metadata[userEmail]", userEmail);
         }
@@ -317,6 +352,7 @@ export default {
           method: "POST",
           headers: {
             Authorization: `Bearer ${stripeKey}`,
+            "Stripe-Version": STRIPE_API_VERSION,
             "Content-Type": "application/x-www-form-urlencoded",
           },
           body: params.toString(),
@@ -330,6 +366,8 @@ export default {
           }, stripeRes.status);
         }
 
+        if (stripeData.currency !== "usd") throw new Error("Stripe created an unexpected currency.");
+        await billingLedger(env, { action: "order", order: { id: stripeData.id, policy: BILLING_POLICY, mode: "payment", email: userEmail, userId, amountCents: grossAmountCents, netCents: Math.round(netDepositedUsd * 100), isGift, recipientEmail } });
         return jsonResponse({
           url: stripeData.url,
           checkoutUrl: stripeData.url,
@@ -352,6 +390,10 @@ export default {
       if (request.method === "POST" && path === "/api/billing/subscription-checkout") {
         const stripeKey = env.STRIPE_SECRET_KEY;
         const body = await request.json().catch(() => ({}));
+        const buyer = await signedInUser();
+        if (!buyer?.email) return jsonResponse({ error: "sign_in_required", message: "Sign in before checkout." }, 401, requestOrigin);
+        try { requireUsd(body); } catch (error) { return jsonResponse({ message: error.message }, 400, requestOrigin); }
+
         const plan = String(body.plan || "ultra-custom");
         const billing = String(body.billing || body.billing_interval || "monthly").toLowerCase();
         const isYearly = billing === "yearly";
@@ -387,9 +429,14 @@ export default {
           productDesc = `Custom quotas: ${dubbingMins}m dubbing, ${voiceCredits.toLocaleString()} voice credits, ${textChars.toLocaleString()} text chars, ${transcribeMins}m transcribe, ${imageCount} images (${isYearly ? "15% annual savings applied" : "Billed monthly"})`;
         }
 
+        let quote;
+        try { quote = subscriptionQuote(body); } catch (error) { return jsonResponse({ message: error.message }, 400, requestOrigin); }
+        [dubbingMins, voiceCredits, textChars, transcribeMins, imageCount] = quote.quotas;
+        monthlyPriceUsd = quote.monthly;
+        yearlyPriceUsd = quote.yearly;
         const billedAmountUsd = isYearly ? yearlyPriceUsd : monthlyPriceUsd;
-        const userId = String(body.userId || "00000000-0000-4000-8000-000000000001");
-        const userEmail = String(body.userEmail || body.email || "").trim().toLowerCase();
+        const userId = buyer.id;
+        const userEmail = buyer.email.toLowerCase();
 
         if (monthlyPriceUsd >= 5000) {
           return jsonResponse({
@@ -403,19 +450,12 @@ export default {
           body.returnUrl || env.APP_URL || "https://ikonikstation.github.io/lingofusion-developers/playground"
         ).replace(/\/+$/, "");
 
-        if (!stripeKey) {
-          return jsonResponse({
-            checkoutUrl: `${returnPlaygroundUrl.replace(/\/playground$/, "")}/checkout?plan=${encodeURIComponent(plan)}&billing=${billing}&monthly_price_usd=${monthlyPriceUsd.toFixed(2)}&yearly_price_usd=${yearlyPriceUsd.toFixed(2)}&dubbing_mins=${dubbingMins}&voice_credits=${voiceCredits}&text_chars=${textChars}&transcribe_mins=${transcribeMins}&image_count=${imageCount}&user_id=${encodeURIComponent(userId)}`,
-            monthlyPriceUsd,
-            yearlyPriceUsd,
-            billedAmountUsd,
-            billing,
-            isTestMode: true,
-          }, 200, requestOrigin);
-        }
+        if (!stripeKey) return jsonResponse({ error: "stripe_not_configured" }, 503, requestOrigin);
 
         const params = new URLSearchParams();
         params.append("mode", "subscription");
+        params.append("adaptive_pricing[enabled]", "false");
+        params.append("custom_text[submit][message]", "All payments are charged in USD. Your bank may convert USD to your local currency.");
         if (userEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userEmail) && userEmail !== "developer@lingofusion.dev") {
           params.append("customer_email", userEmail);
         }
@@ -430,6 +470,8 @@ export default {
         params.append("line_items[0][quantity]", "1");
         params.append("metadata[planId]", plan);
         params.append("metadata[userId]", userId);
+        params.append("metadata[userEmail]", userEmail);
+        params.append("metadata[billingPolicy]", BILLING_POLICY);
         params.append("metadata[billing]", billing);
         params.append("metadata[dubbing_mins]", String(dubbingMins));
         params.append("metadata[voice_credits]", String(voiceCredits));
@@ -446,6 +488,7 @@ export default {
           method: "POST",
           headers: {
             Authorization: `Bearer ${stripeKey}`,
+            "Stripe-Version": STRIPE_API_VERSION,
             "Content-Type": "application/x-www-form-urlencoded",
           },
           body: params.toString(),
@@ -459,6 +502,8 @@ export default {
           }, stripeRes.status, requestOrigin);
         }
 
+        if (stripeData.currency !== "usd") throw new Error("Stripe created an unexpected currency.");
+        await billingLedger(env, { action: "order", order: { id: stripeData.id, policy: BILLING_POLICY, mode: "subscription", email: userEmail, userId, amountCents: quote.amountCents, subscription: quote } });
         return jsonResponse({
           url: stripeData.url,
           checkoutUrl: stripeData.url,
@@ -469,94 +514,14 @@ export default {
 
       // 3. Verify Stripe Checkout Session (server-side only using env.STRIPE_SECRET_KEY)
       if (request.method === "POST" && path === "/api/verify-checkout-session") {
-        const stripeKey = env.STRIPE_SECRET_KEY;
-        if (!stripeKey) {
-          return jsonResponse({ verified: false, error: "stripe_not_configured" }, 503);
-        }
-
+        const buyer = await signedInUser();
+        if (!buyer?.email) return jsonResponse({ error: "sign_in_required" }, 401, requestOrigin);
         const body = await request.json().catch(() => ({}));
-        const sessionId = String(body.sessionId || body.session_id || "").trim();
-        if (!sessionId || !/^cs_(live|test)_/.test(sessionId)) {
-          return jsonResponse({ verified: false, error: "invalid_session_id" }, 400);
-        }
-
-        const stripeRes = await fetch(
-          `https://api.stripe.com/v1/checkout/sessions/${encodeURIComponent(sessionId)}`,
-          {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${stripeKey}`,
-            },
-          },
-        );
-
-        const stripeSession = await stripeRes.json();
-        if (!stripeRes.ok) {
-          return jsonResponse({ verified: false, error: "stripe_lookup_failed" }, stripeRes.status);
-        }
-
-        const paid = stripeSession.payment_status === "paid";
-        const metadata = stripeSession.metadata || {};
-        const netDepositUsd = Number(
-          metadata.topUpAmount ??
-          metadata.netDepositUsd ??
-          ((stripeSession.amount_total || 0) / 100),
-        );
-        const grossChargedUsd = stripeSession.amount_total
-          ? Number((stripeSession.amount_total / 100).toFixed(2))
-          : calculateGrossDeposit(netDepositUsd).grossChargedUsd;
-
-        const isGift = metadata.isGift === "true";
-        const recipientEmail = String(metadata.recipientEmail || "").trim().toLowerCase();
-        const giftMessage = String(metadata.giftMessage || "").trim();
-        const senderName = String(metadata.senderName || "").trim();
-
-        let giftCode = "";
-        if (paid && isGift && recipientEmail) {
-          const gift = await fulfillGiftThroughVault(stripeSession, env);
-          giftCode = gift?.code || "";
-        }
-
-        // If this was a self-deposit that succeeded, persist and sync the user's cloud balance across all devices
-        let syncedBalanceUsd = undefined;
-        if (paid && !isGift && env.GIFTS) {
-          const userEmail = String(metadata.userEmail || stripeSession.customer_details?.email || "").trim().toLowerCase();
-          const userId = String(metadata.userId || "").trim();
-          const syncKey = userEmail ? `user_balance:${userEmail}` : (userId ? `user_balance:${userId}` : null);
-          if (syncKey) {
-            const sessionRecorded = await env.GIFTS.get(`stripe_session:${stripeSession.id}`);
-            if (!sessionRecorded) {
-              const currentBalRaw = await env.GIFTS.get(syncKey);
-              let currentBal = currentBalRaw !== null ? Number(currentBalRaw) : 0;
-              currentBal = Number((currentBal + netDepositUsd).toFixed(6));
-              await env.GIFTS.put(syncKey, currentBal.toString());
-              if (userEmail && userId && userId !== "00000000-0000-4000-8000-000000000001") {
-                await env.GIFTS.put(`user_balance:${userId}`, currentBal.toString());
-              }
-              await env.GIFTS.put(`stripe_session:${stripeSession.id}`, JSON.stringify({
-                paid: true,
-                netDepositUsd,
-                timestamp: new Date().toISOString(),
-              }));
-              syncedBalanceUsd = currentBal;
-            } else {
-              const currentBalRaw = await env.GIFTS.get(syncKey);
-              syncedBalanceUsd = currentBalRaw !== null ? Number(currentBalRaw) : undefined;
-            }
-          }
-        }
-
-        return jsonResponse({
-          verified: paid,
-          sessionId: stripeSession.id,
-          payment_status: stripeSession.payment_status,
-          net_deposited_usd: netDepositUsd,
-          gross_charged_usd: grossChargedUsd,
-          balance_usd: syncedBalanceUsd,
-          isGift,
-          recipientEmail: isGift ? recipientEmail : undefined,
-          giftCode: giftCode || undefined,
-        });
+        const session = await retrieveCheckout(String(body.sessionId || body.session_id || ""), env.STRIPE_SECRET_KEY);
+        if (session.metadata?.userEmail !== buyer.email.toLowerCase()) return jsonResponse({ error: "checkout_owner_mismatch" }, 403, requestOrigin);
+        if (session.payment_status !== "paid" || session.status !== "complete") return jsonResponse({ verified: false, payment_status: session.payment_status }, 200, requestOrigin);
+        const result = await settleCheckout(env, session.id, session);
+        return jsonResponse({ ...result, sessionId: session.id, recipientEmail: session.metadata?.recipientEmail }, 200, requestOrigin);
       }
 
       // 4. Voice Synthesis Proxy (server-side only using env.VOICE_API_KEY)
@@ -883,84 +848,16 @@ export default {
         }, 200, requestOrigin);
       }
 
-      // 8b. Cloud balance sync across devices (GET /api/user/balance)
-      if (request.method === "GET" && path === "/api/user/balance") {
-        if (!env.GIFTS) {
-          return jsonResponse({ balance_usd: 0 }, 200, requestOrigin);
-        }
-        let userEmail = "";
-        let userId = "";
-
-        const authHeader = request.headers.get("authorization") || "";
-        if (authHeader.startsWith("Bearer ") && env.SESSION_SECRET) {
-          const session = await verifySession(authHeader.slice(7), env.SESSION_SECRET).catch(() => null);
-          if (session?.email) userEmail = session.email.toLowerCase();
-          if (session?.id) userId = session.id;
-        }
-
-        if (!userEmail) userEmail = String(url.searchParams.get("email") || "").trim().toLowerCase();
-        if (!userId) userId = String(url.searchParams.get("userId") || "").trim();
-
-        if (!userEmail && (!userId || userId === "00000000-0000-4000-8000-000000000001")) {
-          return jsonResponse({ balance_usd: 0 }, 200, requestOrigin);
-        }
-
-        let rawBal = null;
-        if (userEmail) {
-          rawBal = await env.GIFTS.get(`user_balance:${userEmail}`);
-        }
-        if (rawBal === null && userId && userId !== "00000000-0000-4000-8000-000000000001") {
-          rawBal = await env.GIFTS.get(`user_balance:${userId}`);
-        }
-
-        const balanceUsd = rawBal !== null ? Number(rawBal) : 0;
-        return jsonResponse({
-          balance_usd: balanceUsd,
-          synced: true,
-          email: userEmail || undefined,
-        }, 200, requestOrigin);
-      }
-
-      // 8c. Cloud balance update/deduction sync across devices (POST /api/user/balance)
-      if (request.method === "POST" && path === "/api/user/balance") {
-        if (!env.GIFTS) {
-          return jsonResponse({ balance_usd: 0 }, 200, requestOrigin);
-        }
+      if (["GET", "POST"].includes(request.method) && path === "/api/user/balance") {
+        const user = await signedInUser();
+        if (!user?.email) return jsonResponse({ error: "sign_in_required" }, 401, requestOrigin);
+        const email = user.email.toLowerCase();
+        if (request.method === "GET") return jsonResponse(await billingLedger(env, { action: "balance", email }), 200, requestOrigin);
         const body = await request.json().catch(() => ({}));
-        let userEmail = String(body.email || "").trim().toLowerCase();
-        let userId = String(body.userId || "").trim();
-
-        const authHeader = request.headers.get("authorization") || "";
-        if (authHeader.startsWith("Bearer ") && env.SESSION_SECRET) {
-          const session = await verifySession(authHeader.slice(7), env.SESSION_SECRET).catch(() => null);
-          if (session?.email) userEmail = session.email.toLowerCase();
-          if (session?.id) userId = session.id;
-        }
-
-        if (!userEmail && (!userId || userId === "00000000-0000-4000-8000-000000000001")) {
-          return jsonResponse({ error: "missing_user_identifier" }, 400, requestOrigin);
-        }
-
-        const key = userEmail ? `user_balance:${userEmail}` : `user_balance:${userId}`;
-        const currentBalRaw = await env.GIFTS.get(key);
-        let currentBal = currentBalRaw !== null ? Number(currentBalRaw) : 0;
-
-        if (typeof body.delta_usd === "number" && Number.isFinite(body.delta_usd)) {
-          currentBal = Math.max(0, Number((currentBal + body.delta_usd).toFixed(6)));
-        } else if (typeof body.balance_usd === "number" && Number.isFinite(body.balance_usd)) {
-          currentBal = Math.max(0, Number(body.balance_usd.toFixed(6)));
-        }
-
-        await env.GIFTS.put(key, currentBal.toString());
-        if (userEmail && userId && userId !== "00000000-0000-4000-8000-000000000001") {
-          await env.GIFTS.put(`user_balance:${userId}`, currentBal.toString());
-        }
-
-        return jsonResponse({
-          balance_usd: currentBal,
-          synced: true,
-          updated_at: new Date().toISOString(),
-        }, 200, requestOrigin);
+        if ("balance_usd" in body || typeof body.delta_usd !== "number" || !Number.isFinite(body.delta_usd) || body.delta_usd >= 0) return jsonResponse({ error: "balance_increase_forbidden" }, 403, requestOrigin);
+        const operationId = request.headers.get("idempotency-key");
+        if (!operationId) return jsonResponse({ error: "idempotency_key_required" }, 400, requestOrigin);
+        return jsonResponse(await billingLedger(env, { action: "deduct", email, delta: body.delta_usd, operationId }), 200, requestOrigin);
       }
 
       // Gifts belong to the verified recipient, never an email supplied by the browser.
