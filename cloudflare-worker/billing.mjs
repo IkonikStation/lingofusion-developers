@@ -49,6 +49,14 @@ export class BillingLedger {
           await storage.put(`order:${order.id}`, order);
           return Response.json({ recorded: true });
         }
+        if (action === 'subscriptionStatus') {
+          await storage.put(`stripeSubscriptionStatus:${session.id}`, session.status);
+          const owner = await storage.get(`subscriptionOwner:${session.id}`);
+          if (!owner) return Response.json({ received: true });
+          const previous = await storage.get(`subscription:${owner}`);
+          if (previous?.id === session.id) await storage.put(`subscription:${owner}`, { ...previous, status: session.status });
+          return Response.json({ received: true });
+        }
         if (action === 'balance') {
           const subscription = await storage.get(`subscription:${email}`) || null;
           if (subscription?.periodEnd && subscription.periodEnd * 1000 <= Date.now()) subscription.status = 'expired';
@@ -74,9 +82,10 @@ export class BillingLedger {
           if (legacy && !previous) throw new Error('Legacy payment requires manual reconciliation.');
           const owner = saved.email;
           if (saved.mode === 'subscription') {
+            if (await storage.get(`stripeSubscriptionStatus:${session.subscription.id}`) === 'canceled') throw new Error('Canceled subscription cannot be reactivated.');
             if (charge.amount_refunded) throw new Error('Refunded subscription requires review.');
             const subscription = { ...saved.subscription, id: session.subscription.id, status: 'active', currency: 'usd', periodEnd: session.subscription.latest_invoice.lines?.data?.[0]?.period?.end || session.subscription.latest_invoice.period_end, invoiceId: session.subscription.latest_invoice.id };
-            await this.write({ [key]: { ...previous, subscription: true }, [`subscription:${owner}`]: subscription });
+            await this.write({ [key]: { ...previous, subscription: true }, [`subscription:${owner}`]: subscription, [`subscriptionOwner:${session.subscription.id}`]: owner });
             return Response.json({ verified: true, payment_status: 'paid', mode: 'subscription', subscription, balance_usd: await this.initial(owner) });
           }
           const net = netCreditCents(saved, charge);

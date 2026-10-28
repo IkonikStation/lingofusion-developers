@@ -248,6 +248,10 @@ export default {
           const response = await fetch(`https://api.stripe.com/v1/charges/${encodeURIComponent(chargeId)}`, { headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, "Stripe-Version": STRIPE_API_VERSION } });
           if (!response.ok) throw new Error("Stripe refund lookup failed.");
           await billingLedger(env, { action: "refund", session: await response.json(), hold: event.type.startsWith("charge.dispute") ? dispute.status !== "won" : undefined });
+        } else if (["customer.subscription.updated", "customer.subscription.deleted"].includes(event.type)) {
+          const response = await fetch(`https://api.stripe.com/v1/subscriptions/${encodeURIComponent(object.id)}`, { headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, "Stripe-Version": STRIPE_API_VERSION } });
+          if (!response.ok) throw new Error("Stripe subscription state lookup failed.");
+          await billingLedger(env, { action: "subscriptionStatus", session: await response.json() });
         } else if (["invoice.paid", "invoice.payment_succeeded"].includes(event.type)) {
           const subscription = object.parent?.subscription_details?.subscription || object.subscription;
           if (subscription) {

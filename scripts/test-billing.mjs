@@ -16,11 +16,12 @@ globalThis.fetch=async (url,options={})=>{
     const charge={id:`ch_${serial}`,status:'succeeded',paid:true,currency:'usd',amount,amount_refunded:0};
     const pi={id:`pi_${serial}`,status:'succeeded',currency:'usd',amount_received:amount,latest_charge:charge};
     const s={id,metadata,amount_total:amount,currency:p.get('line_items[0][price_data][currency]'),mode:p.get('mode'),payment_status:'paid',status:'complete',livemode:false,payment_intent:pi,url:'https://checkout.stripe.com/test/mock'};
-    if(s.mode==='subscription') s.subscription={id:`sub_${serial}`,latest_invoice:{id:`in_${serial}`,status:'paid',currency:'usd',amount_paid:amount,payment_intent:pi}};
+    if(s.mode==='subscription') s.subscription={status:'active',id:`sub_${serial}`,latest_invoice:{id:`in_${serial}`,status:'paid',currency:'usd',amount_paid:amount,payment_intent:pi}};
     sessions.set(id,s); return Response.json({...s,status:'open',payment_status:'unpaid'});
   }
   if(target.startsWith('https://api.stripe.com/v1/checkout/sessions?')) return Response.json({data:[...sessions.values()].filter(s=>s.subscription?.id===new URL(target).searchParams.get('subscription'))});
   if(target.startsWith('https://api.stripe.com/v1/checkout/sessions/')) return Response.json(sessions.get(new URL(target).pathname.split('/').pop())||{error:'missing'});
+  if(target.startsWith('https://api.stripe.com/v1/subscriptions/')) return Response.json([...sessions.values()].find(s=>s.subscription?.id===new URL(target).pathname.split('/').pop()).subscription);
   if(target.startsWith('https://api.stripe.com/v1/invoices/')) {const s=[...sessions.values()].find(x=>new URL(target).pathname.endsWith('/'+x.subscription?.latest_invoice?.id));return Response.json(s.subscription.latest_invoice);}
   if(target.startsWith('https://api.stripe.com/v1/payment_intents/')) {const s=[...sessions.values()].find(x=>new URL(target).pathname.endsWith('/'+x.payment_intent?.id));return Response.json(s.payment_intent);}
   if(target.startsWith('https://api.stripe.com/v1/disputes/')) return Response.json(disputeEvidence);
@@ -81,6 +82,14 @@ await test('paid discounted renewal invoices validate their own actual charge am
  assert.equal((await h.webhook('invoice.paid',{subscription:s.subscription.id})).status,200);
  assert.equal((await h.webhook('invoice.payment_succeeded',{parent:{subscription_details:{subscription:s.subscription.id}}})).status,200);
  assert.equal((await verify(s,owner)).status,200);const data=await billing(h.env,{action:'balance',email:owner});assert.equal(data.balance_usd,0);assert.equal(data.subscription.invoiceId,'in_renewal');
+});
+await test('canceled subscriptions cannot reactivate from a paid return or replay',async()=>{
+ const owner='canceled@example.com';const s=await create({plan:'pro'},owner,'/api/billing/subscription-checkout');await verify(s,owner);
+ const stale=structuredClone(s);
+ s.subscription.status='canceled';assert.equal((await h.webhook('customer.subscription.deleted',s.subscription)).status,200);
+ assert.notEqual((await verify(s,owner)).status,200);assert.notEqual((await h.webhook('checkout.session.completed',s)).status,200);
+ await assert.rejects(billing(h.env,{action:'settle',session:stale}));
+ const state=await billing(h.env,{action:'balance',email:owner});assert.equal(state.subscription.status,'canceled');assert.equal(state.balance_usd,0);
 });
 await test('disputed credits are held and restored exactly once after a win',async()=>{
  const owner='dispute@example.com',s=await create({amount:5},owner);await verify(s,owner);

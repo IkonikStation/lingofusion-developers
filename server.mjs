@@ -45,6 +45,7 @@ sqlDb.exec("PRAGMA foreign_keys = ON;");
 
 const schemaSql = await readFile(join(rootDir, "schema.sql"), "utf8");
 sqlDb.exec(schemaSql);
+sqlDb.exec("CREATE TABLE IF NOT EXISTS billing_subscription_states (id TEXT PRIMARY KEY, status TEXT NOT NULL)");
 sqlDb.exec("CREATE TABLE IF NOT EXISTS billing_invoices (id TEXT PRIMARY KEY, subscription_id TEXT NOT NULL)");
 sqlDb.exec("CREATE TABLE IF NOT EXISTS billing_orders (id TEXT PRIMARY KEY, body TEXT NOT NULL, refunded_cents INTEGER NOT NULL DEFAULT 0, credited_cents INTEGER NOT NULL DEFAULT 0)");
 
@@ -2969,9 +2970,10 @@ async function settleNodeCheckout(id, owner) {
   if (owner && order.userId !== owner.id) throw new Error("Checkout owner mismatch.");
   if (row.refunded_cents || order.disputed) throw new Error("Refunded or disputed payment requires review.");
   const charge = assertCharge(session);
-  sqlDb.prepare("UPDATE billing_orders SET body = ? WHERE id = ?").run(JSON.stringify({ ...order, chargeId: charge.id }), id);
+  sqlDb.prepare("UPDATE billing_orders SET body = ? WHERE id = ?").run(JSON.stringify({ ...order, chargeId: charge.id, subscriptionId: session.subscription?.id }), id);
   if (charge.amount_refunded) throw new Error("Refunded payment requires review.");
   if (session.mode === "subscription") {
+    if (sqlDb.prepare("SELECT status FROM billing_subscription_states WHERE id = ?").get(session.subscription.id)?.status === "canceled") throw new Error("Canceled subscription cannot be reactivated.");
     const q = order.subscription;
     const invoice = session.subscription.latest_invoice;
     const sub = provisionWorkspaceSubscription({ invoiceId: invoice.id, periodStart: new Date(invoice.period_start * 1000 || Date.now()).toISOString(), periodEnd: new Date((invoice.lines?.data?.[0]?.period?.end || invoice.period_end) * 1000 || Date.now() + 30*86400000).toISOString(), userId: order.userId, stripeSubscriptionId: session.subscription.id, planId: q.plan, monthlyPriceUsd: q.monthly, dubbingMins: q.quotas[0], voiceCredits: q.quotas[1], textChars: q.quotas[2], transcribeMins: q.quotas[3], imageCount: q.quotas[4] });
@@ -3491,6 +3493,14 @@ async function route(req, res) {
       if (["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type) && object?.payment_status === "paid") {
         const settlement = await settleNodeCheckout(object.id);
         return send(res, 200, { received: true, ...settlement });
+      }
+      if (["customer.subscription.updated", "customer.subscription.deleted"].includes(event.type)) {
+        const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: STRIPE_API_VERSION });
+        const subscription = await stripe.subscriptions.retrieve(object.id);
+        sqlDb.prepare("INSERT INTO billing_subscription_states (id,status) VALUES (?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status").run(subscription.id, subscription.status);
+        const order = sqlDb.prepare("SELECT id FROM billing_orders WHERE json_extract(body, '$.subscriptionId') = ?").get(subscription.id);
+        if (order) sqlDb.prepare("UPDATE workspace_subscriptions SET status = ? WHERE stripe_subscription_id = ?").run(subscription.status, subscription.id);
+        return send(res, 200, { received: true });
       }
       if (["invoice.paid", "invoice.payment_succeeded"].includes(event.type)) {
         const subscription = object.parent?.subscription_details?.subscription || object.subscription;

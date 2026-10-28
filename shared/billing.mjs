@@ -37,6 +37,7 @@ export function assertSession(session, order) {
   if (session.currency !== 'usd' || session.presentment_details?.presentment_currency && session.presentment_details.presentment_currency !== 'usd') throw new Error('Unexpected payment currency.');
   if (session.mode !== order.mode || session.amount_total !== order.amountCents || (session.metadata?.userEmail || (order.isGift ? session.metadata?.senderEmail : null)) !== order.email) throw new Error('Checkout does not match its server order.');
   if (session.status !== 'complete' || session.payment_status !== 'paid') throw new Error('Payment has not succeeded.');
+  if (session.mode === 'subscription' && session.subscription?.status !== 'active') throw new Error('Subscription is not active.');
   return order;
 }
 export function paymentEvidence(session) {
