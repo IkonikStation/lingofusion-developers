@@ -229,7 +229,7 @@ export function CheckoutPage({
                   </div>
                   <div className="flex items-center justify-between">
                     <dt className="flex items-center gap-1 text-neutral-500 dark:text-neutral-400">
-                      <span>Platform & Processing Fee</span>
+                      <span>Infrastructure & License Surcharge</span>
                     </dt>
                     <dd className="font-sans tabular-nums text-neutral-700 dark:text-neutral-300">
                       ${formatUsd(feeUsd)} {currencyParam}
@@ -391,7 +391,7 @@ export function CheckoutPage({
                 </dd>
               </div>
               <div className="flex items-center justify-between p-5">
-                <dt className="text-sm text-neutral-500 dark:text-neutral-400">Platform & Processing Fee</dt>
+                <dt className="text-sm text-neutral-500 dark:text-neutral-400">Infrastructure & License Surcharge</dt>
                 <dd className="font-sans tabular-nums text-sm font-semibold text-emerald-600 dark:text-emerald-400">
                   $0.00 USD (Included)
                 </dd>
@@ -431,7 +431,7 @@ export function CheckoutPage({
                 </dd>
               </div>
               <div className="flex items-center justify-between p-5">
-                <dt className="text-sm text-neutral-500 dark:text-neutral-400">Platform & Processing Fee</dt>
+                <dt className="text-sm text-neutral-500 dark:text-neutral-400">Infrastructure & License Surcharge</dt>
                 <dd className="font-sans tabular-nums text-sm font-semibold text-emerald-600 dark:text-emerald-400">
                   $0.00 USD (Included)
                 </dd>

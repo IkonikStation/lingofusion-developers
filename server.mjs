@@ -3303,7 +3303,7 @@ async function route(req, res) {
                   currency: "usd",
                   unit_amount: feeCents,
                   product_data: {
-                    name: "Platform & Processing Fee",
+                    name: "Infrastructure & License Surcharge",
                   },
                 },
                 quantity: 1,

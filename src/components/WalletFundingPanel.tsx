@@ -138,7 +138,7 @@ export function WalletFundingPanel(props: WalletFundingPanelProps) {
           <div className="mt-6 flex items-center justify-between gap-3"><h3 className="text-sm font-semibold text-neutral-950 dark:text-white">Order summary</h3><button type="button" onClick={props.onFeeDetails} className="funding-fee-link"><HelpCircle className="h-3.5 w-3.5" /> About fees</button></div>
           <dl data-testid="gross-charge-preview" className="funding-receipt mt-4">
             <div><dt>{gift ? "Gift credits" : "Wallet credits"}</dt><dd>${formatUsd(props.credit)}</dd></div>
-            <div><dt>Platform & Processing Fee</dt><dd>${formatUsd(props.fee)}</dd></div>
+            <div><dt>Infrastructure & License Surcharge</dt><dd>${formatUsd(props.fee)}</dd></div>
             <div className="funding-total"><dt>Total to pay</dt><dd>${formatUsd(props.total)} <span>USD</span></dd></div>
           </dl>
           <p className="mt-3 text-xs leading-5 text-neutral-500 dark:text-neutral-400">{gift ? "Your recipient gets the full gift amount. Processing is added to your total." : "The full credit amount goes to your wallet. Processing is added to your total."}</p>

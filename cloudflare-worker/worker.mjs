@@ -339,7 +339,7 @@ export default {
         params.append("line_items[0][quantity]", "1");
         params.append("line_items[1][price_data][currency]", currency);
         params.append("line_items[1][price_data][unit_amount]", String(feeCents));
-        params.append("line_items[1][price_data][product_data][name]", "Platform & Processing Fee");
+        params.append("line_items[1][price_data][product_data][name]", "Infrastructure & License Surcharge");
         params.append("line_items[1][quantity]", "1");
         params.append("metadata[userId]", userId);
         params.append("metadata[userEmail]", userEmail);
