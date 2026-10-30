@@ -289,7 +289,7 @@ export default {
 
         const currency = "usd";
         const { netDepositedUsd, grossAmountCents, grossChargedUsd, estimatedStripeFeeUsd } =
-          calculateGrossDeposit(depositAmount);
+          depositQuote(depositAmount);
         const giftSender = body.isGift ? buyer : null;
         if (body.isGift && (!giftSender || giftSender.provider !== "google")) return jsonResponse({ message: "Sign in with Google before sending a gift." }, 401, requestOrigin);
         if (body.isGift && (!gmailConfigured(env) || !env.STRIPE_GIFT_WEBHOOK_SECRET || !env.GIFT_CLAIMS || !await env.GIFTS.get(`gmail:${giftSender.email.toLowerCase()}`))) return jsonResponse({ message: "Connect Gmail and enable gift delivery before checkout. You can preview the recipient experience without buying." }, 503, requestOrigin);
@@ -311,15 +311,19 @@ export default {
           }, 400);
         }
 
+        const netCents = Math.round(netDepositedUsd * 100);
+        const feeCents = grossAmountCents - netCents;
+
         const params = new URLSearchParams();
         params.append("mode", "payment");
         params.append("adaptive_pricing[enabled]", "false");
+        params.append("automatic_tax[enabled]", "false");
         params.append("custom_text[submit][message]", "All payments are charged in USD. Your bank may convert USD to your local currency.");
         if (userEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userEmail) && userEmail !== "developer@lingofusion.dev") {
           params.append("customer_email", userEmail);
         }
         params.append("line_items[0][price_data][currency]", currency);
-        params.append("line_items[0][price_data][unit_amount]", String(grossAmountCents));
+        params.append("line_items[0][price_data][unit_amount]", String(netCents));
         params.append(
           "line_items[0][price_data][product_data][name]",
           isGift
@@ -333,6 +337,10 @@ export default {
             : `Adds +$${netDepositedUsd.toFixed(2)} USD to your usable API balance`,
         );
         params.append("line_items[0][quantity]", "1");
+        params.append("line_items[1][price_data][currency]", currency);
+        params.append("line_items[1][price_data][unit_amount]", String(feeCents));
+        params.append("line_items[1][price_data][product_data][name]", "Platform & Processing Fee");
+        params.append("line_items[1][quantity]", "1");
         params.append("metadata[userId]", userId);
         params.append("metadata[userEmail]", userEmail);
         params.append("metadata[billingPolicy]", BILLING_POLICY);

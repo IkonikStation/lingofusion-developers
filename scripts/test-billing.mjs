@@ -12,7 +12,7 @@ globalThis.fetch=async (url,options={})=>{
     if(stripeFailure) return Response.json({error:{message:'mock declined configuration'}},{status:400});
     const p=new URLSearchParams(options.body), id=`cs_test_${++serial}`;
     const metadata=Object.fromEntries([...p].filter(([k])=>/^metadata\[/.test(k)).map(([k,v])=>[k.slice(9,-1),v]));
-    const amount=Number(p.get('line_items[0][price_data][unit_amount]'));
+    const amount=Array.from(p.entries()).filter(([k])=>/^line_items\[\d+\]\[price_data\]\[unit_amount\]$/.test(k)).reduce((sum,[,v])=>sum+Number(v),0);
     const charge={id:`ch_${serial}`,status:'succeeded',paid:true,currency:'usd',amount,amount_refunded:0};
     const pi={id:`pi_${serial}`,status:'succeeded',currency:'usd',amount_received:amount,latest_charge:charge};
     const s={id,metadata,amount_total:amount,currency:p.get('line_items[0][price_data][currency]'),mode:p.get('mode'),payment_status:'paid',status:'complete',livemode:false,payment_intent:pi,url:'https://checkout.stripe.com/test/mock'};
@@ -34,7 +34,7 @@ const email='buyer@example.com';
 async function create(body={amount:5},owner=email,path='/api/create-checkout-session') {const r=await h.api(path,body,owner);assert.equal(r.status,200,JSON.stringify(await r.clone().json()));return sessions.get((await r.json()).sessionId);}
 async function verify(s,owner=email){return h.api('/api/verify-checkout-session',{sessionId:s.id},owner);}
 try {
-await test('fee policy and server subscription formula preserved; invalid inputs rejected',()=>{assert.equal(depositQuote(5).grossAmountCents,546);assert.equal(subscriptionQuote({plan:'ultra-custom',monthly_price_usd:29}).monthly,256.04);assert.equal(subscriptionQuote({plan:'pro'}).monthly,19.99);for(const n of [NaN,Infinity,-1,0,50001,1.001])assert.throws(()=>depositQuote(n));});
+await test('fee policy and server subscription formula preserved; invalid inputs rejected',()=>{assert.equal(depositQuote(5).grossAmountCents,643);assert.equal(subscriptionQuote({plan:'ultra-custom',monthly_price_usd:29}).monthly,256.04);assert.equal(subscriptionQuote({plan:'pro'}).monthly,19.99);for(const n of [NaN,Infinity,-1,0,50001,1.001])assert.throws(()=>depositQuote(n));});
 await test('no anonymous, foreign-currency, simulator or automatic credit creation',async()=>{
   assert.equal((await h.api('/api/user/balance',{email,delta_usd:5000})).status,401);
   assert.equal((await h.api('/api/user/balance',{balance_usd:5000},email)).status,403);
@@ -44,7 +44,7 @@ await test('no anonymous, foreign-currency, simulator or automatic credit creati
   assert.equal(h.records.has(`user_balance:${email}`),false);
 });
 await test('manual checkout retains USD and fee total; spoofed identity cannot change owner',async()=>{
- const s=await create({amount:5,currency:'USD',userEmail:'victim@example.com'});assert.equal(s.currency,'usd');assert.equal(s.amount_total,546);assert.equal(s.metadata.userEmail,email);
+ const s=await create({amount:5,currency:'USD',userEmail:'victim@example.com'});assert.equal(s.currency,'usd');assert.equal(s.amount_total,643);assert.equal(s.metadata.userEmail,email);
  const p=new URLSearchParams(calls.find(x=>x.target.endsWith('/checkout/sessions')).options.body);assert.equal(p.get('adaptive_pricing[enabled]'),'false');assert.equal((await verify(s,'victim@example.com')).status,403);
 });
 await test('failed, incomplete, unpaid, wrong-currency, wrong-amount and missing charge cannot fulfill',async()=>{
@@ -64,12 +64,12 @@ await test('KV projection failure cannot duplicate a committed payment',async()=
  const owner='outage@example.com';const s=await create({amount:5},owner);h.setProjectionFailure(true);assert.equal((await verify(s,owner)).status,200);h.setProjectionFailure(false);assert.equal((await verify(s,owner)).status,200);assert.equal((await billing(h.env,{action:'balance',email:owner})).balance_usd,5);
 });
 await test('refund before settlement grants no credits; refund delivery after settlement reverses once',async()=>{
- const owner='refund@example.com';const before=await create({amount:5},owner);before.payment_intent.latest_charge.amount_refunded=546;assert.equal((await verify(before,owner)).status,500);assert.equal((await billing(h.env,{action:'balance',email:owner})).balance_usd,0);
- const s=await create({amount:5},owner);assert.equal((await verify(s,owner)).status,200);s.payment_intent.latest_charge.amount_refunded=273;
+ const owner='refund@example.com';const before=await create({amount:5},owner);before.payment_intent.latest_charge.amount_refunded=643;assert.equal((await verify(before,owner)).status,500);assert.equal((await billing(h.env,{action:'balance',email:owner})).balance_usd,0);
+ const s=await create({amount:5},owner);assert.equal((await verify(s,owner)).status,200);s.payment_intent.latest_charge.amount_refunded=321;
  for(let i=0;i<5;i++){const r=await h.webhook('charge.refunded',s.payment_intent.latest_charge);assert.equal(r.status,200,JSON.stringify(await r.json()));}
  assert.equal((await billing(h.env,{action:'balance',email:owner})).balance_usd,2.5);
  await verify(s,owner);assert.equal((await billing(h.env,{action:'balance',email:owner})).balance_usd,2.5);
- s.payment_intent.latest_charge.amount_refunded=546;await h.webhook('charge.refunded',s.payment_intent.latest_charge);assert.equal((await billing(h.env,{action:'balance',email:owner})).balance_usd,0);
+ s.payment_intent.latest_charge.amount_refunded=643;await h.webhook('charge.refunded',s.payment_intent.latest_charge);assert.equal((await billing(h.env,{action:'balance',email:owner})).balance_usd,0);
 });
 await test('subscriptions cannot become prepaid credits or activate before paid invoice',async()=>{
  const owner='subscriber@example.com';const s=await create({plan:'pro',currency:'usd'},owner,'/api/billing/subscription-checkout');assert.equal(s.amount_total,1999);
@@ -105,7 +105,7 @@ await test('disputed credits are held and restored exactly once after a win',asy
 });
 await test('localized presentment and stale refund snapshots cannot recredit money',async()=>{
  const owner='stale@example.com',s=await create({amount:5},owner);await verify(s,owner);const old=structuredClone(s);
- s.payment_intent.latest_charge.amount_refunded=273;await h.webhook('charge.refunded',s.payment_intent.latest_charge);
+ s.payment_intent.latest_charge.amount_refunded=321;await h.webhook('charge.refunded',s.payment_intent.latest_charge);
  await assert.rejects(billing(h.env,{action:'settle',session:old}));
  const localized=await create({amount:5},owner);localized.payment_intent.presentment_details={presentment_currency:'cad'};assert.notEqual((await verify(localized,owner)).status,200);
  assert.equal((await billing(h.env,{action:'balance',email:owner})).balance_usd,2.5);

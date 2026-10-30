@@ -7,7 +7,8 @@ export function requireUsd(body) {
 export function depositQuote(amount) {
   const net = Number(amount);
   if (!Number.isFinite(net) || net < 1 || net > 50000 || Math.abs(net * 100 - Math.round(net * 100)) > 1e-7) throw new Error('Credit amounts must be USD cents between $1 and $50,000.');
-  const grossAmountCents = Math.ceil(((net + .30) / (1 - .029)) * 100);
+  const total = ((net * 1.15) + 0.30) / 0.941;
+  const grossAmountCents = Math.ceil(total * 100);
   return { netDepositedUsd: net, grossAmountCents, grossChargedUsd: grossAmountCents / 100, estimatedStripeFeeUsd: Number((grossAmountCents / 100 - net).toFixed(2)) };
 }
 export function subscriptionQuote(body) {

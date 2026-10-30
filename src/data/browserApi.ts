@@ -278,8 +278,11 @@ export function resolveBackendModelRouting(
 
 export function calculateGrossDeposit(depositAmountUsd: number) {
   const net = Number(depositAmountUsd);
-  const grossDollars = (net + 0.30) / (1 - 0.029);
-  const grossAmountCents = Math.ceil(grossDollars * 100);
+  if (!Number.isFinite(net) || net < 1 || net > 50000) {
+    throw new Error("Top-up amount must be between $1.00 and $50,000.00 USD.");
+  }
+  const total = ((net * 1.15) + 0.30) / 0.941;
+  const grossAmountCents = Math.ceil(total * 100);
   const grossChargedUsd = Number((grossAmountCents / 100).toFixed(2));
   const estimatedStripeFeeUsd = Number((grossChargedUsd - net).toFixed(2));
   return {

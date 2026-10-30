@@ -13,18 +13,18 @@ for(const [country,method] of [['CA','pm_card_ca'],['US','pm_card_visa'],['FR','
  const response=await h.api('/api/create-checkout-session',{amount:5,currency:'usd'},email);
  assert.equal(response.status,200,JSON.stringify(await response.clone().json()));
  const session=await stripe.checkout.sessions.retrieve((await response.json()).sessionId,{expand:['line_items.data.price']});
- assert.equal(session.currency,'usd');assert.equal(session.amount_total,546);assert.equal(session.adaptive_pricing.enabled,false);assert.equal(session.line_items.data[0].price.currency,'usd');assert.equal(session.livemode,false);
- const pi=await stripe.paymentIntents.create({amount:546,currency:'usd',payment_method:method,automatic_payment_methods:{enabled:true,allow_redirects:'never'},confirm:true,metadata:{auditRun:run},expand:['latest_charge']});
+ assert.equal(session.currency,'usd');assert.equal(session.amount_total,643);assert.equal(session.adaptive_pricing.enabled,false);assert.equal(session.line_items.data[0].price.currency,'usd');assert.equal(session.livemode,false);
+ const pi=await stripe.paymentIntents.create({amount:643,currency:'usd',payment_method:method,automatic_payment_methods:{enabled:true,allow_redirects:'never'},confirm:true,metadata:{auditRun:run},expand:['latest_charge']});
  assert.equal(pi.status,'succeeded');assert.equal(pi.currency,'usd');assert.equal(pi.latest_charge.currency,'usd');assert.equal(pi.latest_charge.livemode,false);
- assertCharge({mode:'payment',amount_total:546,payment_intent:pi});
- results.push({scenario:'USD checkout plus independent card charge',requestedCountry:country,cardCountry:pi.latest_charge.payment_method_details.card.country,session:session.id,paymentIntent:pi.id,charge:pi.latest_charge.id,amount:546,currency:pi.latest_charge.currency,adaptivePricing:session.adaptive_pricing.enabled});
+ assertCharge({mode:'payment',amount_total:643,payment_intent:pi});
+ results.push({scenario:'USD checkout plus independent card charge',requestedCountry:country,cardCountry:pi.latest_charge.payment_method_details.card.country,session:session.id,paymentIntent:pi.id,charge:pi.latest_charge.id,amount:643,currency:pi.latest_charge.currency,adaptivePricing:session.adaptive_pricing.enabled});
  sessions.push({country,url:session.url,id:session.id,email:email.toLowerCase()});
  if(country==='CA'){
-   const refund=await stripe.refunds.create({payment_intent:pi.id,amount:273,metadata:{auditRun:run}});assert.equal(refund.status,'succeeded');
-   const refunded=await stripe.paymentIntents.retrieve(pi.id,{expand:['latest_charge']});assert.equal(refunded.latest_charge.amount_refunded,273);results.push({scenario:'test partial refund',currency:refund.currency,amount:refund.amount,status:refund.status});
+   const refund=await stripe.refunds.create({payment_intent:pi.id,amount:321,metadata:{auditRun:run}});assert.equal(refund.status,'succeeded');
+   const refunded=await stripe.paymentIntents.retrieve(pi.id,{expand:['latest_charge']});assert.equal(refunded.latest_charge.amount_refunded,321);results.push({scenario:'test partial refund',currency:refund.currency,amount:refund.amount,status:refund.status});
  }
 }
-try {await stripe.paymentIntents.create({amount:546,currency:'usd',payment_method:'pm_card_visa_chargeDeclined',automatic_payment_methods:{enabled:true,allow_redirects:'never'},confirm:true,metadata:{auditRun:run}});throw new Error('Decline unexpectedly succeeded');} catch(e){assert.equal(e.code,'card_declined');assert.notEqual(e.payment_intent?.status,'succeeded');results.push({scenario:'declined card',status:e.payment_intent?.status,currency:e.payment_intent?.currency});}
+try {await stripe.paymentIntents.create({amount:643,currency:'usd',payment_method:'pm_card_visa_chargeDeclined',automatic_payment_methods:{enabled:true,allow_redirects:'never'},confirm:true,metadata:{auditRun:run}});throw new Error('Decline unexpectedly succeeded');} catch(e){assert.equal(e.code,'card_declined');assert.notEqual(e.payment_intent?.status,'succeeded');results.push({scenario:'declined card',status:e.payment_intent?.status,currency:e.payment_intent?.currency});}
 const subResponse=await h.api('/api/billing/subscription-checkout',{plan:'pro',billing:'monthly',currency:'usd'},`${run}-subscription@example.com`);assert.equal(subResponse.status,200,JSON.stringify(await subResponse.clone().json()));
 const subSession=await stripe.checkout.sessions.retrieve((await subResponse.json()).sessionId,{expand:['line_items.data.price']});assert.equal(subSession.currency,'usd');assert.equal(subSession.line_items.data[0].price.currency,'usd');assert.equal(subSession.amount_total,1999);assert.equal(subSession.adaptive_pricing.enabled,false);
 sessions.push({country:'subscription',url:subSession.url,id:subSession.id,email:`${run}-subscription@example.com`});results.push({scenario:'subscription checkout',session:subSession.id,currency:subSession.currency,amount:subSession.amount_total,adaptivePricing:subSession.adaptive_pricing.enabled});

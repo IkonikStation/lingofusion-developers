@@ -74,7 +74,7 @@ export function FeeBreakdownModal({
             </span>
           </div>
           <div className="flex items-center justify-between px-3.5 py-2.5">
-            <span className="font-medium text-neutral-600 dark:text-neutral-400">Card Network Fee</span>
+            <span className="font-medium text-neutral-600 dark:text-neutral-400">Platform & Processing Fee</span>
             <span className="font-sans tabular-nums text-neutral-700 dark:text-neutral-300">
               {cardNetworkFee}
             </span>

@@ -78,8 +78,8 @@ async function runTests() {
   console.log(`✓ Ultra $5,000 Enterprise Rule verified: Total $${highTier.totalMonthlyPrice} -> isEnterpriseInvoice = true`);
 
   const deposit5 = calculateGrossDepositCents(5.0);
-  assert.equal(deposit5.grossAmountCents, 546, "Gross cents for $5.00 net deposit must be 546 cents");
-  assert.equal(deposit5.grossChargedUsd, 5.46);
+  assert.equal(deposit5.grossAmountCents, 643, "Gross cents for $5.00 net deposit must be 643 cents");
+  assert.equal(deposit5.grossChargedUsd, 6.43);
   console.log(`✓ Stripe fee gross-up verified: $5.00 net -> ${deposit5.grossAmountCents} cents ($${deposit5.grossChargedUsd})`);
 
   // Verify Behind-the-Scenes Model Routing

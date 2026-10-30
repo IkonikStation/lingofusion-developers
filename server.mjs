@@ -3255,7 +3255,7 @@ async function route(req, res) {
       const defaultUser = getDefaultUser();
       const userId = buyer.id;
       const currency = "usd";
-      const { netDepositedUsd, grossAmountCents, grossChargedUsd, estimatedStripeFeeUsd } = calculateGrossDepositCents(depositAmount);
+      const { netDepositedUsd, grossAmountCents, grossChargedUsd, estimatedStripeFeeUsd } = depositQuote(depositAmount);
       const metadata = {
         billingPolicy: BILLING_POLICY,
         userEmail: buyer.email,
@@ -3278,19 +3278,32 @@ async function route(req, res) {
       // If live/test Stripe secret or restricted key is configured, create session with official Stripe SDK
       if (stripeSecretKey && /^(sk|rk)_(live|test)_/.test(stripeSecretKey) && !stripeSecretKey.includes("replace_with")) {
         try {
+          const netCreditCents = Math.round(netDepositedUsd * 100);
+          const feeCents = grossAmountCents - netCreditCents;
           const stripe = new Stripe(stripeSecretKey, { apiVersion: STRIPE_API_VERSION });
           const stripeSession = await stripe.checkout.sessions.create({
             adaptive_pricing: { enabled: false },
+            automatic_tax: { enabled: false },
             custom_text: { submit: { message: "All payments are charged in USD. Your bank may convert USD to your local currency." } },
             mode: "payment",
             line_items: [
               {
                 price_data: {
-                  currency,
-                  unit_amount: grossAmountCents,
+                  currency: "usd",
+                  unit_amount: netCreditCents,
                   product_data: {
                     name: `LingoFusion Balance — $${netDepositedUsd.toFixed(2)} USD API Credit`,
-                    description: `Adds +$${netDepositedUsd.toFixed(2)} ${currency.toUpperCase()} to your usable API balance`,
+                    description: `Adds +$${netDepositedUsd.toFixed(2)} USD to your usable API balance`,
+                  },
+                },
+                quantity: 1,
+              },
+              {
+                price_data: {
+                  currency: "usd",
+                  unit_amount: feeCents,
+                  product_data: {
+                    name: "Platform & Processing Fee",
                   },
                 },
                 quantity: 1,
