@@ -1532,6 +1532,10 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
   } else if (method === "POST" && path === "/v1/chat/completions") {
     result = await runChatCompletionBrowser(state, options, "api");
   } else if (method === "POST" && (path === "/api/create-checkout-session" || path === "/api/billing/deposit")) {
+    const user = getCurrentUser();
+    if (user.provider === "guest" || !user.sessionToken) {
+      fail("Sign-in required. You must be signed in to purchase credits.");
+    }
     const body = requestBody(options);
     const depositAmount = Number(body.amount ?? body.depositAmount ?? body.topUpAmount);
     if (!Number.isFinite(depositAmount) || depositAmount < 1 || depositAmount > 50000) {

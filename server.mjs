@@ -2948,7 +2948,6 @@ function billingBuyer(req, db) {
   const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
   const [body, sig, extra] = token.split(".");
   if (!body || !sig || extra || !process.env.SESSION_SECRET) {
-    if (process.env.LINGOFUSION_REAL_MODELS === "false") return getDefaultUser();
     return null;
   }
   try {

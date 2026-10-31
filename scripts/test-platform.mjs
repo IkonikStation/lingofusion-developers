@@ -219,18 +219,32 @@ async function runTests() {
     });
     console.log("✓ Pre-check 402 insufficient_quota response matches exact specification");
 
-    // Verify Deposit minimum $1.00 enforcement
-    const lowDepositRes = await fetch(`${BASE_URL}/api/billing/deposit`, {
+    // Verify unauthenticated deposit is rejected with 401 sign_in_required
+    const unauthDepositRes = await fetch(`${BASE_URL}/api/billing/deposit`, {
       method: "POST",
       headers: { "content-type": "application/json" },
+      body: JSON.stringify({ depositAmount: 5.0 }),
+    });
+    assert.equal(unauthDepositRes.status, 401, "Anonymous deposit must be rejected");
+
+    // Verify Deposit minimum $1.00 enforcement with authenticated API key
+    const lowDepositRes = await fetch(`${BASE_URL}/api/billing/deposit`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKeySecret}`,
+      },
       body: JSON.stringify({ depositAmount: 0.5 }),
     });
     assert.equal(lowDepositRes.status, 400, "Deposit under $1.00 must be rejected");
 
-    // Valid Deposit $5.00
+    // Valid Deposit $5.00 with authenticated API key
     const depositRes = await fetch(`${BASE_URL}/api/billing/deposit`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKeySecret}`,
+      },
       body: JSON.stringify({ depositAmount: 5.0 }),
     });
     assert.equal(depositRes.status, 200);
@@ -309,7 +323,10 @@ async function runTests() {
     // Test Recurring Subscription Tiers: Pro ($19.99) and Pro Max ($39.99)
     const proSubRes = await fetch(`${BASE_URL}/api/billing/subscription-checkout`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKeySecret}`,
+      },
       body: JSON.stringify({ plan: "pro-350k", billing: "monthly" }),
     });
     assert.equal(proSubRes.status, 200);
@@ -319,7 +336,10 @@ async function runTests() {
 
     const proMaxSubRes = await fetch(`${BASE_URL}/api/billing/subscription-checkout`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiKeySecret}`,
+      },
       body: JSON.stringify({ plan: "pro-max-750k", billing: "monthly" }),
     });
     assert.equal(proMaxSubRes.status, 200);

@@ -1,4 +1,4 @@
-import { Check, ChevronDown, CreditCard, Gift, HelpCircle, Loader2, ShieldCheck, Wallet, X, Zap } from "lucide-react";
+import { Check, ChevronDown, CreditCard, Gift, HelpCircle, Loader2, LogIn, ShieldCheck, Wallet, X, Zap } from "lucide-react";
 import type { ReactNode } from "react";
 import { formatUsd } from "../lib/utils";
 
@@ -24,6 +24,8 @@ type WalletFundingPanelProps = {
   onFeeDetails: () => void;
   onCheckout: () => void;
   senderEmail?: string;
+  isSignedIn?: boolean;
+  onSignIn?: () => void;
   gmailReady: boolean;
   gmailConnected: boolean;
   gmailBusy: boolean;
@@ -143,11 +145,34 @@ export function WalletFundingPanel(props: WalletFundingPanelProps) {
           </dl>
           <p className="mt-3 text-xs leading-5 text-neutral-500 dark:text-neutral-400">{gift ? "Your recipient gets the full gift amount. Processing is added to your total." : "The full credit amount goes to your wallet. Processing is added to your total."}</p>
           {props.status && <p role="status" className="mt-4 text-sm text-emerald-700 dark:text-emerald-400">{props.status}</p>}
+          {props.isSignedIn === false && (
+            <p role="status" className="mt-4 text-xs font-medium text-amber-700 dark:text-amber-400">
+              Please sign in to your account before purchasing credits.
+            </p>
+          )}
           {gift && <button type="button" onClick={props.onPreview} className="funding-preview-button mt-5"><Gift className="h-4 w-4" /> Preview recipient experience · Free</button>}
-          <button type="button" disabled={props.busy || invalidAmount || (gift && (!props.recipient || !props.gmailConnected || !props.gmailReady))} data-testid="simulate-webhook-btn" onClick={props.onCheckout} className="funding-checkout mt-6">
-            {props.busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-            {props.busy ? "Redirecting to Stripe…" : "Continue to checkout"}
-          </button>
+          {props.isSignedIn === false ? (
+            <button
+              type="button"
+              data-testid="simulate-webhook-btn"
+              onClick={props.onSignIn}
+              className="funding-checkout mt-6"
+            >
+              <LogIn className="h-4 w-4" />
+              Sign in to add credits
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={props.busy || invalidAmount || (gift && (!props.recipient || !props.gmailConnected || !props.gmailReady))}
+              data-testid="simulate-webhook-btn"
+              onClick={props.onCheckout}
+              className="funding-checkout mt-6"
+            >
+              {props.busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+              {props.busy ? "Redirecting to Stripe…" : "Continue to checkout"}
+            </button>
+          )}
           <p className="mt-3 flex items-center justify-center gap-1.5 text-[11px] text-neutral-400"><ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> Secure checkout with Stripe</p>
         </aside>
       </div>

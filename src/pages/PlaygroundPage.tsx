@@ -1519,6 +1519,15 @@ export function PlaygroundPage({
     setErrorBanner(null);
     setDepositStatusMessage(null);
     setPaymentNotice(null);
+
+    const user = getCurrentUser();
+    if (user.provider === "guest" || !user.sessionToken) {
+      setErrorBanner("Sign in required. Please sign in to purchase credits.");
+      setDepositModalOpen(false);
+      onOpenAuth?.();
+      return;
+    }
+
     if (!Number.isFinite(depositAmount) || depositAmount < 1 || depositAmount > 50000) {
       setErrorBanner("Amount must be between $1.00 and $50,000.00 USD.");
       return;
@@ -1866,6 +1875,11 @@ export function PlaygroundPage({
                 onClose={() => { setReceiverPreviewOpen(false); setDepositModalOpen(false); }}
               /> : <WalletFundingPanel
                 senderEmail={getCurrentUser().provider === "google" ? currentUserEmail : undefined}
+                isSignedIn={getCurrentUser().provider !== "guest" && Boolean(getCurrentUser().sessionToken)}
+                onSignIn={() => {
+                  setDepositModalOpen(false);
+                  onOpenAuth?.();
+                }}
                 gmailReady={gmail.configured && gmail.paymentNotificationsReady}
                 gmailConnected={gmail.connected}
                 gmailBusy={gmailBusy}

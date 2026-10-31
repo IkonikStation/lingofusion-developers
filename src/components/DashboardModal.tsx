@@ -481,6 +481,13 @@ export function DashboardModal({
       return;
     }
 
+    if (currentUser?.provider === "guest" || !currentUser?.sessionToken) {
+      onNotify(tc("Please sign in to purchase credits"));
+      onClose();
+      onOpenAuth?.();
+      return;
+    }
+
     setBusyAction("recharge");
     try {
       const session = await api<{ url?: string; checkoutUrl?: string }>("/api/create-checkout-session", {
@@ -1303,16 +1310,29 @@ export function DashboardModal({
                                 </div>
 
                                 <div className="mt-5 flex flex-col gap-2">
-                                  <ActionButton
-                                    onClick={addBalance}
-                                    className="w-full"
-                                    disabled={busyAction === "recharge" || rechargeAmount < 1 || rechargeAmount > 50000}
-                                  >
-                                    <CreditCard className="h-4 w-4" />
-                                    {busyAction === "recharge"
-                                      ? tc("Redirecting to Stripe...")
-                                      : tc("Continue to Checkout")}
-                                  </ActionButton>
+                                  {currentUser?.provider === "guest" ? (
+                                    <ActionButton
+                                      onClick={() => {
+                                        onClose();
+                                        onOpenAuth?.();
+                                      }}
+                                      className="w-full"
+                                    >
+                                      <LogIn className="h-4 w-4" />
+                                      {tc("Sign in to purchase credits")}
+                                    </ActionButton>
+                                  ) : (
+                                    <ActionButton
+                                      onClick={addBalance}
+                                      className="w-full"
+                                      disabled={busyAction === "recharge" || rechargeAmount < 1 || rechargeAmount > 50000}
+                                    >
+                                      <CreditCard className="h-4 w-4" />
+                                      {busyAction === "recharge"
+                                        ? tc("Redirecting to Stripe...")
+                                        : tc("Continue to Checkout")}
+                                    </ActionButton>
+                                  )}
                                   <div className="flex items-center justify-between pt-1">
                                     <span className="inline-flex items-center gap-1 text-[11px] text-neutral-400">
                                       <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
