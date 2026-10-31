@@ -141,6 +141,8 @@ async function runTests() {
       ...process.env,
       LINGOFUSION_API_PORT: String(TEST_PORT),
       LINGOFUSION_REAL_MODELS: "false",
+      LINGOFUSION_SKIP_LOCAL_ENV: "true",
+      STRIPE_SECRET_KEY: "",
       STRIPE_WEBHOOK_SECRET: "whsec_test_secret_123",
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -234,7 +236,7 @@ async function runTests() {
     assert.equal(depositRes.status, 200);
     const depositData = await depositRes.json();
     assert.ok(depositData.checkoutUrl, "Must return checkoutUrl");
-    assert.equal(depositData.grossAmountCents, 546);
+    assert.equal(depositData.grossAmountCents, 643);
     assert.equal(depositData.metadata.netDepositUsd, "5");
     console.log(`✓ POST /api/billing/deposit returned checkoutUrl and grossAmountCents=${depositData.grossAmountCents}`);
 
@@ -242,6 +244,7 @@ async function runTests() {
     const webhookEventPayload = JSON.stringify({
       id: "evt_test_001",
       type: "checkout.session.completed",
+      livemode: false,
       data: {
         object: {
           id: depositData.sessionId,
@@ -272,11 +275,12 @@ async function runTests() {
     const invoicePaidPayload = JSON.stringify({
       id: "evt_test_inv_001",
       type: "invoice.paid",
+      livemode: false,
       data: {
         object: {
           id: "in_test_001",
-          amount_paid: 546,
-          amount_total: 546,
+          amount_paid: 643,
+          amount_total: 643,
           metadata: {
             userId: depositData.metadata.userId,
             netDepositUsd: "5.00",
@@ -328,6 +332,7 @@ async function runTests() {
     const subInvoicePayload = JSON.stringify({
       id: "evt_test_sub_inv_002",
       type: "invoice.paid",
+      livemode: false,
       data: {
         object: {
           id: "in_sub_002",

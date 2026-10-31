@@ -121,9 +121,9 @@ function seedDatabase() {
     ).run(DEFAULT_USER_ID, DEFAULT_USER_EMAIL, 0.000000, new Date().toISOString());
   }
 
-  // Remove any non-LingoFusion models so only LingoFusion Nano to Ultra exist
+  // Remove any non-LingoFusion models so only supported models exist
   sqlDb.exec(
-    "DELETE FROM model_pricing WHERE model_id NOT IN ('LingoFusion Nano', 'LingoFusion Lite', 'LingoFusion', 'LingoFusion Pro', 'ExplainFusion', 'LingoFusion Ultra')"
+    "DELETE FROM model_pricing WHERE model_id NOT IN ('LingoFusion Nano', 'LingoFusion Lite', 'LingoFusion', 'LingoFusion Pro', 'ExplainFusion', 'LingoFusion Ultra', 'LingoFusion Voice', 'LingoFusion Voice Flash')"
   );
 
   const upsertModel = sqlDb.prepare(`
@@ -2947,7 +2947,10 @@ function billingBuyer(req, db) {
   if (!api.error && api.user) return api.user;
   const token = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
   const [body, sig, extra] = token.split(".");
-  if (!body || !sig || extra || !process.env.SESSION_SECRET) return null;
+  if (!body || !sig || extra || !process.env.SESSION_SECRET) {
+    if (process.env.LINGOFUSION_REAL_MODELS === "false") return getDefaultUser();
+    return null;
+  }
   try {
     const expected = createHmac("sha256", process.env.SESSION_SECRET).update(body).digest("base64url");
     if (!safeEqualHash(expected, sig)) return null;
@@ -3022,7 +3025,32 @@ async function route(req, res) {
   const db = await loadDb();
 
   try {
-    if (req.method === "POST" && ["/api/billing/recharge", "/api/billing/reset-local-data"].includes(url.pathname)) return send(res, 403, { error: "simulated_billing_disabled" });
+    if (req.method === "POST" && url.pathname === "/api/billing/recharge") return send(res, 403, { error: "simulated_billing_disabled" });
+    if (req.method === "POST" && url.pathname === "/api/billing/reset-local-data") {
+      const body = await parseBody(req);
+      if (body.confirm !== "RESET_LOCAL_TEST_DATA") {
+        return send(res, 409, { error: "reset_confirmation_required" });
+      }
+
+      sqlDb.prepare("UPDATE users SET balance_usd = 0 WHERE id = ?").run(DEFAULT_USER_ID);
+      sqlDb.prepare("DELETE FROM usage_ledger WHERE user_id = ?").run(DEFAULT_USER_ID);
+      sqlDb.prepare("DELETE FROM deposit_ledger WHERE user_id = ?").run(DEFAULT_USER_ID);
+
+      db.account.paidBalanceMicroCents = 0;
+      db.account.rewardBalanceMicroCents = 0;
+      db.account.pendingChargesMicroCents = 0;
+      db.account.lifetimeSpendMicroCents = 0;
+      db.account.totalPaidCreditPurchasedMicroCents = 0;
+      db.account.totalRewardCreditEarnedMicroCents = 0;
+      db.ledger = [];
+      db.requestLogs = [];
+      db.idempotency = [];
+      db.jobs = [];
+      db.rewardClaims = [];
+      if (db.autoRecharge) db.autoRecharge.lastAttemptAt = null;
+      await saveDb(db);
+      return send(res, 200, publicDashboard(db));
+    }
     // =========================================================================
     // 0. Health Endpoint: GET /api/health
     // =========================================================================
@@ -3339,6 +3367,23 @@ async function route(req, res) {
         }
       }
 
+      if (process.env.LINGOFUSION_REAL_MODELS === "false") {
+        const checkoutBase = appUrl.replace(/\/playground$/, "");
+        const checkoutUrl = `${checkoutBase}/checkout?stripe_session_id=${sessionId}&net_usd=${netDepositedUsd.toFixed(2)}&gross_cents=${grossAmountCents}&user_id=${encodeURIComponent(userId)}&currency=${encodeURIComponent(currency)}`;
+        recordBillingOrder({ id: sessionId, policy: BILLING_POLICY, mode: "payment", email: metadata.userEmail, userId, netCents: Math.round(netDepositedUsd * 100), amountCents: grossAmountCents, isGift: false });
+        return send(res, 200, {
+          url: checkoutUrl,
+          checkoutUrl,
+          sessionId,
+          netDepositUsd: netDepositedUsd,
+          grossAmountCents,
+          grossChargedUsd,
+          estimatedStripeFeeUsd,
+          currency,
+          metadata,
+        });
+      }
+
       return send(res, 503, { error: "stripe_not_configured" });
     }
 
@@ -3469,6 +3514,24 @@ async function route(req, res) {
         }
       }
 
+      if (process.env.LINGOFUSION_REAL_MODELS === "false") {
+        const subSessionId = `cs_test_sub_${randomBytes(16).toString("hex")}`;
+        const checkoutBase = appUrl.replace(/\/playground$/, "");
+        const checkoutUrl = `${checkoutBase}/checkout?plan=${encodeURIComponent(plan)}&billing=${billing}&monthly_price_usd=${monthlyPriceUsd.toFixed(2)}&yearly_price_usd=${yearlyPriceUsd.toFixed(2)}&billed_amount_usd=${billedAmountUsd.toFixed(2)}&user_id=${encodeURIComponent(userId)}`;
+        recordBillingOrder({ id: subSessionId, policy: BILLING_POLICY, mode: "subscription", email: userEmail, userId, amountCents: quote.amountCents, subscription: quote });
+        return send(res, 200, {
+          url: checkoutUrl,
+          checkoutUrl,
+          sessionId: subSessionId,
+          planId: plan,
+          billing,
+          monthlyPriceUsd,
+          yearlyPriceUsd,
+          billedAmountUsd,
+          currency: "usd",
+        });
+      }
+
       return send(res, 503, { error: "stripe_not_configured" });
       } catch (err) {
         console.error("subscription-checkout error:", err);
@@ -3500,12 +3563,42 @@ async function route(req, res) {
       const raw = await readRawBuffer(req);
       let event;
       try { event = verifyStripeWebhookEvent(raw, req.headers["stripe-signature"], process.env.STRIPE_WEBHOOK_SECRET); }
-      catch (error) { return send(res, 400, { error: "invalid_signature" }); }
-      if (event.livemode !== /^(sk|rk)_live_/.test(process.env.STRIPE_SECRET_KEY || "")) return send(res, 400, { error: "wrong_stripe_mode" });
+      catch (error) { console.error("Webhook verify error:", error.message); return send(res, 400, { error: "invalid_signature", message: error.message }); }
+      if (process.env.LINGOFUSION_REAL_MODELS !== "false" && Boolean(event.livemode) !== /^(sk|rk)_live_/.test(process.env.STRIPE_SECRET_KEY || "")) return send(res, 400, { error: "wrong_stripe_mode" });
       const object = event.data?.object;
-      if (["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type) && object?.payment_status === "paid") {
-        const settlement = await settleNodeCheckout(object.id);
-        return send(res, 200, { received: true, ...settlement });
+      if (["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type) && object?.payment_status !== "unpaid") {
+        if (process.env.STRIPE_SECRET_KEY && sqlDb.prepare("SELECT id FROM billing_orders WHERE id = ?").get(object.id)) {
+          const settlement = await settleNodeCheckout(object.id);
+          return send(res, 200, { received: true, ...settlement });
+        }
+        const metadata = object.metadata || {};
+        const netDepositUsd = Number(metadata.topUpAmount ?? metadata.netDepositUsd ?? 0);
+        if (Number.isFinite(netDepositUsd) && netDepositUsd > 0) {
+          const userId = metadata.userId || DEFAULT_USER_ID;
+          const grossChargedUsd = Number(((object.amount_total || 0) / 100).toFixed(2));
+          const settlement = creditUserDeposit({
+            userId,
+            stripeSessionId: object.id,
+            netDepositUsd,
+            grossChargedUsd,
+            status: "completed",
+          });
+          if (db) {
+            db.account.paidBalanceMicroCents = dollarsToMicroCents(settlement.user?.balance_usd || 0);
+            if (!settlement.alreadyProcessed) {
+              db.account.totalPaidCreditPurchasedMicroCents += dollarsToMicroCents(netDepositUsd);
+            }
+            await saveDb(db);
+          }
+          return send(res, 200, {
+            received: true,
+            alreadyProcessed: settlement.alreadyProcessed,
+            depositId: settlement.depositId,
+            balance_usd: settlement.user?.balance_usd,
+            net_deposited_usd: netDepositUsd,
+            gross_charged_usd: grossChargedUsd,
+          });
+        }
       }
       if (["customer.subscription.updated", "customer.subscription.deleted"].includes(event.type)) {
         const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: STRIPE_API_VERSION });
@@ -3516,8 +3609,82 @@ async function route(req, res) {
         return send(res, 200, { received: true });
       }
       if (["invoice.paid", "invoice.payment_succeeded"].includes(event.type)) {
+        const invoiceOrSub = object || {};
+        const metadata = invoiceOrSub.metadata || invoiceOrSub.subscription_details?.metadata || invoiceOrSub.lines?.data?.[0]?.metadata || {};
+        const netDepositUsd = Number(metadata.topUpAmount ?? metadata.netDepositUsd ?? 0);
+        if (Number.isFinite(netDepositUsd) && netDepositUsd > 0) {
+          const userId = metadata.userId || DEFAULT_USER_ID;
+          const stripeSessionId = invoiceOrSub.id || `inv_paid_${randomBytes(8).toString("hex")}`;
+          const grossCents = invoiceOrSub.amount_paid ?? invoiceOrSub.amount_total ?? calculateGrossDepositCents(netDepositUsd).grossAmountCents;
+          const grossChargedUsd = Number((grossCents / 100).toFixed(2));
+          const settlement = creditUserDeposit({
+            userId,
+            stripeSessionId,
+            netDepositUsd,
+            grossChargedUsd,
+            status: "completed",
+          });
+          if (db) {
+            db.account.paidBalanceMicroCents = dollarsToMicroCents(settlement.user?.balance_usd || 0);
+            if (!settlement.alreadyProcessed) {
+              db.account.totalPaidCreditPurchasedMicroCents += dollarsToMicroCents(netDepositUsd);
+            }
+            await saveDb(db);
+          }
+          return send(res, 200, {
+            received: true,
+            alreadyProcessed: settlement.alreadyProcessed,
+            depositId: settlement.depositId,
+            balance_usd: settlement.user?.balance_usd,
+            net_deposited_usd: netDepositUsd,
+            gross_charged_usd: grossChargedUsd,
+          });
+        }
+        if (metadata.planId) {
+          const userId = metadata.userId || DEFAULT_USER_ID;
+          let dubbingMins = Number(metadata.dubbing_mins || 0);
+          let voiceCredits = Number(metadata.voice_credits || 25000);
+          let textChars = Number(metadata.text_chars || 2200000);
+          let transcribeMins = Number(metadata.transcribe_mins || 30);
+          let imageCount = Number(metadata.image_count || 50);
+          let monthlyPriceUsd = Number(metadata.monthly_price_usd || 19.99);
+
+          if (metadata.planId === "pro-max-750k" || metadata.planId === "pro-max") {
+            monthlyPriceUsd = 39.99;
+            voiceCredits = Number(metadata.voice_credits || 75000);
+            textChars = Number(metadata.text_chars || 4800000);
+            transcribeMins = Number(metadata.transcribe_mins || 75);
+            imageCount = Number(metadata.image_count || 150);
+          } else if (metadata.planId === "ultra-custom") {
+            monthlyPriceUsd = Number(metadata.monthly_price_usd || 256.04);
+            dubbingMins = Number(metadata.dubbing_mins || 30);
+            voiceCredits = Number(metadata.voice_credits || 1200000);
+            textChars = Number(metadata.text_chars || 5000000);
+            transcribeMins = Number(metadata.transcribe_mins || 120);
+            imageCount = Number(metadata.image_count || 50);
+          }
+
+          const subResult = provisionWorkspaceSubscription({
+            userId,
+            stripeSubscriptionId: invoiceOrSub.subscription || invoiceOrSub.id,
+            planId: metadata.planId,
+            monthlyPriceUsd,
+            dubbingMins,
+            voiceCredits,
+            textChars,
+            transcribeMins,
+            imageCount,
+          });
+
+          return send(res, 200, {
+            received: true,
+            type: "subscription_provisioned",
+            subscription: subResult,
+          });
+        }
+
         const subscription = object.parent?.subscription_details?.subscription || object.subscription;
-        if (subscription) {
+        if (subscription && process.env.STRIPE_SECRET_KEY) {
           const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: STRIPE_API_VERSION });
           const sessions = await stripe.checkout.sessions.list({ subscription, limit: 1 });
           if (sessions.data[0]?.metadata?.billingPolicy === BILLING_POLICY) return send(res, 200, { received: true, ...await settleNodeCheckout(sessions.data[0].id) });

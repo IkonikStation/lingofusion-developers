@@ -1519,7 +1519,6 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
   let result: unknown;
 
   if (method === "GET" && path === "/api/dashboard") {
-    state.dashboard.autoRecharge.enabled = false;
     result = state.dashboard;
   } else if (method === "GET" && path === "/v1/models") {
     result = {

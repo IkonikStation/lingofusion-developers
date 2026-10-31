@@ -98,6 +98,9 @@ function readFileAsDataUrl(file: File): Promise<string> {
 }
 
 const ALLOWED_LINGOFUSION_MODELS = [
+  "LingoFusion Native-1.7B",
+  "LingoFusion Native-9B",
+  "LingoFusion Native-35B",
   "LingoFusion Nano",
   "LingoFusion Lite",
   "LingoFusion",
@@ -474,7 +477,7 @@ export function PlaygroundPage({
       }
       updateBalance(bal);
       if (dash.autoRecharge) {
-        setAutoTopUpEnabled(false);
+        setAutoTopUpEnabled(Boolean(dash.autoRecharge?.enabled));
         if (typeof dash.autoRecharge.threshold === "number" && dash.autoRecharge.threshold > 0) {
           setAutoTopUpThreshold(dash.autoRecharge.threshold);
         }
@@ -1912,7 +1915,7 @@ export function PlaygroundPage({
                   </span>
                 </div>
                 <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
-                  Temporarily unavailable. Add funds manually to top up your balance.
+                  Automatically recharge your balance with Stripe when your credit runs low.
                 </p>
               </div>
 
@@ -1921,7 +1924,7 @@ export function PlaygroundPage({
                 role="switch"
                 aria-checked={autoTopUpEnabled}
                 data-testid="auto-topup-toggle"
-                disabled={true}
+                disabled={autoTopUpBusy}
                 onClick={() => {
                   const next = !autoTopUpEnabled;
                   setAutoTopUpEnabled(next);
@@ -2052,7 +2055,7 @@ export function PlaygroundPage({
               <button
                 type="button"
                 data-testid="save-auto-topup-btn"
-                disabled={true}
+                disabled={autoTopUpBusy}
                 onClick={() => void handleSaveAutoTopUp()}
                 className="pressable inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-neutral-300 bg-white px-4 text-xs font-semibold text-neutral-900 shadow-2xs transition hover:bg-neutral-50 disabled:opacity-50 dark:border-white/15 dark:bg-neutral-950 dark:text-white dark:hover:bg-white/10"
               >
