@@ -2343,11 +2343,7 @@ async function handleTextToSpeech({ req, res, body, user, apiKeyId, source, db }
   const charCount = input.length;
   const costUsd = Number(((charCount / 1000) * route.pricePerThousandChars).toFixed(6));
 
-  const isExternalPlaygroundProxy =
-    source === "playground" &&
-    String(req?.headers?.origin || "").includes("github.io");
-
-  if (!isExternalPlaygroundProxy && (user.balance_usd <= 0 || user.balance_usd < costUsd)) {
+  if (user.balance_usd <= 0 || user.balance_usd < costUsd) {
     return send(res, 402, {
       error: {
         message: `Insufficient balance. Required: $${costUsd.toFixed(4)}, Available: $${Number(user.balance_usd).toFixed(4)}.`,

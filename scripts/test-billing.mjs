@@ -41,6 +41,10 @@ await test('no anonymous, foreign-currency, simulator or automatic credit creati
   assert.equal((await h.api('/api/user/balance',{delta_usd:5000},email)).status,403);
   for(const path of ['/api/auto-recharge','/api/billing/recharge','/api/billing/reset-local-data'])assert.equal((await h.api(path,{enabled:true,amount:100},email)).status,503);
   for(const path of ['/api/create-checkout-session','/api/billing/deposit','/api/billing/subscription-checkout'])assert.equal((await h.api(path,{amount:5,currency:'cad'},email)).status,400);
+  for(const path of ['/api/playground/chat','/api/playground/speech','/api/playground/image','/api/playground/music','/api/playground/dubbing']){
+    assert([401, 403].includes((await h.api(path,{input:'hello'},'')).status));
+    assert.equal((await h.api(path,{input:'hello'},email,{ 'x-lingofusion-client-token': 'lf_play_secure_649f7' })).status,402);
+  }
   assert.equal(h.records.has(`user_balance:${email}`),false);
 });
 await test('manual checkout retains USD and fee total; spoofed identity cannot change owner',async()=>{

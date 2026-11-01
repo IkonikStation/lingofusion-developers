@@ -212,6 +212,26 @@ export default {
         const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
         return env.SESSION_SECRET ? verifySession(token, env.SESSION_SECRET).catch(() => null) : null;
       };
+
+      const requireUserBalance = async () => {
+        const user = await signedInUser();
+        if (!user?.email) {
+          return { error: jsonResponse({ error: "sign_in_required", message: "Sign in before using models." }, 401, requestOrigin) };
+        }
+        const email = user.email.toLowerCase();
+        let balanceUsd = 0;
+        if (env.BILLING) {
+          const b = await billingLedger(env, { action: "balance", email });
+          balanceUsd = Number(b.balance_usd || 0);
+        } else if (env.GIFTS) {
+          const raw = await env.GIFTS.get(`user_balance:${email}`);
+          balanceUsd = raw !== null ? Number(raw) : 0;
+        }
+        if (balanceUsd <= 0) {
+          return { error: jsonResponse({ error: "insufficient_quota", message: "Insufficient balance. Please deposit credits." }, 402, requestOrigin) };
+        }
+        return { user, email, balanceUsd };
+      };
       if (request.method === "GET" && path === "/api/gifts/gmail/callback") return gmailCallback(request, env);
       if (request.method === "GET" && path === "/api/gifts/config") {
         return jsonResponse(await gmailStatus(env, await signedInUser()), 200, requestOrigin);
@@ -538,6 +558,9 @@ export default {
 
       // 4. Voice Synthesis Proxy (server-side only using env.VOICE_API_KEY)
       if (request.method === "POST" && (path === "/api/playground/speech" || path === "/v1/audio/speech")) {
+        const auth = await requireUserBalance();
+        if (auth.error) return auth.error;
+
         const voiceKey = env.VOICE_API_KEY;
         if (!voiceKey) {
           return jsonResponse({ error: "voice_provider_not_configured", message: "VOICE_API_KEY secret is not set on Worker." }, 503);
@@ -606,6 +629,9 @@ export default {
 
       // 4b. Chat / Text Translation Proxy
       if (request.method === "POST" && (path === "/api/playground/chat" || path === "/v1/chat/completions")) {
+        const auth = await requireUserBalance();
+        if (auth.error) return auth.error;
+
         const openaiKey = env.OPENAI_API_KEY;
         if (!openaiKey) {
           return jsonResponse({ error: "translation_engine_not_configured", message: "Translation engine secret is not configured on Gateway." }, 503, requestOrigin);
@@ -634,6 +660,9 @@ export default {
 
       // 4c. Image Translation / Edits Proxy
       if (request.method === "POST" && (path === "/api/playground/image" || path === "/v1/images/edits")) {
+        const auth = await requireUserBalance();
+        if (auth.error) return auth.error;
+
         const openaiKey = env.OPENAI_API_KEY;
         if (!openaiKey) {
           return jsonResponse({ error: "image_engine_not_configured", message: "Image synthesis engine secret is not configured on Gateway." }, 503, requestOrigin);
@@ -663,6 +692,9 @@ export default {
 
       // 4d. Music Generation Proxy (server-side only using Treblo v3 / Melodia)
       if (request.method === "POST" && (path === "/api/playground/music" || path === "/v1/music")) {
+        const auth = await requireUserBalance();
+        if (auth.error) return auth.error;
+
         const trebloKey = env.TREBLO_API_KEY || env.VOICE_API_KEY;
         if (!trebloKey) {
           return jsonResponse({ error: "music_provider_not_configured", message: "TREBLO_API_KEY secret is not set on Worker." }, 503, requestOrigin);
@@ -791,6 +823,9 @@ export default {
 
       // 4e. Dubbing Proxy (server-side only using env.VOICE_API_KEY / Dubbing v2)
       if (["POST", "GET"].includes(request.method) && ["/api/playground/dubbing", "/v1/dubbing"].includes(path)) {
+        const auth = await requireUserBalance();
+        if (auth.error) return auth.error;
+
         try {
           const body = request.method === "POST" ? await request.json() : Object.fromEntries(url.searchParams);
           return jsonResponse(await dubbingRequest(request.method, body, env.VOICE_API_KEY), 200, requestOrigin);
