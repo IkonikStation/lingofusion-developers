@@ -14,7 +14,7 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AuthUser } from "../data/auth";
 import type { LanguageCode, TranslationKey } from "../data/i18n";
 import { languages } from "../data/i18n";
@@ -73,6 +73,39 @@ export function Header({
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!userMenuOpen && !searchOpen) return;
+
+    const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node;
+      if (userMenuOpen && userMenuRef.current && !userMenuRef.current.contains(target)) {
+        setUserMenuOpen(false);
+      }
+      if (searchOpen && searchRef.current && !searchRef.current.contains(target)) {
+        setSearchOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setUserMenuOpen(false);
+        setSearchOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    document.addEventListener("touchstart", handleOutsideClick);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+      document.removeEventListener("touchstart", handleOutsideClick);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [userMenuOpen, searchOpen]);
 
   const filteredSearch = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -176,7 +209,7 @@ export function Header({
           </button>
 
           {/* Minimal Search bar */}
-          <div className="relative hidden w-44 xl:block lg:w-52">
+          <div ref={searchRef} className="relative hidden w-44 xl:block lg:w-52">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400" />
             <input
               value={query}
@@ -243,7 +276,7 @@ export function Header({
 
           {/* User Account / Sign In */}
           {currentUser && currentUser.provider !== "guest" ? (
-            <div className="relative">
+            <div ref={userMenuRef} className="relative">
               <button
                 type="button"
                 onClick={() => setUserMenuOpen((prev) => !prev)}
@@ -278,12 +311,7 @@ export function Header({
               </button>
 
               {userMenuOpen && (
-                <>
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setUserMenuOpen(false)}
-                  />
-                  <div className="absolute right-0 top-10 z-50 w-64 rounded-2xl border border-neutral-200 bg-white p-2 shadow-xl dark:border-white/10 dark:bg-[#141414]">
+                <div className="absolute right-0 top-10 z-50 w-64 rounded-2xl border border-neutral-200 bg-white p-2 shadow-xl dark:border-white/10 dark:bg-[#141414]">
                     <div className="border-b border-neutral-100 px-3 py-2.5 dark:border-white/10">
                       <div className="mb-2 flex items-center gap-2.5">
                         <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-neutral-900 font-bold text-white dark:bg-white dark:text-neutral-950">
@@ -381,8 +409,7 @@ export function Header({
                       </button>
                     </div>
                   </div>
-                </>
-              )}
+                )}
             </div>
           ) : (
             <button
