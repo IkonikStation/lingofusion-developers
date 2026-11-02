@@ -3161,7 +3161,7 @@ export function PlaygroundPage({
                     value={userInput}
                     onChange={setUserInput}
                     onSubmit={handleRunVoiceSynthesis}
-                    placeholder="Enter text to speak with LingoFusion Voice (use [Laughing], [Whispering], etc.)..."
+                    placeholder="Enter text to speak"
                     className="w-full flex-1 text-base leading-7 text-neutral-950 dark:text-white"
                   />
                 </div>
