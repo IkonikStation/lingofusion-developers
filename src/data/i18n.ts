@@ -23,6 +23,16 @@ export const languages = [
 
 export type LanguageCode = (typeof languages)[number]["code"];
 
+export function getDeviceLanguage(): LanguageCode {
+  const preferred = navigator.languages?.length ? navigator.languages : [navigator.language];
+  for (const locale of preferred) {
+    const base = locale?.toLowerCase().split(/[-_]/)[0];
+    const match = languages.find((language) => language.code === base);
+    if (match) return match.code;
+  }
+  return "en";
+}
+
 export type TranslationKey =
   | "home"
   | "api"

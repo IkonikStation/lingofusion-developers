@@ -7,8 +7,7 @@ import { Sidebar } from "./components/Sidebar";
 import { SubscriptionPage } from "./components/SubscriptionPage";
 import type { AuthUser } from "./data/auth";
 import { getCurrentUser, signOut, subscribeAuth } from "./data/auth";
-import { createContentTranslator, createTranslator, getLanguage } from "./data/i18n";
-import type { LanguageCode } from "./data/i18n";
+import { createContentTranslator, createTranslator, getDeviceLanguage, getLanguage } from "./data/i18n";
 import {
   dubbingModels,
   imageModels,
@@ -71,7 +70,7 @@ export default function App() {
   });
   const [systemDark, setSystemDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
   const theme = themePreference === "system" ? (systemDark ? "dark" : "light") : themePreference;
-  const [language, setLanguage] = useState<LanguageCode>("en");
+  const [language, setLanguage] = useState(getDeviceLanguage);
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [dashboardInitialTab, setDashboardInitialTab] = useState<string>("Overview");
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -86,6 +85,12 @@ export default function App() {
   const tc = useMemo(() => createContentTranslator(language), [language]);
   const activeLanguage = getLanguage(language);
   const isSubscriptionPage = activePage === "Subscription Prices";
+
+  useEffect(() => {
+    const updateLanguage = () => setLanguage(getDeviceLanguage());
+    window.addEventListener("languagechange", updateLanguage);
+    return () => window.removeEventListener("languagechange", updateLanguage);
+  }, []);
 
   useEffect(() => {
     if (!mobileOpen) return;
@@ -316,7 +321,6 @@ export default function App() {
         activePage={activePage}
         isSubscriptionPage={isSubscriptionPage}
         theme={theme}
-        language={language}
         mobileOpen={mobileOpen}
         searchItems={searchItems}
         balanceUsd={balanceUsd}
@@ -334,7 +338,6 @@ export default function App() {
         t={t}
         tc={tc}
         onNavigate={navigate}
-        onLanguageChange={setLanguage}
         onDashboard={() => {
           setDashboardInitialTab("Overview");
           setDashboardOpen(true);
@@ -357,13 +360,11 @@ export default function App() {
           activePage={activePage}
           collapsed={sidebarCollapsed}
           mobileOpen={mobileOpen}
-          language={language}
           currentUser={currentUser}
           onOpenAuth={() => setAuthModalOpen(true)}
           t={t}
           tc={tc}
           onNavigate={navigate}
-          onLanguageChange={setLanguage}
           onDashboard={() => {
             setMobileOpen(false);
             setDashboardInitialTab("Overview");

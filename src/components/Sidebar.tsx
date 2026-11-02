@@ -21,19 +21,17 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AuthUser } from "../data/auth";
-import type { LanguageCode, TranslationKey } from "../data/i18n";
+import type { TranslationKey } from "../data/i18n";
 
 type SidebarProps = {
   activePage: string;
   collapsed: boolean;
   mobileOpen: boolean;
-  language: LanguageCode;
   currentUser?: AuthUser;
   onOpenAuth?: () => void;
   t: (key: TranslationKey) => string;
   tc: (text: string) => string;
   onNavigate: (page: string) => void;
-  onLanguageChange: (language: LanguageCode) => void;
   onDashboard: () => void;
   onToggleCollapse: () => void;
   onCloseMobile: () => void;

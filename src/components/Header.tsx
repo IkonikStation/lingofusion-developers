@@ -14,8 +14,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AuthUser } from "../data/auth";
-import type { LanguageCode, TranslationKey } from "../data/i18n";
-import { languages } from "../data/i18n";
+import type { TranslationKey } from "../data/i18n";
 import { formatUsd } from "../lib/utils";
 
 type HeaderProps = {
@@ -23,7 +22,6 @@ type HeaderProps = {
   isSubscriptionPage: boolean;
   theme: "light" | "dark";
   themePreference: "system" | "light" | "dark";
-  language: LanguageCode;
   mobileOpen: boolean;
   searchItems: string[];
   balanceUsd?: number;
@@ -34,7 +32,6 @@ type HeaderProps = {
   t: (key: TranslationKey) => string;
   tc: (text: string) => string;
   onNavigate: (page: string) => void;
-  onLanguageChange: (language: LanguageCode) => void;
   onDashboard: () => void;
   onThemeChange: (theme: "system" | "light" | "dark") => void;
   onToggleMobile: () => void;
@@ -53,7 +50,6 @@ export function Header({
   activePage,
   isSubscriptionPage,
   themePreference,
-  language,
   mobileOpen,
   searchItems,
   balanceUsd = 0,
@@ -64,7 +60,6 @@ export function Header({
   t,
   tc,
   onNavigate,
-  onLanguageChange,
   onDashboard,
   onThemeChange,
   onToggleMobile,
@@ -248,20 +243,6 @@ export function Header({
               </div>
             )}
           </div>
-
-          {/* Language selector */}
-          <select
-            value={language}
-            onChange={(e) => onLanguageChange(e.target.value as LanguageCode)}
-            className="hidden h-8 rounded-md border border-neutral-200 bg-transparent px-2 text-xs text-neutral-600 outline-none dark:border-neutral-800 dark:text-neutral-400 sm:block"
-            aria-label="Language"
-          >
-            {languages.map((item) => (
-              <option key={item.code} value={item.code}>
-                {item.code.toUpperCase()}
-              </option>
-            ))}
-          </select>
 
           {/* Theme switcher */}
           <select
