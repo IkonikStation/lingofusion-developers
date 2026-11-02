@@ -60,6 +60,7 @@ import { browserApi, getApiBaseUrl, shouldUseBrowserApi } from "./data/browserAp
 
 export default function App() {
   const [activePage, setActivePage] = useState(() => pageFromPath(window.location.pathname));
+  const [playgroundQuery, setPlaygroundQuery] = useState(() => window.location.search);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [themePreference, setThemePreference] = useState<"system" | "light" | "dark">(() => {
@@ -171,6 +172,7 @@ export default function App() {
       window.history.pushState({}, "", deployedPath);
     }
     setActivePage(nextPage);
+    if (nextPage === "Playground") setPlaygroundQuery(search);
     setMobileOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -217,6 +219,7 @@ export default function App() {
   useEffect(() => {
     const handlePopState = () => {
       setActivePage(pageFromPath(window.location.pathname));
+      setPlaygroundQuery(window.location.search);
       setMobileOpen(false);
     };
     window.addEventListener("popstate", handlePopState);
@@ -410,6 +413,7 @@ export default function App() {
                   <ModelsPage onOpenModel={navigate} />
                 ) : activePage === "Playground" ? (
                   <PlaygroundPage
+                    key={playgroundQuery}
                     onOpenAuth={() => setAuthModalOpen(true)}
                     onOpenDashboard={() => setDashboardOpen(true)}
                     onNavigate={navigate}

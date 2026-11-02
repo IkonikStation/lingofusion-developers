@@ -4,6 +4,7 @@ import {
   BadgeDollarSign,
   BookOpen,
   ChevronsUpDown,
+  Clapperboard,
   Cpu,
   FileText,
   Home,
@@ -11,13 +12,13 @@ import {
   KeyRound,
   Languages,
   Layers,
+  Music,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
   Settings,
   Sparkles,
   Terminal,
-  Video,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AuthUser } from "../data/auth";
@@ -31,7 +32,7 @@ type SidebarProps = {
   onOpenAuth?: () => void;
   t: (key: TranslationKey) => string;
   tc: (text: string) => string;
-  onNavigate: (page: string) => void;
+  onNavigate: (page: string, query?: Record<string, string>) => void;
   onDashboard: () => void;
   onToggleCollapse: () => void;
   onCloseMobile: () => void;
@@ -97,7 +98,8 @@ export function Sidebar({
       { id: "playground", label: "Playground", icon: Terminal, targetPage: "Playground" },
       { id: "chat", label: "Text & Translation", icon: Languages, targetPage: "Text generation" },
       { id: "audio", label: "Audio & Speech", icon: AudioWaveform, targetPage: "Speech generation" },
-      { id: "dubbing", label: "Dubbing", icon: Video, targetPage: "Dubbing" },
+      { id: "music", label: "Music", icon: Music, targetPage: "Music" },
+      { id: "dubbing", label: "Dubbing", icon: Clapperboard, targetPage: "Dubbing" },
       { id: "images", label: "Images", icon: ImageIcon, targetPage: "Image translation" },
       { id: "pdf", label: "PDF Extraction", icon: FileText, targetPage: "PDF text extraction" },
       { id: "keys", label: "API Keys", icon: KeyRound, targetPage: "Dashboard", action: "dashboard" },
@@ -126,7 +128,9 @@ export function Sidebar({
   };
 
   const handleClick = (entry: NavEntry) => {
-    if (entry.action === "dashboard") {
+    if (entry.id === "music") {
+      onNavigate("Playground", { mode: "music" });
+    } else if (entry.action === "dashboard") {
       onDashboard();
     } else {
       onNavigate(entry.targetPage);
