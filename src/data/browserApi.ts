@@ -1519,6 +1519,21 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
   let result: unknown;
 
   if (method === "GET" && path === "/api/dashboard") {
+    const user = getCurrentUser();
+    if (DEFAULT_EDGE_GATEWAY_URL && user.provider !== "guest" && user.sessionToken) {
+      try {
+        const edgeRes = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/keys`, {
+          headers: { Authorization: `Bearer ${user.sessionToken}` },
+        });
+        if (edgeRes.ok) {
+          const data = await edgeRes.json();
+          if (Array.isArray(data.apiKeys) && data.apiKeys.length) {
+            state.dashboard.apiKeys = data.apiKeys;
+            saveState(state);
+          }
+        }
+      } catch {}
+    }
     result = state.dashboard;
   } else if (method === "GET" && path === "/v1/models") {
     result = {
@@ -1721,11 +1736,52 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
     });
     result = state.dashboard;
   } else if (method === "POST" && path === "/api/keys") {
+    const user = getCurrentUser();
     const body = requestBody(options);
     const project = state.dashboard.projects.find((candidate) => candidate.id === body.projectId && candidate.status === "active") || state.dashboard.projects[0];
     if (!project) fail("active_project_required");
     const name = String(body.name ?? "").trim();
     if (!name) fail("key_name_required");
+
+    if (DEFAULT_EDGE_GATEWAY_URL && user.provider !== "guest" && user.sessionToken) {
+      try {
+        const edgeRes = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/keys`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${user.sessionToken}`,
+          },
+          body: JSON.stringify({ name }),
+        });
+        if (edgeRes.ok) {
+          const edgeData = await edgeRes.json();
+          const secret = edgeData.secret;
+          const keyId = edgeData.key_id || edgeData.id;
+          const keyPrefix = edgeData.key_prefix;
+          state.secrets[keyId] = secret;
+          const clientEntry = {
+            id: keyId,
+            name,
+            projectId: project.id,
+            masked: maskSecret(secret),
+            key_prefix: keyPrefix,
+            scopes: ["Text translation", "Music generation", "Chat completions"],
+            createdAt: edgeData.createdAt || new Date().toISOString(),
+            status: "active" as const,
+            is_active: true,
+          };
+          state.dashboard.apiKeys = edgeData.apiKeys || [
+            clientEntry,
+            ...state.dashboard.apiKeys.filter((k) => k.id !== keyId),
+          ];
+          saveState(state);
+          return { secret, key_id: keyId, key_prefix: keyPrefix, dashboard: state.dashboard } as T;
+        }
+      } catch (err) {
+        console.warn("Edge API key generation error, falling back locally:", err);
+      }
+    }
+
     const id = randomId("key");
     const secret = createSecret();
     const keyPrefix = secret.slice(0, 14);
@@ -1745,9 +1801,35 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
     });
     result = { secret, key_id: id, key_prefix: keyPrefix, dashboard: state.dashboard };
   } else if (method === "POST" && /^\/api\/keys\/[^/]+\/rotate$/.test(path)) {
+    const user = getCurrentUser();
     const id = path.split("/")[3];
     const key = state.dashboard.apiKeys.find((candidate) => candidate.id === id && candidate.status === "active");
     if (!key) fail("key_not_found");
+
+    if (DEFAULT_EDGE_GATEWAY_URL && user.provider !== "guest" && user.sessionToken) {
+      try {
+        const edgeRes = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/keys/${encodeURIComponent(id)}/rotate`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${user.sessionToken}`,
+          },
+        });
+        if (edgeRes.ok) {
+          const edgeData = await edgeRes.json();
+          const secret = edgeData.secret;
+          state.secrets[id] = secret;
+          key.masked = maskSecret(secret);
+          key.key_prefix = edgeData.key_prefix || secret.slice(0, 14);
+          if (Array.isArray(edgeData.apiKeys)) state.dashboard.apiKeys = edgeData.apiKeys;
+          saveState(state);
+          return { secret, dashboard: state.dashboard } as T;
+        }
+      } catch (err) {
+        console.warn("Edge key rotation error:", err);
+      }
+    }
+
     const secret = createSecret();
     state.secrets[id] = secret;
     key.masked = maskSecret(secret);

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { harness } from './billing-test-harness.mjs';
+import worker from '../cloudflare-worker/worker.mjs';
 import { billing } from '../cloudflare-worker/billing.mjs';
 import { depositQuote, subscriptionQuote, assertSession, assertCharge } from '../shared/billing.mjs';
 const realFetch=globalThis.fetch;
@@ -27,6 +28,9 @@ globalThis.fetch=async (url,options={})=>{
   if(target.startsWith('https://api.stripe.com/v1/disputes/')) return Response.json(disputeEvidence);
   if(target.startsWith('https://api.stripe.com/v1/charges/')) {const s=[...sessions.values()].find(x=>new URL(target).pathname.endsWith('/'+x.payment_intent?.latest_charge?.id));return Response.json(s.payment_intent.latest_charge);}
   if(target==='https://gmail.googleapis.com/gmail/v1/users/me/messages/send') return Response.json({id:'mock-message'});
+  if(target==='https://api.openai.com/v1/chat/completions') {
+    return Response.json({ id: 'chatcmpl-mock', object: 'chat.completion', created: 1730000000, model: 'gpt-4o', choices: [{ message: { role: 'assistant', content: 'Bonjour le monde' } }] });
+  }
   if(target==='https://oauth2.googleapis.com/token') return Response.json({access_token:'mock'});
   throw new Error(`Unmocked network blocked: ${target}`);
 };
@@ -119,4 +123,105 @@ await test('deductions are owner-bound, reject absolute writes and retry once',a
  await Promise.all(Array.from({length:8},()=>h.api('/api/user/balance',{delta_usd:-.1},owner,{'idempotency-key':'usage-1'})));assert.equal((await billing(h.env,{action:'balance',email:owner})).balance_usd,Number((before-.1).toFixed(6)));
 });
 await test('Stripe checkout creation failures never become simulated payment success',async()=>{stripeFailure=true;assert.equal((await h.api('/api/create-checkout-session',{amount:5},email)).status,400);assert.equal((await h.api('/api/billing/subscription-checkout',{plan:'pro'},email)).status,400);stripeFailure=false;});
+await test('edge gateway API keys work for OpenAI compatibility, balance checks, rotation and revocation', async () => {
+  const user = 'apikeyuser@example.com';
+  // 1. Unauthenticated key generation must fail
+  assert.equal((await h.api('/api/keys', { name: 'Dev Key' }, '')).status, 401);
+
+  // 2. Models list
+  const modelsRes = await h.api('/v1/models', undefined, '');
+  assert.equal(modelsRes.status, 200);
+  const models = await modelsRes.json();
+  assert.equal(models.object, 'list');
+  assert.ok(models.data.some(m => m.id === 'LingoFusion'));
+
+  // 3. Create key
+  const createRes = await h.api('/api/keys', { name: 'Python SDK Key' }, user);
+  assert.equal(createRes.status, 201);
+  const keyData = await createRes.json();
+  assert.ok(keyData.secret.startsWith('sk_live_'));
+  assert.ok(keyData.id.startsWith('key_'));
+
+  // 4. List keys
+  const listRes = await h.api('/api/keys', undefined, user);
+  assert.equal(listRes.status, 200);
+  const list = await listRes.json();
+  assert.equal(list.apiKeys.length, 1);
+  assert.equal(list.apiKeys[0].id, keyData.id);
+
+  // 5. Test Bearer sk_live_... with $0 balance -> HTTP 402 insufficient_quota
+  const zeroBalReq = new Request('https://gateway.test/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${keyData.secret}`,
+    },
+    body: JSON.stringify({ model: 'LingoFusion', messages: [{ role: 'user', content: 'hello' }] }),
+  });
+  const zeroBalRes = await worker.fetch(zeroBalReq, h.env);
+  assert.equal(zeroBalRes.status, 402);
+  const zeroBalData = await zeroBalRes.json();
+  assert.equal(zeroBalData.error.code, 'insufficient_quota');
+
+  // 6. Test fake / invalid API key -> HTTP 401 invalid_api_key
+  const fakeKeyReq = new Request('https://gateway.test/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer sk_live_fake1234567890',
+    },
+    body: JSON.stringify({ model: 'LingoFusion', messages: [{ role: 'user', content: 'hello' }] }),
+  });
+  const fakeKeyRes = await worker.fetch(fakeKeyReq, h.env);
+  assert.equal(fakeKeyRes.status, 401);
+
+  // 7. Rotate key
+  const rotateRes = await h.api(`/api/keys/${keyData.id}/rotate`, {}, user);
+  assert.equal(rotateRes.status, 200);
+  const rotated = await rotateRes.json();
+  assert.ok(rotated.secret.startsWith('sk_live_'));
+  assert.notEqual(rotated.secret, keyData.secret);
+
+  // 8. Old secret now rejected
+  const oldSecretReq = new Request('https://gateway.test/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${keyData.secret}`,
+    },
+    body: JSON.stringify({ model: 'LingoFusion', messages: [{ role: 'user', content: 'hello' }] }),
+  });
+  assert.equal((await worker.fetch(oldSecretReq, h.env)).status, 401);
+
+  // 8b. Active rotated key with balance -> successful completion
+  h.env.OPENAI_API_KEY = 'sk-mock-openai-key';
+  await h.env.GIFTS.put(`user_balance:${user}`, '5.0');
+  const validCallReq = new Request('https://gateway.test/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${rotated.secret}`,
+    },
+    body: JSON.stringify({ model: 'LingoFusion', messages: [{ role: 'user', content: 'hello' }] }),
+  });
+  const validCallRes = await worker.fetch(validCallReq, h.env);
+  assert.equal(validCallRes.status, 200);
+  const completion = await validCallRes.json();
+  assert.equal(completion.choices[0].message.content, 'Bonjour le monde');
+
+  // 9. Revoke key
+  const revokeRes = await h.api(`/api/keys/${keyData.id}`, {}, user);
+  assert.equal(revokeRes.status, 200);
+
+  // 10. Rotated key also revoked
+  const revokedReq = new Request('https://gateway.test/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${rotated.secret}`,
+    },
+    body: JSON.stringify({ model: 'LingoFusion', messages: [{ role: 'user', content: 'hello' }] }),
+  });
+  assert.equal((await worker.fetch(revokedReq, h.env)).status, 401);
+});
 } finally {globalThis.fetch=realFetch;}
