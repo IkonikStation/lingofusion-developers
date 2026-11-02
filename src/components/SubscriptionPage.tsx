@@ -38,14 +38,14 @@ type SubscriptionPageProps = {
   onProVariantChange: (key: ProVariantKey) => void;
 };
 
-const numberFormatter = new Intl.NumberFormat("en-US");
+const numberFormatter = new Intl.NumberFormat(undefined);
 
 function formatNumber(value: number) {
   return numberFormatter.format(value);
 }
 
 function formatPrice(value: number) {
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: value % 1 === 0 ? 0 : 2,
@@ -93,25 +93,7 @@ export function SubscriptionPage({ onApiPrices, onSelectPlan, onBuildTeam, onCon
     setSalesFormOpen(true);
   };
 
-  useEffect(() => {
-    document.title = "Subscription Prices | LingoFusion";
-    const description = "Compare LingoFusion Free, Pro, Ultra, and Teams subscription plans for consumer translation and Advanced TTS.";
-    let meta = document.querySelector<HTMLMetaElement>('meta[name="description"]');
-    if (!meta) {
-      meta = document.createElement("meta");
-      meta.name = "description";
-      document.head.append(meta);
-    }
-    meta.content = description;
 
-    let canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
-    if (!canonical) {
-      canonical = document.createElement("link");
-      canonical.rel = "canonical";
-      document.head.append(canonical);
-    }
-    canonical.href = `${window.location.origin}/subscriptions`;
-  }, []);
 
   useEffect(() => {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;

@@ -1,3 +1,4 @@
+import { translateText } from "../locales/catalog";
 export const languages = [
   { code: "ar", name: "Arabic", nativeName: "العربية", dir: "rtl" },
   { code: "hy", name: "Armenian", nativeName: "Հայերեն", dir: "ltr" },
@@ -214,8 +215,7 @@ export function getLanguage(code: LanguageCode) {
 }
 
 export function createTranslator(code: LanguageCode) {
-  const table = { ...en, ...overrides[code] };
-  return (key: TranslationKey) => table[key] ?? en[key];
+  return (key: TranslationKey) => overrides[code]?.[key] ?? translateText(en[key], code);
 }
 
 const contentTranslations: Record<LanguageCode, Record<string, string>> = {
@@ -247,26 +247,7 @@ const contentTranslations: Record<LanguageCode, Record<string, string>> = {
 };
 
 export function createContentTranslator(code: LanguageCode) {
-  const table = contentTranslations[code] ?? {};
-  const keyedEntries = Object.entries(en).reduce<Record<string, string>>((entries, [key, value]) => {
-    entries[value] = createTranslator(code)(key as TranslationKey);
-    return entries;
-  }, {});
-  const glossary = contentGlossary[code] ?? {};
-  const resetText = resetTranslations[code] ?? {};
-
-  return (text: string) => {
-    if (code === "en") {
-      return text;
-    }
-
-    const exact = resetText[text] ?? table[text] ?? keyedEntries[text] ?? glossary[text];
-    if (exact) {
-      return exact;
-    }
-
-    return translateWithGlossary(text, glossary);
-  };
+  return (text: string) => translateText(text, code);
 }
 
 const contentGlossary: Record<LanguageCode, Record<string, string>> = {

@@ -7,7 +7,7 @@ import { Sidebar } from "./components/Sidebar";
 import { SubscriptionPage } from "./components/SubscriptionPage";
 import type { AuthUser } from "./data/auth";
 import { getCurrentUser, signOut, subscribeAuth } from "./data/auth";
-import { createContentTranslator, createTranslator, getDeviceLanguage, getLanguage } from "./data/i18n";
+import { createContentTranslator, createTranslator, getLanguage } from "./data/i18n";
 import {
   dubbingModels,
   imageModels,
@@ -54,6 +54,8 @@ const searchItems = Array.from(
   ]),
 );
 
+import { useLocale } from "./locales/context";
+
 import { browserApi, getApiBaseUrl, shouldUseBrowserApi } from "./data/browserApi";
 
 export default function App() {
@@ -70,7 +72,7 @@ export default function App() {
   });
   const [systemDark, setSystemDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
   const theme = themePreference === "system" ? (systemDark ? "dark" : "light") : themePreference;
-  const [language, setLanguage] = useState(getDeviceLanguage);
+  const language = useLocale();
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [dashboardInitialTab, setDashboardInitialTab] = useState<string>("Overview");
   const [authModalOpen, setAuthModalOpen] = useState(false);
@@ -85,12 +87,6 @@ export default function App() {
   const tc = useMemo(() => createContentTranslator(language), [language]);
   const activeLanguage = getLanguage(language);
   const isSubscriptionPage = activePage === "Subscription Prices";
-
-  useEffect(() => {
-    const updateLanguage = () => setLanguage(getDeviceLanguage());
-    window.addEventListener("languagechange", updateLanguage);
-    return () => window.removeEventListener("languagechange", updateLanguage);
-  }, []);
 
   useEffect(() => {
     if (!mobileOpen) return;
@@ -228,14 +224,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (isSubscriptionPage) return;
     document.title =
       activePage === "Pricing"
-        ? "API Prices | LingoFusion Developers"
-        : `${activePage} | LingoFusion Developers`;
+        ? `${tc("API Prices")} | LingoFusion Developers`
+        : `${tc(activePage)} | LingoFusion Developers`;
 
     const description =
-      activePage === "Pricing"
+      isSubscriptionPage
+        ? "Compare LingoFusion Free, Pro, Ultra, and Teams subscription plans for consumer translation and Advanced TTS."
+        : activePage === "Pricing"
         ? "LingoFusion API pricing for text, speech, transcription, dubbing, image, PDF, and music models."
         : pageSummaries[activePage] ?? pageSummaries.Overview;
 
@@ -245,7 +242,7 @@ export default function App() {
       meta.name = "description";
       document.head.append(meta);
     }
-    meta.content = description;
+    meta.content = tc(description);
 
     let canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
     if (!canonical) {
@@ -254,7 +251,7 @@ export default function App() {
       document.head.append(canonical);
     }
     canonical.href = `${window.location.origin}${window.location.pathname}`;
-  }, [activePage, isSubscriptionPage]);
+  }, [activePage, isSubscriptionPage, tc]);
 
   useEffect(() => {
     if (isSubscriptionPage) return;

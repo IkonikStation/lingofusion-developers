@@ -79,7 +79,7 @@ export function humanizePlanId(planId: string) {
 
 export function formatUsd(amount: number): string {
   if (!Number.isFinite(amount)) return "0.00";
-  return amount.toLocaleString("en-US", {
+  return amount.toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });

@@ -23,7 +23,7 @@ export function MarkdownView({ content, className = "", streaming = false }: Mar
   }, [content]);
 
   return (
-    <div className={`prose-like text-base leading-7 text-neutral-900 dark:text-neutral-100 ${className}`}>
+    <div translate="no" className={`prose-like text-base leading-7 text-neutral-900 dark:text-neutral-100 ${className}`}>
       {blocks.map((block, idx) => {
         if (block.type === "code") {
           const highlighted = highlightCode(block.content, block.language);
@@ -37,6 +37,7 @@ export function MarkdownView({ content, className = "", streaming = false }: Mar
                   {block.language || "text"}
                 </span>
                 <button
+                  translate="yes"
                   type="button"
                   onClick={() => handleCopyCode(block.content, idx)}
                   className="inline-flex items-center gap-1 text-[11px] hover:text-white"

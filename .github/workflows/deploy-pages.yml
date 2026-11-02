@@ -38,6 +38,9 @@ jobs:
           node scripts/test-gifts.mjs
           node scripts/test-billing-node.mjs
 
+      - name: Check localization
+        run: pnpm test:localization
+
       - name: Build site
         env:
           VITE_LINGOFUSION_GATEWAY_URL: ${{ vars.VITE_LINGOFUSION_GATEWAY_URL }}

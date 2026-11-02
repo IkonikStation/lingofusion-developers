@@ -287,7 +287,7 @@ export function Header({
                   )}
                 </div>
                 <span className="hidden max-w-[90px] truncate sm:inline">
-                  {currentUser.name.split(" ")[0]}
+                  <span translate="no">{currentUser.name.split(" ")[0]}</span>
                 </span>
                 <ChevronDown className="h-3 w-3 text-neutral-400" />
               </button>
@@ -310,10 +310,10 @@ export function Header({
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-xs font-semibold text-neutral-900 dark:text-white">
-                            {currentUser.name}
+                            <span translate="no">{currentUser.name}</span>
                           </p>
                           <p className="truncate text-[11px] text-neutral-400">
-                            {currentUser.email}
+                            <span translate="no">{currentUser.email}</span>
                           </p>
                         </div>
                       </div>

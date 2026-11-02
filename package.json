@@ -7,6 +7,7 @@
     "build": "tsc -b && vite build && node scripts/generate-spa-fallbacks.mjs",
     "preview": "vite preview",
     "test": "node scripts/test-platform.mjs",
+    "test:localization": "node scripts/check-locales.mjs && node scripts/test-localization.mjs",
     "test:billing": "node --test scripts/test-billing.mjs && node scripts/test-gifts.mjs && node scripts/test-billing-node.mjs",
     "test:stripe-sandbox": "node scripts/test-stripe-sandbox.mjs"
   },
@@ -26,6 +27,7 @@
     "@types/react-dom": "latest",
     "autoprefixer": "latest",
     "postcss": "latest",
-    "tailwindcss": "^3.4.17"
+    "tailwindcss": "^3.4.17",
+    "typescript-compiler": "npm:typescript@5.9.3"
   }
 }

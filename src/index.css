@@ -1222,3 +1222,10 @@ a {
   border-radius: 4px;
 }
 .dubbing-similarity-slider:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Use the device language's reading direction for navigation and text. */
+[dir="rtl"] .text-left { text-align: right; }
+[dir="rtl"] #site-navigation { left: auto; right: 0; border-right-width: 0; border-left-width: 1px; }
+@media (max-width: 1023px) {
+  [dir="rtl"] #site-navigation.invisible { transform: translateX(100%); }
+}

@@ -920,7 +920,7 @@ export function DashboardModal({
                       <TextInput label="Key name" value={newKey.name} onChange={(value) => setNewKey({ ...newKey, name: value })} />
                       <SelectInput label="Project" value={newKey.projectId} onChange={(value) => setNewKey({ ...newKey, projectId: value })}>
                         <option value="">{tc("Select project")}</option>
-                        {data.projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+                        {data.projects.map((project) => <option translate="no" key={project.id} value={project.id}>{project.name}</option>)}
                       </SelectInput>
                       <TextInput label="Expiration date" value={newKey.expiresAt} placeholder="YYYY-MM-DD or blank" onChange={(value) => setNewKey({ ...newKey, expiresAt: value })} />
                       <NumberInput label="Spend limit" value={newKey.spendLimit} min={0} max={1000000} onChange={(value) => setNewKey({ ...newKey, spendLimit: value })} />
@@ -957,7 +957,7 @@ export function DashboardModal({
                           <div key={key.id} className="rounded-lg border border-neutral-200 p-4 dark:border-white/10">
                             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                               <div>
-                                <p className="font-semibold text-neutral-950 dark:text-neutral-50">{key.name}</p>
+                                <p className="font-semibold text-neutral-950 dark:text-neutral-50"><span translate="no">{key.name}</span></p>
                                 <p className="mt-1 font-mono text-sm text-neutral-600 dark:text-neutral-400">{key.masked}</p>
                                 <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-500">
                                   {tc("Project")}: {data.projects.find((project) => project.id === key.projectId)?.name ?? key.projectId} · {tc("Status")}: {tc(key.status)}
@@ -1377,7 +1377,7 @@ export function DashboardModal({
                     <Toolbar>
                       <SelectInput label="Project" value={projectFilter} onChange={setProjectFilter}>
                         <option value="All projects">{tc("All projects")}</option>
-                        {data.projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+                        {data.projects.map((project) => <option translate="no" key={project.id} value={project.id}>{project.name}</option>)}
                       </SelectInput>
                       <SelectInput label="Status" value={statusFilter} onChange={setStatusFilter}>
                         <option value="All statuses">{tc("All statuses")}</option>
@@ -1814,8 +1814,8 @@ function Table({ headers, rows }: { headers: string[]; rows: Array<Array<string 
             {rows.map((row, index) => (
               <tr key={`${row[0]}-${index}`} className="hover:bg-neutral-50 dark:hover:bg-white/[0.04]">
                 {row.map((cell, cellIndex) => (
-                  <td data-label={t(headers[cellIndex] ?? "")} key={`${cell}-${cellIndex}`} className="px-4 py-3.5 text-neutral-700 dark:text-neutral-300">
-                    {typeof cell === "string" ? t(cell) : cell}
+                  <td translate={["Project", "Description", "Name", "Key name", "API key"].includes(headers[cellIndex]) ? "no" : undefined} data-label={t(headers[cellIndex] ?? "")} key={`${cell}-${cellIndex}`} className="px-4 py-3.5 text-neutral-700 dark:text-neutral-300">
+                    {typeof cell === "string" && !["Project", "Description", "Name", "Key name", "API key"].includes(headers[cellIndex]) ? t(cell) : cell}
                   </td>
                 ))}
               </tr>
