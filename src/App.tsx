@@ -28,6 +28,7 @@ import {
 } from "./lib/utils";
 
 // Pages
+import { CapabilityDocsPage, isCapabilityGuide } from "./pages/CapabilityDocsPage";
 import { CheckoutPage } from "./pages/CheckoutPage";
 import { ContactSalesPage } from "./pages/ContactSalesPage";
 import { DocsPage } from "./pages/DocsPage";
@@ -439,6 +440,8 @@ export default function App() {
                     }}
                     onOpenPlayground={() => navigate("Playground", { model: activePage })}
                   />
+                ) : isCapabilityGuide(activePage) ? (
+                  <CapabilityDocsPage key={activePage} page={activePage} onNavigate={navigate} />
                 ) : (
                   <DocsPage activePage={activePage} t={t} tc={tc} onNavigate={navigate} onCopy={copySnippet} />
                 )}

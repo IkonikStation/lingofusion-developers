@@ -30,6 +30,8 @@ const routes = [
   "docs/text-generation",
   "docs/image-translation",
   "docs/dubbing",
+  "docs/music",
+  "docs/pdf-text-extraction",
   "docs/sdks-and-libraries",
   "docs/error-codes",
   "docs/changelog",

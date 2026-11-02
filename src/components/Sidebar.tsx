@@ -128,9 +128,7 @@ export function Sidebar({
   };
 
   const handleClick = (entry: NavEntry) => {
-    if (entry.id === "music") {
-      onNavigate("Playground", { mode: "music" });
-    } else if (entry.action === "dashboard") {
+    if (entry.action === "dashboard") {
       onDashboard();
     } else {
       onNavigate(entry.targetPage);

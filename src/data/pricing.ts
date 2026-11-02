@@ -254,6 +254,8 @@ export const sidebarSections = [
     items: [
       "Text generation",
       "Speech generation",
+      "Music",
+      "PDF text extraction",
       "Image translation",
       "Dubbing",
       "SDKs and libraries",
@@ -301,6 +303,8 @@ export const pageSummaries: Record<string, string> = {
     "Generate, improve, summarize, and translate text with token-based text models.",
   "Speech generation":
     "Synthesize natural, expressive speech with LingoFusion Voice and LingoFusion Voice Flash.",
+  Music: "Generate music from a text prompt with LingoFusion Music.",
+  "PDF text extraction": "Extract text from PDF documents for search and translation workflows.",
   "Image translation":
     "Translate text inside images while preserving visual structure and image quality.",
   Dubbing:
