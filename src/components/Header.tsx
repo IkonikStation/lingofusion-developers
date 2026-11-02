@@ -6,10 +6,8 @@ import {
   KeyRound,
   LogOut,
   Menu,
-  Moon,
   PlusCircle,
   Search,
-  Sun,
   User,
   Wallet,
   X,
@@ -24,6 +22,7 @@ type HeaderProps = {
   activePage: string;
   isSubscriptionPage: boolean;
   theme: "light" | "dark";
+  themePreference: "system" | "light" | "dark";
   language: LanguageCode;
   mobileOpen: boolean;
   searchItems: string[];
@@ -37,7 +36,7 @@ type HeaderProps = {
   onNavigate: (page: string) => void;
   onLanguageChange: (language: LanguageCode) => void;
   onDashboard: () => void;
-  onToggleTheme: () => void;
+  onThemeChange: (theme: "system" | "light" | "dark") => void;
   onToggleMobile: () => void;
 };
 
@@ -53,7 +52,7 @@ const navItems = [
 export function Header({
   activePage,
   isSubscriptionPage,
-  theme,
+  themePreference,
   language,
   mobileOpen,
   searchItems,
@@ -67,7 +66,7 @@ export function Header({
   onNavigate,
   onLanguageChange,
   onDashboard,
-  onToggleTheme,
+  onThemeChange,
   onToggleMobile,
 }: HeaderProps) {
   const [query, setQuery] = useState("");
@@ -265,14 +264,16 @@ export function Header({
           </select>
 
           {/* Theme switcher */}
-          <button
-            type="button"
-            onClick={onToggleTheme}
-            className="flex h-8 w-8 items-center justify-center rounded-md border border-neutral-200 text-neutral-600 hover:text-neutral-900 dark:border-neutral-800 dark:text-neutral-400 dark:hover:text-white"
-            aria-label="Toggle theme"
+          <select
+            value={themePreference}
+            onChange={(event) => onThemeChange(event.target.value as "system" | "light" | "dark")}
+            className="h-8 rounded-md border border-neutral-200 bg-transparent px-2 text-xs text-neutral-600 outline-none dark:border-neutral-800 dark:text-neutral-400"
+            aria-label="Color theme"
           >
-            {theme === "light" ? <Moon className="h-3.5 w-3.5" /> : <Sun className="h-3.5 w-3.5" />}
-          </button>
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
 
           {/* User Account / Sign In */}
           {currentUser && currentUser.provider !== "guest" ? (

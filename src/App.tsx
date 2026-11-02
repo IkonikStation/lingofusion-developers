@@ -61,7 +61,16 @@ export default function App() {
   const [activePage, setActivePage] = useState(() => pageFromPath(window.location.pathname));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [themePreference, setThemePreference] = useState<"system" | "light" | "dark">(() => {
+    try {
+      const saved = window.localStorage.getItem("lingofusion-theme");
+      return saved === "light" || saved === "dark" ? saved : "system";
+    } catch {
+      return "system";
+    }
+  });
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const theme = themePreference === "system" ? (systemDark ? "dark" : "light") : themePreference;
   const [language, setLanguage] = useState<LanguageCode>("en");
   const [dashboardOpen, setDashboardOpen] = useState(false);
   const [dashboardInitialTab, setDashboardInitialTab] = useState<string>("Overview");
@@ -185,6 +194,13 @@ export default function App() {
       notify("Clipboard permission was blocked");
     }
   };
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const update = () => setSystemDark(media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
@@ -323,7 +339,16 @@ export default function App() {
           setDashboardInitialTab("Overview");
           setDashboardOpen(true);
         }}
-        onToggleTheme={() => setTheme((value) => (value === "light" ? "dark" : "light"))}
+        themePreference={themePreference}
+        onThemeChange={(value) => {
+          setThemePreference(value);
+          try {
+            if (value === "system") window.localStorage.removeItem("lingofusion-theme");
+            else window.localStorage.setItem("lingofusion-theme", value);
+          } catch {
+            // The selection still applies for this visit if storage is unavailable.
+          }
+        }}
         onToggleMobile={() => setMobileOpen((value) => !value)}
       />
 
