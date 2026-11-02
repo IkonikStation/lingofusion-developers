@@ -139,7 +139,7 @@ export function Sidebar({
       {/* Top Section: Project selector + Search + Nav list */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* Project Selector Header */}
-        <div className="flex items-center justify-between border-b border-neutral-200/80 px-3 py-3 dark:border-neutral-800/80">
+        <div className={`flex items-center ${compact ? "justify-center" : "justify-between"} border-b border-neutral-200/80 px-3 py-3 dark:border-neutral-800/80`}>
           {!compact ? (
             <div className="relative">
               <button
@@ -173,11 +173,7 @@ export function Sidebar({
                 </div>
               )}
             </div>
-          ) : (
-            <div className="mx-auto flex h-6 w-6 items-center justify-center rounded-md bg-neutral-900 text-[10px] font-bold text-white dark:bg-white dark:text-neutral-900">
-              L
-            </div>
-          )}
+          ) : null}
 
           {/* Toggle sidebar button */}
           <button
