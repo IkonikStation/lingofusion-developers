@@ -2686,7 +2686,7 @@ async function handleChatCompletions({ req, res, body, user, apiKeyId, source, d
                     completionTokens += tokenEstimate(deltaText);
                   }
                   if (parsed.usage) {
-                    if (Number.isFinite(parsed.usage.prompt_tokens)) promptTokens = parsed.usage.prompt_tokens;
+                    if (Number.isFinite(parsed.usage.prompt_tokens) && parsed.usage.prompt_tokens <= promptTokens * 2) promptTokens = parsed.usage.prompt_tokens;
                     if (Number.isFinite(parsed.usage.completion_tokens)) completionTokens = parsed.usage.completion_tokens;
                   }
                   if (!res.writableEnded) {
@@ -2824,7 +2824,7 @@ async function handleChatCompletions({ req, res, body, user, apiKeyId, source, d
       if (upstreamRes.ok) {
         const upstreamData = await upstreamRes.json();
         replyContent = String(upstreamData.choices?.[0]?.message?.content || "");
-        if (Number.isFinite(upstreamData.usage?.prompt_tokens)) {
+        if (Number.isFinite(upstreamData.usage?.prompt_tokens) && upstreamData.usage.prompt_tokens <= promptTokens * 2) {
           promptTokens = upstreamData.usage.prompt_tokens;
         }
         if (Number.isFinite(upstreamData.usage?.completion_tokens)) {

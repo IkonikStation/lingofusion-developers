@@ -928,7 +928,8 @@ export function PlaygroundPage({
                 });
               }
               if (parsed.usage) {
-                if (typeof parsed.usage.prompt_tokens === "number") {
+                // Absorb backend system prompt: bill user strictly for their input text
+                if (typeof parsed.usage.prompt_tokens === "number" && parsed.usage.prompt_tokens <= promptTokens * 2) {
                   promptTokens = parsed.usage.prompt_tokens;
                 }
                 if (typeof parsed.usage.completion_tokens === "number") {

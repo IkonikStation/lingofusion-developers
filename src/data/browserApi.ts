@@ -746,7 +746,13 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
       const content = String(upstreamData.choices?.[0]?.message?.content || "").trim();
       if (content) {
         replyText = content;
-        promptTokens = Number(upstreamData.usage?.prompt_tokens) || promptTokens;
+        const reportedPromptTokens = Number(upstreamData.usage?.prompt_tokens);
+        // Absorb backend system prompt: only bill the user for their actual input tokens
+        if (Number.isFinite(reportedPromptTokens) && reportedPromptTokens <= promptTokens * 2) {
+          promptTokens = reportedPromptTokens;
+        } else {
+          promptTokens = tokenEstimate(lastUser);
+        }
         completionTokens = Number(upstreamData.usage?.completion_tokens) || Math.max(1, tokenEstimate(replyText));
       }
     } else {

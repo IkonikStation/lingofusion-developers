@@ -904,13 +904,13 @@ export default {
         const modelMap = {
           "lingofusion nano": "gpt-4o-mini",
           "lingofusion lite": "gpt-4o-mini",
-          "lingofusion": "gpt-4o",
-          "lingofusion pro": "gpt-4o",
-          "lingofusion ultra": "gpt-4o",
-          "explainfusion": "gpt-4o",
-          "lingofusion explain": "gpt-4o",
+          "lingofusion": "gpt-4o-mini",
+          "lingofusion pro": "gpt-4o-mini",
+          "lingofusion ultra": "gpt-4o-mini",
+          "explainfusion": "gpt-4o-mini",
+          "lingofusion explain": "gpt-4o-mini",
         };
-        const upstreamModel = modelMap[requestedModel.toLowerCase()] || requestedModel;
+        const upstreamModel = modelMap[requestedModel.toLowerCase()] || "gpt-4o-mini";
 
         const rawMessages = Array.isArray(body.messages) ? body.messages : [];
         // LingoFusion is a pure translation engine: strip and disallow any user-supplied system/developer messages.
@@ -1002,6 +1002,20 @@ export default {
         const cors = getCorsHeaders(requestOrigin);
         for (const [k, v] of Object.entries(cors)) {
           resHeaders.set(k, v);
+        }
+
+        // Absorb internal system prompt: callers are billed only for their input text, not the system instructions
+        if (!body.stream && upstreamRes.ok) {
+          try {
+            const data = await upstreamRes.json();
+            if (data?.usage) {
+              const userPromptLength = nonSystemMessages.reduce((acc, m) => acc + (typeof m?.content === "string" ? m.content.length : 0), 0);
+              const userPromptTokens = Math.max(1, Math.ceil(userPromptLength / 4));
+              data.usage.prompt_tokens = userPromptTokens;
+              data.usage.total_tokens = userPromptTokens + (Number(data.usage.completion_tokens) || 0);
+            }
+            return jsonResponse(data, upstreamRes.status, requestOrigin);
+          } catch {}
         }
 
         return new Response(upstreamRes.body, {
