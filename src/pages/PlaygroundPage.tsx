@@ -950,13 +950,18 @@ export function PlaygroundPage({
         if (done) break;
       }
 
+      let billablePrompt = promptTokens;
+      let billableCompletion = completionTokens;
+      if (activeModel.model_id.toLowerCase().includes("nano") && (billablePrompt + billableCompletion) < 50) {
+        billablePrompt = Math.max(billablePrompt, 50 - billableCompletion);
+      }
       const computedCost =
         finalCostUsd ??
         Number(
           (
             webSearchFee +
-            promptTokens * (activeModel.input_per_million / 1_000_000) +
-            completionTokens * (activeModel.output_per_million / 1_000_000)
+            billablePrompt * (activeModel.input_per_million / 1_000_000) +
+            billableCompletion * (activeModel.output_per_million / 1_000_000)
           ).toFixed(6),
         );
 

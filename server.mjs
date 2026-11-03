@@ -50,7 +50,7 @@ sqlDb.exec("CREATE TABLE IF NOT EXISTS billing_invoices (id TEXT PRIMARY KEY, su
 sqlDb.exec("CREATE TABLE IF NOT EXISTS billing_orders (id TEXT PRIMARY KEY, body TEXT NOT NULL, refunded_cents INTEGER NOT NULL DEFAULT 0, credited_cents INTEGER NOT NULL DEFAULT 0)");
 
 const textModels = [
-  { model: "LingoFusion Nano", input: 0.08, output: 0.60 },
+  { model: "LingoFusion Nano", input: 0.15, output: 0.85 },
   { model: "LingoFusion Lite", input: 0.50, output: 2.00 },
   { model: "LingoFusion", input: 1.00, output: 5.00 },
   { model: "LingoFusion Pro", input: 3.50, output: 20.00 },
@@ -59,7 +59,7 @@ const textModels = [
 ];
 
 const defaultPricingCatalog = [
-  { model_id: "LingoFusion Nano", provider: "lingofusion", upstream_model_name: "gpt-5-nano", input_per_million: 0.0800, output_per_million: 0.6000, is_active: 1 },
+  { model_id: "LingoFusion Nano", provider: "lingofusion", upstream_model_name: "gpt-5-nano", input_per_million: 0.1500, output_per_million: 0.8500, is_active: 1 },
   { model_id: "LingoFusion Lite", provider: "lingofusion", upstream_model_name: "gpt-5.6-luna", input_per_million: 0.5000, output_per_million: 2.0000, is_active: 1 },
   { model_id: "LingoFusion", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 1.0000, output_per_million: 5.0000, is_active: 1 },
   { model_id: "LingoFusion Pro", provider: "lingofusion", upstream_model_name: "gpt-6-sol", input_per_million: 3.5000, output_per_million: 20.0000, is_active: 1 },
@@ -151,9 +151,13 @@ export const calculateGrossDepositCents = depositQuote;
 
 // Token Pricing Engine:
 // cost = (prompt_tokens * (input_per_million / 1,000,000)) + (completion_tokens * (output_per_million / 1,000,000))
-export function calculateTokenCostUsd(promptTokens, completionTokens, inputPerMillion, outputPerMillion) {
-  const pTokens = Math.max(0, Math.trunc(Number(promptTokens) || 0));
-  const cTokens = Math.max(0, Math.trunc(Number(completionTokens) || 0));
+export function calculateTokenCostUsd(promptTokens, completionTokens, inputPerMillion, outputPerMillion, modelId) {
+  let pTokens = Math.max(0, Math.trunc(Number(promptTokens) || 0));
+  let cTokens = Math.max(0, Math.trunc(Number(completionTokens) || 0));
+  // 50-token minimum billable floor for LingoFusion Nano micro-requests (~$0.00004)
+  if (modelId && String(modelId).toLowerCase().includes("nano") && (pTokens + cTokens) < 50) {
+    pTokens = Math.max(pTokens, 50 - cTokens);
+  }
   const inRate = Number(inputPerMillion) || 0;
   const outRate = Number(outputPerMillion) || 0;
   const cost = (pTokens * (inRate / 1_000_000)) + (cTokens * (outRate / 1_000_000));
@@ -2596,6 +2600,7 @@ async function handleChatCompletions({ req, res, body, user, apiKeyId, source, d
         completionTokens,
         modelPricing.input_per_million,
         modelPricing.output_per_million,
+        modelPricing.model_id,
       );
       const costUsd = Number((tokenCostUsd + (routing.webSearchCallFeeUsd || 0)).toFixed(6));
       const deduction = deductUserBalanceAndLogUsage({
@@ -2851,6 +2856,7 @@ async function handleChatCompletions({ req, res, body, user, apiKeyId, source, d
     completionTokens,
     modelPricing.input_per_million,
     modelPricing.output_per_million,
+    modelPricing.model_id,
   );
   const costUsd = Number((tokenCostUsd + (routing.webSearchCallFeeUsd || 0)).toFixed(6));
 
@@ -3714,7 +3720,7 @@ async function route(req, res) {
       const completionTokens = Math.max(0, Math.trunc(Number(body.completion_tokens) || 0));
       const promptCostUsd = Number((promptTokens * (inputPerMillion / 1_000_000)).toFixed(6));
       const completionCostUsd = Number((completionTokens * (outputPerMillion / 1_000_000)).toFixed(6));
-      const costUsd = calculateTokenCostUsd(promptTokens, completionTokens, inputPerMillion, outputPerMillion);
+      const costUsd = calculateTokenCostUsd(promptTokens, completionTokens, inputPerMillion, outputPerMillion, modelPricing?.model_id);
 
       return send(res, 200, {
         model_id: modelPricing?.model_id || body.model || "custom",

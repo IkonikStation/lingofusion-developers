@@ -85,34 +85,47 @@ export function PricingCard(props: PricingCardProps) {
 }
 
 function TextTable({ rows, labels }: { rows: DisplayTextModel[]; labels: PricingLabels }) {
+  const hasNano = rows.some((row) => row.model.toLowerCase().includes("nano"));
   return (
-    <table className="mobile-record-table w-full min-w-[500px] text-left text-xs">
-      <thead className="border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/50">
-        <tr>
-          <th className="px-5 py-3 font-medium text-neutral-600 dark:text-neutral-400">{labels.model}</th>
-          <th className="px-5 py-3 font-medium text-neutral-600 dark:text-neutral-400">{labels.input}</th>
-          <th className="px-5 py-3 font-medium text-neutral-600 dark:text-neutral-400">{labels.output}</th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
-        {rows.map((row) => (
-          <tr key={row.model} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/30">
-            <td data-label={labels.model} className="px-5 py-3.5">
-              <div className="flex flex-wrap items-center justify-end gap-2 sm:justify-start">
-                <span className="font-semibold text-neutral-900 dark:text-neutral-100">{row.model}</span>
-                {row.recommended && (
-                  <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
-                    {labels.recommended}
-                  </span>
-                )}
-              </div>
-            </td>
-            <td data-label={labels.input} className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.input}</td>
-            <td data-label={labels.output} className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.output}</td>
+    <>
+      <table className="mobile-record-table w-full min-w-[500px] text-left text-xs">
+        <thead className="border-b border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/50">
+          <tr>
+            <th className="px-5 py-3 font-medium text-neutral-600 dark:text-neutral-400">{labels.model}</th>
+            <th className="px-5 py-3 font-medium text-neutral-600 dark:text-neutral-400">{labels.input}</th>
+            <th className="px-5 py-3 font-medium text-neutral-600 dark:text-neutral-400">{labels.output}</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
+          {rows.map((row) => (
+            <tr key={row.model} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/30">
+              <td data-label={labels.model} className="px-5 py-3.5">
+                <div className="flex flex-wrap items-center justify-end gap-2 sm:justify-start">
+                  <span className="font-semibold text-neutral-900 dark:text-neutral-100">{row.model}</span>
+                  {row.recommended && (
+                    <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+                      {labels.recommended}
+                    </span>
+                  )}
+                  {row.model.toLowerCase().includes("nano") && (
+                    <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                      *50-token min (~$0.00004)
+                    </span>
+                  )}
+                </div>
+              </td>
+              <td data-label={labels.input} className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.input}</td>
+              <td data-label={labels.output} className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.output}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {hasNano && (
+        <div className="border-t border-neutral-200 bg-neutral-50/50 px-5 py-2.5 text-[11px] text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900/30 dark:text-neutral-400">
+          *<strong>Micro-Request Minimum:</strong> LingoFusion Nano requests are subject to a 50-token (~35 words) minimum charge per API call (~$0.00004). All requests above 50 tokens are billed strictly on exact token count.
+        </div>
+      )}
+    </>
   );
 }
 

@@ -288,7 +288,7 @@ print(response.output_text)`,
             Pass custom idempotency keys on batch operations to safely retry transient connection failures without duplicate token billing.
           </DocCard>
           <DocCard icon={Activity} title="Cost Accounting" tc={tc}>
-            Track exact prompt tokens, reasoning tokens, and completion tokens returned in each response payload.
+            Track exact prompt tokens, reasoning tokens, and completion tokens returned in each response payload. LingoFusion Nano requests have a 50-token minimum billable floor (~$0.00004).
           </DocCard>
         </div>
       </section>

@@ -41,7 +41,7 @@ export const textModels: TextModel[] = [
   { model: "LingoFusion Native-1.7B", inputUsd: 0, outputUsd: 0, local: true },
   { model: "LingoFusion Native-9B", inputUsd: 0, outputUsd: 0, local: true, recommended: true },
   { model: "LingoFusion Native-35B", inputUsd: 0, outputUsd: 0, local: true },
-  { model: "LingoFusion Nano", inputUsd: 0.08, outputUsd: 0.60 },
+  { model: "LingoFusion Nano", inputUsd: 0.15, outputUsd: 0.85 },
   { model: "LingoFusion Lite", inputUsd: 0.50, outputUsd: 2.00 },
   {
     model: "LingoFusion",
@@ -110,7 +110,7 @@ export const textModelPresentations: Record<string, TextModelPresentation> = {
     imageScale: 1.73,
     capability: "Fast, efficient translation for high-volume utility tasks and latency-sensitive workflows.",
     bestFor: "Simple, high-volume language tasks where speed and cost matter most.",
-    features: ["Fast multilingual translation", "Text classification", "Structured extraction", "Low-latency responses"],
+    features: ["Fast multilingual translation", "Text classification", "Structured extraction", "50-token minimum (~$0.00004)"],
   },
   "LingoFusion Lite": {
     image: "/assets/models/lingofusion-lite.png",
