@@ -28,6 +28,7 @@ import { browserApi, calculateGrossDeposit, getApiBaseUrl, shouldUseBrowserApi }
 import { sdkExamples } from "../data/sdkExamples";
 import type { SdkLanguage } from "../data/sdkExamples";
 import { highlightCode } from "../lib/highlightCode";
+import { tokenizeText } from "../lib/tokenizer";
 import { formatUsd } from "../lib/utils";
 import { FeeBreakdownModal } from "./FeeBreakdownModal";
 
@@ -595,13 +596,21 @@ export function DashboardModal({
   };
 
   const tokenizeInput = async () => {
-    if (!tryKey) {
-      setTab("API Keys");
-      onNotify(tc("Create a key first, then come back to Tokenizer"));
-      return;
-    }
     setTokenizerLoading(true);
     try {
+      if (browserMode || !tryKey) {
+        const { tokenIds, tokens, count } = tokenizeText(tokenizerInput);
+        setTokenizerResult({
+          model: tokenizerModel,
+          tokenizer_model: "o200k_base",
+          exact: true,
+          token_count: count,
+          token_ids: tokenIds.slice(0, 500),
+          preview_pieces: tokens.slice(0, 500),
+          truncated: tokenIds.length > 500,
+        });
+        return;
+      }
       const result = await api<TokenizerResult>("/v1/tokenize", {
         method: "POST",
         headers: { authorization: `Bearer ${tryKey}` },

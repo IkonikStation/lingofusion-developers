@@ -8,6 +8,9 @@ import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { LMStudioClient } from "@lmstudio/sdk";
 import Stripe from "stripe";
+import { getEncoding } from "js-tiktoken";
+
+const o200kEnc = getEncoding("o200k_base");
 
 const rootDir = dirname(fileURLToPath(import.meta.url));
 
@@ -682,7 +685,11 @@ function musicCostMicro(model) {
 function tokenEstimate(text) {
   const str = String(text || "");
   if (!str) return 0;
-  return Math.max(1, Math.ceil(str.length / 4));
+  try {
+    return o200kEnc.encode(str).length;
+  } catch {
+    return Math.max(1, Math.ceil(str.length / 4));
+  }
 }
 
 function estimateMessagesTokens(messages) {
@@ -700,8 +707,15 @@ function estimateMessagesTokens(messages) {
 }
 
 function estimatedTokenPieces(text) {
-  return Array.from(String(text || "").matchAll(/\s+|[\p{L}\p{N}]+|[^\s\p{L}\p{N}]/gu), (match) => match[0])
-    .flatMap((piece) => piece.match(/.{1,4}/gu) || [piece]);
+  const str = String(text || "");
+  if (!str) return [];
+  try {
+    const ids = o200kEnc.encode(str);
+    return ids.map((id) => o200kEnc.decode([id]));
+  } catch {
+    return Array.from(str.matchAll(/\s+|[\p{L}\p{N}]+|[^\s\p{L}\p{N}]/gu), (match) => match[0])
+      .flatMap((piece) => piece.match(/.{1,4}/gu) || [piece]);
+  }
 }
 
 const phraseTranslations = {
@@ -4099,13 +4113,16 @@ async function route(req, res) {
         });
       }
 
-      const previewPieces = estimatedTokenPieces(text);
+      const tokenIds = Array.from(o200kEnc.encode(text));
+      const previewPieces = tokenIds.map((id) => o200kEnc.decode([id]));
       return send(res, 200, {
         model: model.model,
-        exact: false,
-        token_count: tokenEstimate(text),
+        tokenizer_model: "o200k_base",
+        exact: true,
+        token_count: tokenIds.length,
+        token_ids: tokenIds.slice(0, 500),
         preview_pieces: previewPieces.slice(0, 500),
-        truncated: previewPieces.length > 500,
+        truncated: tokenIds.length > 500,
       });
     }
 

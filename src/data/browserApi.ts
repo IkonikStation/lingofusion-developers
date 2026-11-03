@@ -3,6 +3,7 @@ import { dubbingModels, musicModels, resolveImageModel, textModelsByPricingMode 
 import type { TextPricingMode } from "./pricing";
 import { buildImageTranslationInstruction, buildModelSystemPrompt } from "./systemPrompts";
 import { getCurrentUser } from "./auth";
+import { countTokens } from "../lib/tokenizer";
 
 export type ModelPricingRecord = {
   id: string;
@@ -508,7 +509,7 @@ function authorize(state: BrowserState, options?: RequestInit) {
 }
 
 function tokenEstimate(text: unknown) {
-  return Math.max(1, Math.ceil(String(text ?? "").length / 4));
+  return countTokens(text);
 }
 
 function translatePhrase(input: string, fromLanguage: string, toLanguage: string, modelId = "LingoFusion") {
