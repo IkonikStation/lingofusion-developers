@@ -50,7 +50,7 @@ sqlDb.exec("CREATE TABLE IF NOT EXISTS billing_invoices (id TEXT PRIMARY KEY, su
 sqlDb.exec("CREATE TABLE IF NOT EXISTS billing_orders (id TEXT PRIMARY KEY, body TEXT NOT NULL, refunded_cents INTEGER NOT NULL DEFAULT 0, credited_cents INTEGER NOT NULL DEFAULT 0)");
 
 const textModels = [
-  { model: "LingoFusion Nano", input: 0.05, output: 0.10 },
+  { model: "LingoFusion Nano", input: 0.08, output: 0.60 },
   { model: "LingoFusion Lite", input: 0.50, output: 2.00 },
   { model: "LingoFusion", input: 1.00, output: 5.00 },
   { model: "LingoFusion Pro", input: 3.50, output: 20.00 },
@@ -59,7 +59,7 @@ const textModels = [
 ];
 
 const defaultPricingCatalog = [
-  { model_id: "LingoFusion Nano", provider: "lingofusion", upstream_model_name: "gpt-5-nano", input_per_million: 0.0500, output_per_million: 0.1000, is_active: 1 },
+  { model_id: "LingoFusion Nano", provider: "lingofusion", upstream_model_name: "gpt-5-nano", input_per_million: 0.0800, output_per_million: 0.6000, is_active: 1 },
   { model_id: "LingoFusion Lite", provider: "lingofusion", upstream_model_name: "gpt-5.6-luna", input_per_million: 0.5000, output_per_million: 2.0000, is_active: 1 },
   { model_id: "LingoFusion", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 1.0000, output_per_million: 5.0000, is_active: 1 },
   { model_id: "LingoFusion Pro", provider: "lingofusion", upstream_model_name: "gpt-6-sol", input_per_million: 3.5000, output_per_million: 20.0000, is_active: 1 },
