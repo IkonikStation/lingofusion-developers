@@ -7,6 +7,7 @@ import {
   ChevronDown,
   Clapperboard,
   ClipboardCopy,
+  Coins,
   Copy,
   Download,
   FileText,
@@ -643,6 +644,34 @@ export function PlaygroundPage({
       defaultBrowserModelPricing[2],
     [models, selectedModelId],
   );
+
+  // Live token estimate & pricing calculator while typing in Playground
+  const liveTokenMetrics = useMemo(() => {
+    const rawTokens = Math.max(0, Math.ceil(userInput.trim().length / 4));
+    const isNano = activeModel.model_id.toLowerCase().includes("nano");
+    // Billable floor for Nano: 50 tokens
+    const billableInput = isNano && rawTokens > 0 && rawTokens < 50 ? 50 : rawTokens;
+    const isLocal = activeModel.model_id.startsWith("LingoFusion Native-") || Boolean(activeModel.local);
+
+    const speedMultiplier =
+      speedMode === "ultrafast" ? 4 : speedMode === "fast" ? 1.5 : 1;
+    const inRate = (activeModel.input_per_million * speedMultiplier) / 1_000_000;
+    const outRate = (activeModel.output_per_million * speedMultiplier) / 1_000_000;
+    const webSearch = allowWebSearch ? getWebSearchCallRateUsd(activeModel.model_id) : 0;
+
+    // Estimated total cost assuming output is roughly similar length to input
+    const estimatedCost = isLocal
+      ? 0
+      : Number((webSearch + (billableInput * inRate) + (billableInput * outRate)).toFixed(6));
+
+    return {
+      rawTokens,
+      billableInput,
+      estimatedCost,
+      isLocal,
+      isNano,
+    };
+  }, [userInput, activeModel, speedMode, allowWebSearch]);
 
   const activeImageModel = useMemo(
     () => imageModels.find((model) => model.label === selectedImageModel) ?? imageModels[0],
@@ -2618,6 +2647,37 @@ export function PlaygroundPage({
                 </Popover>
               )}
 
+              {/* Live Token & Price Counter in Top Bar */}
+              {mode === "text" && (userInput.trim() || latestRun) && (
+                <div
+                  data-testid="playground-live-counter"
+                  className="hidden items-center gap-2 rounded-xl border border-neutral-200/80 bg-neutral-50/80 px-3 py-2 font-mono text-xs md:inline-flex dark:border-white/10 dark:bg-white/5"
+                >
+                  <Zap className={`h-3.5 w-3.5 ${latestRun?.streaming ? "animate-pulse text-emerald-500" : "text-amber-500"}`} />
+                  {latestRun ? (
+                    <span className="tabular-nums text-neutral-700 dark:text-neutral-200">
+                      <strong>{latestRun.promptTokens + latestRun.completionTokens}</strong> tokens (
+                      {latestRun.promptTokens} in / {latestRun.completionTokens} out) ·{" "}
+                      <strong className="text-emerald-600 dark:text-emerald-400">
+                        {liveTokenMetrics.isLocal ? "Free" : `$${Number(latestRun.costUsd || 0).toFixed(6)}`}
+                      </strong>
+                    </span>
+                  ) : (
+                    <span className="tabular-nums text-neutral-600 dark:text-neutral-300">
+                      ~<strong>{liveTokenMetrics.rawTokens}</strong> tokens · est.{" "}
+                      <strong className="text-neutral-900 dark:text-white">
+                        {liveTokenMetrics.isLocal ? "Free" : `~$${liveTokenMetrics.estimatedCost.toFixed(6)}`}
+                      </strong>
+                      {liveTokenMetrics.isNano && liveTokenMetrics.rawTokens > 0 && liveTokenMetrics.rawTokens < 50 && (
+                        <span className="ml-1 text-[10px] text-amber-600 dark:text-amber-400">
+                          (50-token min)
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </div>
+              )}
+
               {mode === "dubbing" ? (
                 <button
                   type="button"
@@ -2720,9 +2780,18 @@ export function PlaygroundPage({
 
               {userInput && (
                 <div className="flex items-center gap-3">
-                  <span className="font-mono text-[11px] text-neutral-400 dark:text-neutral-500">
-                    {userInput.length.toLocaleString()} chars
-                  </span>
+                  <div className="flex items-center gap-2 font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
+                    <span className="inline-flex items-center gap-1 rounded bg-neutral-100 px-1.5 py-0.5 text-neutral-700 dark:bg-white/10 dark:text-neutral-300">
+                      <Zap className="h-3 w-3 text-amber-500" />
+                      ~{liveTokenMetrics.rawTokens} tokens
+                    </span>
+                    <span>{userInput.length.toLocaleString()} chars</span>
+                    {!liveTokenMetrics.isLocal && (
+                      <span className="font-semibold text-neutral-700 dark:text-neutral-300">
+                        est. ~${liveTokenMetrics.estimatedCost.toFixed(6)}
+                      </span>
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={() => {
@@ -2791,6 +2860,58 @@ export function PlaygroundPage({
                   </span>
                 )}
               </div>
+
+              {/* Live Output Token & Cost Telemetry Bar */}
+              {(latestRun || isRunning || (userInput.trim() && translatedOutput)) && (
+                <div
+                  data-testid="playground-telemetry-bar"
+                  className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200/70 pt-3 text-xs dark:border-white/10"
+                >
+                  <div className="flex flex-wrap items-center gap-2 font-mono text-[11px] text-neutral-600 dark:text-neutral-300">
+                    <span className="inline-flex items-center gap-1 rounded bg-neutral-100 px-2 py-0.5 font-medium text-neutral-800 dark:bg-white/10 dark:text-neutral-200">
+                      <Coins className="h-3 w-3 text-amber-500" />
+                      Tokens:{" "}
+                      <strong>
+                        {latestRun
+                          ? latestRun.promptTokens + latestRun.completionTokens
+                          : liveTokenMetrics.rawTokens}
+                      </strong>
+                      {latestRun && (
+                        <span className="text-neutral-400 dark:text-neutral-500">
+                          ({latestRun.promptTokens} in / {latestRun.completionTokens} out)
+                        </span>
+                      )}
+                    </span>
+
+                    <span className="inline-flex items-center gap-1 rounded bg-neutral-100 px-2 py-0.5 font-medium text-neutral-800 dark:bg-white/10 dark:text-neutral-200">
+                      Cost:{" "}
+                      <strong className="text-emerald-600 dark:text-emerald-400">
+                        {liveTokenMetrics.isLocal
+                          ? "Free (Local)"
+                          : latestRun
+                          ? `$${Number(latestRun.costUsd || 0).toFixed(6)} USD`
+                          : `~$${liveTokenMetrics.estimatedCost.toFixed(6)} USD`}
+                      </strong>
+                    </span>
+
+                    {latestRun?.streaming && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                        Live streaming
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 text-[11px] text-neutral-400">
+                    <span>Model: {activeModel.model_id}</span>
+                    {liveTokenMetrics.isNano && (
+                      <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-600 dark:text-amber-400">
+                        *50-token min floor
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
             </>

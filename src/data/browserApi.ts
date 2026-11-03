@@ -13,6 +13,7 @@ export type ModelPricingRecord = {
   input_per_million: number;
   output_per_million: number;
   is_active: boolean;
+  local?: boolean;
 };
 
 export type UsageLedgerRecord = {
