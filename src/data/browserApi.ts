@@ -713,6 +713,10 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
       },
       body: JSON.stringify({
         model: routing.upstreamModel,
+        from_language: fromLanguage,
+        to_language: toLanguage,
+        tone: body.tone,
+        pricing_mode: body.pricing_mode,
         messages: [
           {
             role: "system",
@@ -1005,6 +1009,10 @@ export async function streamChatCompletionBrowser(
     },
     body: JSON.stringify({
       model: routing.upstreamModel,
+      from_language: fromLanguage,
+      to_language: toLanguage,
+      tone: body.tone,
+      pricing_mode: body.pricing_mode,
       messages: [
         {
           role: "system",

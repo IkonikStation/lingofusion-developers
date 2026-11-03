@@ -915,8 +915,37 @@ export default {
         const rawMessages = Array.isArray(body.messages) ? body.messages : [];
         // LingoFusion is a pure translation engine: strip and disallow any user-supplied system/developer messages.
         const nonSystemMessages = rawMessages.filter((m) => m?.role !== "system" && m?.role !== "developer");
-        const fromLang = String(body.from_language || "English").trim();
-        const toLang = String(body.to_language || "French").trim();
+        const existingSystem = rawMessages.find((m) => m?.role === "system" || m?.role === "developer")?.content || "";
+        let extractedFrom = "";
+        let extractedTo = "";
+        if (typeof existingSystem === "string" && existingSystem.length > 0) {
+          const toMatch = existingSystem.match(/Translate from [^\n.]+ to ([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\./i)
+            || existingSystem.match(/into (?:the )?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\./i);
+          if (toMatch) extractedTo = toMatch[1].trim();
+
+          const fromMatch = existingSystem.match(/Translate from ([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+to/i);
+          if (fromMatch) extractedFrom = fromMatch[1].trim();
+        }
+
+        const fromLang = String(
+          body.from_language ||
+          body.fromLanguage ||
+          body.source_lang ||
+          body.source_language ||
+          extractedFrom ||
+          "English"
+        ).trim();
+
+        const toLang = String(
+          body.to_language ||
+          body.toLanguage ||
+          body.target_lang ||
+          body.target_language ||
+          body.target ||
+          extractedTo ||
+          "Spanish"
+        ).trim();
+
         const tone = String(body.tone || "Natural (Default)").trim();
 
         // Exactly use the official full LingoFusion system prompt configured for the selected model
@@ -934,7 +963,14 @@ export default {
 
         const {
           to_language,
+          toLanguage,
+          target_lang,
+          target_language,
+          target,
           from_language,
+          fromLanguage,
+          source_lang,
+          source_language,
           tone: _tone,
           pricing_mode,
           allow_web_search,
