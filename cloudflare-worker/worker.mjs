@@ -923,8 +923,18 @@ export default {
           ? [{ role: "system", content: translationInstructions }, ...messages]
           : messages;
 
+        const {
+          to_language,
+          from_language,
+          tone: _tone,
+          pricing_mode,
+          allow_web_search,
+          reasoning_enabled,
+          ...cleanPayload
+        } = body;
+
         const upstreamPayload = {
-          ...body,
+          ...cleanPayload,
           model: upstreamModel,
           messages: upstreamMessages,
         };
