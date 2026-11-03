@@ -443,6 +443,22 @@ function requestSecret(options?: RequestInit) {
   return new Headers(options?.headers).get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
 }
 
+function getAuthBearer(options?: RequestInit, state?: BrowserState, fallbackKey?: string): string {
+  const explicit = requestSecret(options) || fallbackKey;
+  if (explicit) return explicit;
+  const user = getCurrentUser();
+  if (user?.sessionToken) return user.sessionToken;
+  if (state?.secrets) {
+    const activeKeyId = state.dashboard?.apiKeys?.find((k) => k.status === "active")?.id;
+    if (activeKeyId && state.secrets[activeKeyId]) {
+      return state.secrets[activeKeyId];
+    }
+    const anySecret = Object.values(state.secrets).find((s) => typeof s === "string" && s.startsWith("sk_live_"));
+    if (anySecret) return anySecret;
+  }
+  return "";
+}
+
 function recalculateUsage(dashboard: BrowserDashboard) {
   const usage = dashboard.requestLogs.reduce((total, log) => {
     total.totalRequests += 1;
@@ -686,12 +702,14 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
     const isUltrafast = pricingMode === "ultrafast" && ["LingoFusion Pro", "LingoFusion Ultra"].includes(modelPricing.model_id);
     const isFast = pricingMode === "fast" && ["LingoFusion Nano", "LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(modelPricing.model_id);
     const serviceTier = isUltrafast ? "ultrafast" : isFast ? "fast" : undefined;
+    const authToken = getAuthBearer(options, state);
 
     const upstreamRes = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-LingoFusion-Client-Token": "lf_play_secure_649f7",
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       },
       body: JSON.stringify({
         model: routing.upstreamModel,
@@ -729,9 +747,13 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
       }
     } else {
       const errorData = (await upstreamRes.json().catch(() => ({}))) as Record<string, any>;
-      const upstreamMsg = errorData?.error?.message || `Translation upstream returned HTTP ${upstreamRes.status}`;
+      const upstreamMsg =
+        errorData?.error?.message ||
+        (typeof errorData?.error === "string" && errorData.error ? `${errorData.error}: ${errorData.message || ""}` : "") ||
+        errorData?.message ||
+        `Translation upstream returned HTTP ${upstreamRes.status}`;
       console.error("Translation upstream error:", upstreamRes.status, upstreamMsg);
-      throw new Error(upstreamMsg);
+      throw new Error(upstreamMsg.trim() || `Translation upstream returned HTTP ${upstreamRes.status}`);
     }
   } catch (err) {
     if (err instanceof Error && err.message && !err.message.includes("Failed to fetch")) {
@@ -972,12 +994,14 @@ export async function streamChatCompletionBrowser(
   const isUltrafast = pricingMode === "ultrafast" && ["LingoFusion Pro", "LingoFusion Ultra"].includes(modelPricing.model_id);
   const isFast = pricingMode === "fast" && ["LingoFusion Nano", "LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(modelPricing.model_id);
   const serviceTier = isUltrafast ? "ultrafast" : isFast ? "fast" : undefined;
+  const authToken = getAuthBearer(undefined, state, typeof body.apiKey === "string" ? body.apiKey : typeof body.api_key === "string" ? body.api_key : undefined);
 
   const upstreamRes = await fetch(endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "X-LingoFusion-Client-Token": "lf_play_secure_649f7",
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     },
     body: JSON.stringify({
       model: routing.upstreamModel,
@@ -1010,8 +1034,11 @@ export async function streamChatCompletionBrowser(
   if (!upstreamRes.ok) {
     const errorData = (await upstreamRes.json().catch(() => ({}))) as Record<string, any>;
     const upstreamMsg =
-      errorData?.error?.message || `Translation upstream returned HTTP ${upstreamRes.status}`;
-    throw new Error(upstreamMsg);
+      errorData?.error?.message ||
+      (typeof errorData?.error === "string" && errorData.error ? `${errorData.error}: ${errorData.message || ""}` : "") ||
+      errorData?.message ||
+      `Translation upstream returned HTTP ${upstreamRes.status}`;
+    throw new Error(upstreamMsg.trim() || `Translation upstream returned HTTP ${upstreamRes.status}`);
   }
 
   return upstreamRes;
@@ -1062,19 +1089,24 @@ async function runImageTranslationBrowser(
   form.append("n", "1");
   form.append("image", blob, "source.png");
 
+  const authToken = getAuthBearer(options, state);
   const upstreamRes = await fetch(editsEndpoint, {
     method: "POST",
     headers: {
       "X-LingoFusion-Client-Token": "lf_play_secure_649f7",
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     },
     body: form,
   });
 
   if (!upstreamRes.ok) {
     const errorData = (await upstreamRes.json().catch(() => ({}))) as Record<string, any>;
-    throw new Error(
-      errorData?.error?.message || `Image upstream returned HTTP ${upstreamRes.status}`,
-    );
+    const upstreamMsg =
+      errorData?.error?.message ||
+      (typeof errorData?.error === "string" && errorData.error ? `${errorData.error}: ${errorData.message || ""}` : "") ||
+      errorData?.message ||
+      `Image upstream returned HTTP ${upstreamRes.status}`;
+    throw new Error(upstreamMsg.trim() || `Image upstream returned HTTP ${upstreamRes.status}`);
   }
 
   const payload = (await upstreamRes.json()) as Record<string, any>;
@@ -1244,11 +1276,13 @@ async function runSpeechBrowser(state: BrowserState, options?: RequestInit) {
 
   let audioUrl = "";
   try {
+    const authToken = getAuthBearer(options, state);
     const upstreamRes = await fetch(`${gatewayUrl}/api/playground/speech`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-LingoFusion-Client-Token": "lf_play_secure_649f7",
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       },
       body: JSON.stringify({
         input,
@@ -1259,7 +1293,12 @@ async function runSpeechBrowser(state: BrowserState, options?: RequestInit) {
 
     const data = (await upstreamRes.json().catch(() => ({}))) as Record<string, any>;
     if (!upstreamRes.ok || !data.audio_url) {
-      throw new Error(data?.message || data?.error || `Voice synthesis failed (HTTP ${upstreamRes.status})`);
+      const errMsg =
+        data?.error?.message ||
+        (typeof data?.error === "string" && data.error ? `${data.error}: ${data.message || ""}` : "") ||
+        data?.message ||
+        `Voice synthesis failed (HTTP ${upstreamRes.status})`;
+      throw new Error(errMsg.trim() || `Voice synthesis failed (HTTP ${upstreamRes.status})`);
     }
     audioUrl = String(data.audio_url);
   } catch (err) {
@@ -1328,11 +1367,13 @@ async function runMusic(state: BrowserState, options?: RequestInit) {
 
   let audioUrl = "";
   try {
+    const authToken = getAuthBearer(options, state);
     const upstreamRes = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/playground/music`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-LingoFusion-Client-Token": "lf_play_secure_649f7",
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       },
       body: JSON.stringify({
         prompt,
@@ -1343,7 +1384,12 @@ async function runMusic(state: BrowserState, options?: RequestInit) {
 
     let data = (await upstreamRes.json().catch(() => ({}))) as Record<string, any>;
     if (!upstreamRes.ok) {
-      throw new Error(data?.message || data?.error || `Music generation failed (HTTP ${upstreamRes.status})`);
+      const errMsg =
+        data?.error?.message ||
+        (typeof data?.error === "string" && data.error ? `${data.error}: ${data.message || ""}` : "") ||
+        data?.message ||
+        `Music generation failed (HTTP ${upstreamRes.status})`;
+      throw new Error(errMsg.trim() || `Music generation failed (HTTP ${upstreamRes.status})`);
     }
 
     if (data.status === "processing" && (data.id || data.task_id)) {
@@ -1352,7 +1398,10 @@ async function runMusic(state: BrowserState, options?: RequestInit) {
       while (!data.audio_url && Date.now() - pollStart < 360000) {
         await new Promise((r) => setTimeout(r, 2500));
         const pollRes = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/playground/music?id=${encodeURIComponent(taskId)}`, {
-          headers: { "X-LingoFusion-Client-Token": "lf_play_secure_649f7" },
+          headers: {
+            "X-LingoFusion-Client-Token": "lf_play_secure_649f7",
+            ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+          },
         });
         if (pollRes.ok) {
           const pollData = (await pollRes.json().catch(() => ({}))) as Record<string, any>;
@@ -1364,7 +1413,12 @@ async function runMusic(state: BrowserState, options?: RequestInit) {
           }
         } else if (pollRes.status >= 400 && pollRes.status !== 404) {
           const errData = (await pollRes.json().catch(() => ({}))) as Record<string, any>;
-          throw new Error(errData?.message || errData?.error || `Polling failed (HTTP ${pollRes.status})`);
+          const pollErrMsg =
+            errData?.error?.message ||
+            (typeof errData?.error === "string" && errData.error ? `${errData.error}: ${errData.message || ""}` : "") ||
+            errData?.message ||
+            `Polling failed (HTTP ${pollRes.status})`;
+          throw new Error(pollErrMsg.trim() || `Polling failed (HTTP ${pollRes.status})`);
         }
       }
     }
@@ -1447,7 +1501,12 @@ async function runDubbingBrowser(state: BrowserState, options?: RequestInit) {
     fail("Insufficient balance. Please deposit credits.");
   }
 
-  const headers = { "Content-Type": "application/json", "X-LingoFusion-Client-Token": "lf_play_secure_649f7" };
+  const authToken = getAuthBearer(options, state);
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "X-LingoFusion-Client-Token": "lf_play_secure_649f7",
+    ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+  };
   const readResponse = async (response: Response) => {
     const data = await response.json();
     if (!response.ok) fail(data.message || "Dubbing failed.");

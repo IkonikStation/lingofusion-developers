@@ -857,9 +857,13 @@ export function PlaygroundPage({
         response = await streamChatCompletionBrowser(payload, controller.signal);
       } else {
         const baseUrl = getApiBaseUrl();
+        const user = getCurrentUser();
         response = await fetch(`${baseUrl}/api/playground/chat`, {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: {
+            "content-type": "application/json",
+            ...(user.sessionToken ? { Authorization: `Bearer ${user.sessionToken}` } : {}),
+          },
           body: JSON.stringify(payload),
           signal: controller.signal,
         });
@@ -868,8 +872,11 @@ export function PlaygroundPage({
       if (!response.ok) {
         const errBody = await response.json().catch(() => ({}));
         const errMsg =
-          errBody?.error?.message || errBody?.message || `HTTP ${response.status}`;
-        throw new Error(errMsg);
+          errBody?.error?.message ||
+          (typeof errBody?.error === "string" && errBody.error ? `${errBody.error}: ${errBody.message || ""}` : "") ||
+          errBody?.message ||
+          `HTTP ${response.status}`;
+        throw new Error(errMsg.trim() || `HTTP ${response.status}`);
       }
 
       if (!response.body) {
