@@ -901,16 +901,22 @@ export default {
         }
 
         const requestedModel = String(body.model || "LingoFusion").trim();
+        const hasReasoning = Boolean(
+          body.reasoning ||
+          body.reasoning_effort === "medium" ||
+          body.reasoning === "medium" ||
+          body.reasoning_enabled
+        );
         const modelMap = {
-          "lingofusion nano": "gpt-4o-mini",
-          "lingofusion lite": "gpt-4o-mini",
-          "lingofusion": "gpt-4o-mini",
-          "lingofusion pro": "gpt-4o-mini",
-          "lingofusion ultra": "gpt-4o-mini",
-          "explainfusion": "gpt-4o-mini",
-          "lingofusion explain": "gpt-4o-mini",
+          "lingofusion nano": "gpt-5-nano",
+          "lingofusion lite": "gpt-5.6-luna",
+          "lingofusion": "gpt-6-luna",
+          "lingofusion pro": hasReasoning ? "gpt-6.1-sol" : "gpt-6-sol",
+          "lingofusion ultra": "gpt-6-astra",
+          "explainfusion": "gpt-6-luna",
+          "lingofusion explain": "gpt-6-luna",
         };
-        const upstreamModel = modelMap[requestedModel.toLowerCase()] || "gpt-4o-mini";
+        const upstreamModel = modelMap[requestedModel.toLowerCase()] || requestedModel;
 
         const rawMessages = Array.isArray(body.messages) ? body.messages : [];
         // LingoFusion is a pure translation engine: strip and disallow any user-supplied system/developer messages.
