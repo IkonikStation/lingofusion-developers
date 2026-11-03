@@ -493,8 +493,8 @@ export default {
         return jsonResponse({ revoked: true, apiKeys: list }, 200, requestOrigin);
       }
 
-      // 1d. Developer Sandbox Test Credit Grant ($0.50)
-      if (request.method === "POST" && path === "/api/developer/claim-test-credit") {
+      // 1d. Account Special Offer Credit Grant ($0.10)
+      if (request.method === "POST" && (path === "/api/account/special-offer" || path === "/api/developer/claim-test-credit")) {
         const user = await signedInUser();
         if (!user?.email) return jsonResponse({ error: "sign_in_required", message: "Please sign in first." }, 401, requestOrigin);
         const email = user.email.toLowerCase();
@@ -504,29 +504,29 @@ export default {
             const result = await billingLedger(env, { action: "grantTestCredit", email });
             return jsonResponse({
               success: true,
-              credited: 0.50,
+              credited: 0.10,
               balance_usd: result.balance_usd,
-              message: "Granted $0.50 test credit for API key testing.",
+              message: "Granted $0.10 special offer credit to your account.",
             }, 200, requestOrigin);
           } catch (err) {
-            return jsonResponse({ error: "already_claimed", message: err.message }, 400, requestOrigin);
+            return jsonResponse({ error: "already_claimed", message: "Special offer has already been claimed for this account." }, 400, requestOrigin);
           }
         }
 
         if (env.GIFTS) {
-          const claimedKey = `test_grant:${email}`;
+          const claimedKey = `special_offer_claimed:${email}`;
           if (await env.GIFTS.get(claimedKey)) {
-            return jsonResponse({ error: "already_claimed", message: "Developer test credit has already been claimed for this account." }, 400, requestOrigin);
+            return jsonResponse({ error: "already_claimed", message: "Special offer has already been claimed for this account." }, 400, requestOrigin);
           }
           await env.GIFTS.put(claimedKey, "true");
           const cur = Number(await env.GIFTS.get(`user_balance:${email}`) || 0);
-          const newBal = Number((cur + 0.50).toFixed(2));
+          const newBal = Number((cur + 0.10).toFixed(2));
           await env.GIFTS.put(`user_balance:${email}`, String(newBal));
           return jsonResponse({
             success: true,
-            credited: 0.50,
+            credited: 0.10,
             balance_usd: newBal,
-            message: "Granted $0.50 test credit for API key testing.",
+            message: "Granted $0.10 special offer credit to your account.",
           }, 200, requestOrigin);
         }
 

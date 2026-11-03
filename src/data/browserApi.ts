@@ -1936,13 +1936,13 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
     const data = await response.json();
     if (!response.ok) fail(data.message || "Subscription checkout is unavailable.");
     result = data;
-  } else if (method === "POST" && path === "/api/developer/claim-test-credit") {
+  } else if (method === "POST" && (path === "/api/account/special-offer" || path === "/api/developer/claim-test-credit")) {
     const user = getCurrentUser();
     if (user.provider === "guest" || !user.sessionToken) {
-      fail("Sign-in required. Please sign in to claim test credit.");
+      fail("Sign-in required. Please sign in to claim your special offer.");
     }
     if (DEFAULT_EDGE_GATEWAY_URL) {
-      const edgeRes = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/developer/claim-test-credit`, {
+      const edgeRes = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/account/special-offer`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1950,16 +1950,16 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
         },
       });
       const data = await edgeRes.json();
-      if (!edgeRes.ok) throw new Error(data.message || data.error || "Failed to claim test credit.");
-      state.dashboard.account.paidBalance = data.balance_usd ?? 0.50;
-      if (state.dashboard.user) state.dashboard.user.balance_usd = data.balance_usd ?? 0.50;
+      if (!edgeRes.ok) throw new Error(data.message || data.error || "Failed to claim special offer.");
+      state.dashboard.account.paidBalance = data.balance_usd ?? 0.10;
+      if (state.dashboard.user) state.dashboard.user.balance_usd = data.balance_usd ?? 0.10;
       saveState(state);
       result = data;
     } else {
-      state.dashboard.account.paidBalance = Number(((state.dashboard.account.paidBalance || 0) + 0.50).toFixed(2));
+      state.dashboard.account.paidBalance = Number(((state.dashboard.account.paidBalance || 0) + 0.10).toFixed(2));
       if (state.dashboard.user) state.dashboard.user.balance_usd = state.dashboard.account.paidBalance;
       saveState(state);
-      result = { success: true, credited: 0.50, balance_usd: state.dashboard.account.paidBalance };
+      result = { success: true, credited: 0.10, balance_usd: state.dashboard.account.paidBalance };
     }
   } else if (method === "POST" && path === "/api/billing/recharge") {
     fail("Simulated credit purchases are unavailable. Please use Stripe Checkout.");
