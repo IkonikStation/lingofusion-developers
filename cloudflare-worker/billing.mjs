@@ -62,6 +62,14 @@ export class BillingLedger {
           if (subscription?.periodEnd && subscription.periodEnd * 1000 <= Date.now()) subscription.status = 'expired';
           return Response.json({ balance_usd: await this.initial(email), subscription });
         }
+        if (action === 'grantTestCredit') {
+          const key = `testGrant:${email}`;
+          if (await storage.get(key)) throw new Error('Developer test credit already claimed for this account.');
+          const current = await this.initial(email);
+          const newBal = Number((current + 0.50).toFixed(6));
+          await this.write({ [key]: true }, { [email]: newBal });
+          return Response.json({ balance_usd: newBal, credited: 0.50 });
+        }
         if (action === 'deduct') {
           if (!Number.isFinite(delta) || delta >= 0 || !operationId || operationId.length > 100) throw new Error('Only authenticated usage deductions are accepted.');
           const key = `deduct:${email}:${operationId}`;

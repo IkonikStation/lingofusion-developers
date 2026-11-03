@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   Wallet,
   X,
+  Zap,
 } from "lucide-react";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { AuthUser } from "../data/auth";
@@ -507,6 +508,40 @@ export function DashboardModal({
     }
   };
 
+  const claimTestCredit = async () => {
+    if (busyAction) return;
+    if (currentUser?.provider === "guest" || !currentUser?.sessionToken) {
+      onNotify(tc("Please sign in first to claim test credits"));
+      onOpenAuth?.();
+      return;
+    }
+
+    setBusyAction("claim-test-credit");
+    try {
+      const res = await api<{ success: boolean; credited: number; balance_usd: number; message?: string }>("/api/developer/claim-test-credit", {
+        method: "POST",
+      });
+      if (res.balance_usd !== undefined) {
+        setData((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            account: {
+              ...prev.account,
+              paidBalance: res.balance_usd,
+            },
+            user: prev.user ? { ...prev.user, balance_usd: res.balance_usd } : prev.user,
+          };
+        });
+        onNotify(tc("Added $0.50 test credit for API key testing!"));
+      }
+    } catch (err: any) {
+      onNotify(err.message || tc("Failed to claim test credit"));
+    } finally {
+      setBusyAction("");
+    }
+  };
+
   const resetLocalData = async () => {
     if (busyAction) {
       return;
@@ -947,10 +982,21 @@ export function DashboardModal({
                         ))}
                       </div>
                     </fieldset>
-                    <ActionButton onClick={createKey} className="mt-4">
-                      <KeyRound className="h-4 w-4" />
-                      {tc("Create key")}
-                    </ActionButton>
+                    <div className="mt-4 flex flex-wrap items-center gap-3">
+                      <ActionButton onClick={createKey}>
+                        <KeyRound className="h-4 w-4" />
+                        {tc("Create key")}
+                      </ActionButton>
+                      <button
+                        type="button"
+                        onClick={claimTestCredit}
+                        disabled={busyAction === "claim-test-credit"}
+                        className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3.5 text-xs font-semibold text-blue-600 transition hover:bg-blue-500/20 dark:text-blue-400"
+                      >
+                        <Zap className="h-3.5 w-3.5 text-blue-500" />
+                        {busyAction === "claim-test-credit" ? tc("Adding $0.50...") : tc("Claim $0.50 Free Test Credit")}
+                      </button>
+                    </div>
                     {data.apiKeys.length ? (
                       <div className="mt-5 space-y-3">
                         {data.apiKeys.map((key) => (
@@ -1338,14 +1384,24 @@ export function DashboardModal({
                                       <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                                       Secured by Stripe
                                     </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => setConfirmResetLocalData(true)}
-                                      disabled={busyAction === "reset-local-data"}
-                                      className="text-[11px] font-medium text-neutral-400 underline hover:text-red-600 dark:hover:text-red-400"
-                                    >
-                                      {tc("Reset local ledger")}
-                                    </button>
+                                    <div className="flex items-center gap-3">
+                                      <button
+                                        type="button"
+                                        onClick={claimTestCredit}
+                                        disabled={busyAction === "claim-test-credit"}
+                                        className="text-[11px] font-semibold text-blue-600 underline hover:text-blue-500 dark:text-blue-400"
+                                      >
+                                        {busyAction === "claim-test-credit" ? tc("Adding...") : tc("Claim $0.50 test credit")}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setConfirmResetLocalData(true)}
+                                        disabled={busyAction === "reset-local-data"}
+                                        className="text-[11px] font-medium text-neutral-400 underline hover:text-red-600 dark:hover:text-red-400"
+                                      >
+                                        {tc("Reset local ledger")}
+                                      </button>
+                                    </div>
                                   </div>
                                 </div>
                               </>
