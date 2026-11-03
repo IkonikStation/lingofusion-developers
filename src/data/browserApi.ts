@@ -1151,8 +1151,12 @@ async function runImageTranslationBrowser(
   if (!imageResult) fail("The image provider returned no image.");
 
   const usage = payload?.usage && typeof payload.usage === "object" ? payload.usage : {};
-  const promptTokens =
-    Number(usage.input_tokens) || Number(usage.prompt_tokens) || tokenEstimate(prompt);
+  const systemPromptTokens = countTokens(prompt);
+  const rawInputTokens = Number(usage.input_tokens) || Number(usage.prompt_tokens) || 0;
+  // Stop users from paying for internal system prompt:
+  // Upstream returns combined prompt text + image tokens; we absorb the system prompt
+  // so the user is only billed for their actual image tokens.
+  const promptTokens = Math.max(0, rawInputTokens - systemPromptTokens);
   const completionTokens = Number(usage.output_tokens) || Number(usage.completion_tokens) || 0;
   const costUsd = calculateTokenCost(
     promptTokens,
@@ -1179,7 +1183,7 @@ async function runImageTranslationBrowser(
   createChargeEntry(
     state,
     costUsd,
-    `${model.label} image translation (${promptTokens} in / ${completionTokens} out) via ${source}`,
+    `${model.label} image translation (${promptTokens} in / ${completionTokens} out, ${systemPromptTokens} system absorbed) via ${source}`,
   );
   logRequest(state, {
     id: requestId,
@@ -1208,13 +1212,13 @@ async function runImageTranslationBrowser(
     label: model.label,
     resolution: model.resolution,
     provider: "lingofusion",
-    upstream_model: model.upstreamModel,
     from_language: fromLanguage,
     to_language: toLanguage,
     image: imageResult,
     image_mime_type: first?.b64_json ? "image/png" : undefined,
     usage: {
       prompt_tokens: promptTokens,
+      system_tokens_absorbed: systemPromptTokens,
       completion_tokens: completionTokens,
       total_tokens: promptTokens + completionTokens,
       cost_usd: costUsd,

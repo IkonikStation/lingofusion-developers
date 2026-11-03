@@ -2256,11 +2256,17 @@ async function handleImageTranslation({ res, body, user, source = "playground", 
   }
 
   const usage = payload?.usage && typeof payload.usage === "object" ? payload.usage : {};
-  const promptTokens = Number.isFinite(usage.input_tokens)
+  const systemPromptTokens = tokenEstimate(prompt);
+  const rawInputTokens = Number.isFinite(usage.input_tokens)
     ? usage.input_tokens
     : Number.isFinite(usage.prompt_tokens)
       ? usage.prompt_tokens
-      : tokenEstimate(prompt);
+      : 0;
+
+  // Stop users from paying for the internal system prompt:
+  // Upstream returns combined prompt text + image tokens; we absorb the system prompt
+  // so the user is only billed for their actual image tokens.
+  const promptTokens = Math.max(0, rawInputTokens - systemPromptTokens);
   const completionTokens = Number.isFinite(usage.output_tokens)
     ? usage.output_tokens
     : Number.isFinite(usage.completion_tokens)
@@ -2314,13 +2320,13 @@ async function handleImageTranslation({ res, body, user, source = "playground", 
     label: model.label,
     resolution: model.resolution,
     provider: "lingofusion",
-    upstream_model: model.upstream_model_name,
     from_language: fromLanguage,
     to_language: toLanguage,
     image: b64 ? `data:image/png;base64,${b64}` : resultUrl,
     image_mime_type: b64 ? "image/png" : undefined,
     usage: {
       prompt_tokens: promptTokens,
+      system_tokens_absorbed: systemPromptTokens,
       completion_tokens: completionTokens,
       total_tokens: promptTokens + completionTokens,
       cost_usd: costUsd,

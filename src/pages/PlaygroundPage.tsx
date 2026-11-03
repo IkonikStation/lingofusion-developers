@@ -86,6 +86,7 @@ type ImageRun = {
   toLanguage: string;
   promptTokens: number;
   completionTokens: number;
+  systemTokensAbsorbed?: number;
   costUsd: number;
   createdAt: string;
 };
@@ -1185,6 +1186,7 @@ export function PlaygroundPage({
         image: string;
         usage: {
           prompt_tokens: number;
+          system_tokens_absorbed?: number;
           completion_tokens: number;
           total_tokens: number;
           cost_usd: number;
@@ -1204,6 +1206,7 @@ export function PlaygroundPage({
         toLanguage,
         promptTokens: response.usage?.prompt_tokens ?? 0,
         completionTokens: response.usage?.completion_tokens ?? 0,
+        systemTokensAbsorbed: response.usage?.system_tokens_absorbed ?? 209,
         costUsd: response.usage?.cost_usd ?? 0,
         createdAt: new Date().toISOString(),
       });
@@ -3119,6 +3122,44 @@ export function PlaygroundPage({
                       </span>
                     )}
                   </div>
+
+                  {/* Clean bottom token and price counter */}
+                  {imageRun && imageOutput && (
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-neutral-100 pt-3 dark:border-white/5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          data-testid="playground-image-token-counter"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200/80 bg-neutral-100/70 px-2.5 py-1 text-[11px] font-medium text-neutral-600 dark:border-white/10 dark:bg-white/5 dark:text-neutral-300"
+                        >
+                          <Zap className="h-3 w-3 text-amber-500" />
+                          <span>Image Tokens:</span>
+                          <strong className="font-semibold text-neutral-900 dark:text-white">
+                            {imageRun.promptTokens} in / {imageRun.completionTokens} out
+                          </strong>
+                        </span>
+
+                        <span
+                          data-testid="playground-image-absorbed-counter"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300"
+                          title="LingoFusion system prompt absorbed by the platform at no charge"
+                        >
+                          <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                          <span>System prompt absorbed ({imageRun.systemTokensAbsorbed ?? 209} tokens • $0.00)</span>
+                        </span>
+
+                        <span
+                          data-testid="playground-image-cost-counter"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200/80 bg-neutral-100/70 px-2.5 py-1 text-[11px] font-medium text-neutral-600 dark:border-white/10 dark:bg-white/5 dark:text-neutral-300"
+                        >
+                          <Coins className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                          <span>Cost:</span>
+                          <strong className="font-semibold text-neutral-900 dark:text-white">
+                            ${formatCostBadge(imageRun.costUsd)}
+                          </strong>
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </>
