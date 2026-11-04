@@ -155,9 +155,8 @@ export const ttsModels: SimpleModel[] = [
 ];
 
 export const transcriptionModels: SimpleModel[] = [
-  { model: "LingoFusion Transcribe", priceUsd: 0.017, pricingUnit: "per_minute" },
-  { model: "LingoFusion Transcribe Mini", priceUsd: 0.008, pricingUnit: "per_minute" },
-  { model: "LingoFusion Transcribe Live", priceUsd: 0.04, pricingUnit: "per_minute" },
+  { model: "LingoFusion Transcribe", priceUsd: 0.01, pricingUnit: "per_minute" },
+  { model: "LingoFusion Live Transcribe", priceUsd: 0.03, pricingUnit: "per_minute" },
 ];
 
 export const dubbingModels: SimpleModel[] = [
@@ -231,8 +230,7 @@ export const latestModels = [
   "LingoFusion Voice",
   "LingoFusion Voice Flash",
   "LingoFusion Transcribe",
-  "LingoFusion Transcribe Mini",
-  "LingoFusion Transcribe Live",
+  "LingoFusion Live Transcribe",
   "LingoFusion Dubbing",
   "LingoFusion Music",
   "PDF text extraction",
@@ -258,6 +256,7 @@ export const sidebarSections = [
       "PDF text extraction",
       "Image translation",
       "Dubbing",
+      "Transcription",
       "SDKs and libraries",
       "Error codes",
     ],
@@ -281,12 +280,11 @@ export const navMenus = {
     "LingoFusion Native-35B",
     "LingoFusion Nano",
     "LingoFusion Transcribe",
-    "LingoFusion Transcribe Mini",
-    "LingoFusion Transcribe Live",
+    "LingoFusion Live Transcribe",
     "PDF text extraction",
     "PDF editing and translation",
   ],
-  Docs: ["Text generation", "Speech generation", "Image translation", "Dubbing"],
+  Docs: ["Text generation", "Speech generation", "Image translation", "Dubbing", "Transcription"],
   Resources: ["Changelog", "Support", "Status"],
 };
 
@@ -346,9 +344,7 @@ export const modelDetails: Record<string, string> = {
     "Fast, lower-cost multilingual speech generation.",
   "LingoFusion Transcribe":
     "Production transcription model for accurate speech-to-text workflows.",
-  "LingoFusion Transcribe Mini":
-    "Lower-latency transcription model for lightweight speech-to-text tasks.",
-  "LingoFusion Transcribe Live":
+  "LingoFusion Live Transcribe":
     "Real-time transcription model for streaming audio and live captioning.",
   "PDF text extraction":
     "Extract text from PDF files for translation, search, and document workflows.",

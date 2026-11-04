@@ -68,7 +68,19 @@ export class BillingLedger {
             result: record.status === 'settled' ? await this.usageResult(`meteredUsage:${email}:${operationId}`, record) : null,
             balance_usd: await this.initial(email) });
         }
-        if (['usageReserve', 'usageFinish', 'usageUncertain'].includes(action)) {
+        if (action === 'usageCancelUnclaimedLive') {
+          if (!email || !/^[A-Za-z0-9_-]{1,100}$/.test(operationId || '')) throw new Error('Invalid usage identity.');
+          const key = `meteredUsage:${email}:${operationId}`;
+          const prior = await storage.get(key);
+          if (!prior || !prior.fingerprint?.startsWith('live-transcribe-v1:')) throw new Error('Unknown live session.');
+          if (prior.status === 'settled') return Response.json({ result: await this.usageResult(key, prior), balance_usd: await this.initial(email) });
+          if (prior.liveClaimed) throw new Error('Provider session was claimed; reconciliation required.');
+          const result = { model: 'LingoFusion Live Transcribe', text: '', duration_seconds: 0, cost_usd: 0, operation_id: operationId };
+          const balance = (Math.round((await this.initial(email)) * 1e6) + prior.maximumMicros) / 1e6;
+          await this.write({ [key]: { ...prior, status: 'settled', actualMicros: 0, result, evidence: { confirmedNoDispatch: true } } }, { [email]: balance });
+          return Response.json({ result, balance_usd: balance });
+        }
+        if (['usageReserve', 'usageFinish', 'usageUncertain', 'usageClaimLive'].includes(action)) {
           if (!email || !operationId || operationId.length > 100 || !fingerprint) throw new Error('Invalid usage identity.');
           const key = `meteredUsage:${email}:${operationId}`;
           const prior = await storage.get(key);
@@ -84,6 +96,11 @@ export class BillingLedger {
             return Response.json({ ...record, replay: false });
           }
           if (!prior) throw new Error('Unknown reservation.');
+          if (action === 'usageClaimLive') {
+            if (prior.status !== 'dispatched' || prior.liveClaimed) throw new Error('Live session already claimed.');
+            await storage.put(key, { ...prior, liveClaimed: true });
+            return Response.json({ claimed: true });
+          }
           if (action === 'usageUncertain') {
             if (prior.status !== 'settled') await storage.put(key, { ...prior, status: 'uncertain' });
             return Response.json({ held: prior.status !== 'settled' });

@@ -1,3 +1,4 @@
+import { transcriptionRequest, createLiveTranscription, connectLiveTranscription } from './transcription.mjs';
 import { meteredText } from './meteredText.mjs';
 import { BILLING_POLICY, STRIPE_API_VERSION, depositQuote, requireUsd, retrieveCheckout, subscriptionQuote } from "../shared/billing.mjs";
 import { buildModelSystemPrompt } from "../shared/systemPrompts.mjs";
@@ -342,6 +343,23 @@ export default {
         return jsonResponse({ error: "unavailable", message: "Automatic top-up and simulated balance changes are unavailable. Please add funds manually." }, 503, requestOrigin);
       }
 
+      if (request.method === 'GET' && path === '/api/transcription/socket') {
+        if (requestOrigin && !ALLOWED_ORIGINS.includes(requestOrigin)) return jsonResponse({error:'origin_not_allowed'},403,requestOrigin);
+        return connectLiveTranscription(request,env,(data,status=200)=>jsonResponse(data,status,requestOrigin),context);
+      }
+      if (request.method === 'POST' && ['/api/transcription/file','/v1/audio/transcriptions','/api/transcription/live','/api/transcription/cancel'].includes(path)) {
+        const user = await authenticateUser();
+        if (!user || user.error) return jsonResponse({error:'sign_in_required'},401,requestOrigin);
+        const respond=(data,status=200)=>jsonResponse(data,status,requestOrigin);
+        if (path === '/api/transcription/cancel') {
+          const body = await request.json();
+          try { return respond(await billingLedger(env,{action:'usageCancelUnclaimedLive',email:user.email.toLowerCase(),operationId:body.operation_id})); }
+          catch(error) { return respond({error:'reconciliation_required',message:error.message},409); }
+        }
+
+        return path === '/api/transcription/live' ? createLiveTranscription(request,env,user,respond) : transcriptionRequest(request,env,user,respond);
+      }
+
       // 1b. Models List (/v1/models) - OpenAI compatibility
       if (request.method === "GET" && path === "/v1/models") {
         return jsonResponse(
@@ -356,6 +374,8 @@ export default {
               { id: "ExplainFusion", object: "model", created: 1730000000, owned_by: "lingofusion" },
               { id: "LingoFusion Voice", object: "model", created: 1730000000, owned_by: "lingofusion" },
               { id: "LingoFusion Voice Flash", object: "model", created: 1730000000, owned_by: "lingofusion" },
+              { id: "LingoFusion Transcribe", object: "model", owned_by: "lingofusion" },
+              { id: "LingoFusion Live Transcribe", object: "model", owned_by: "lingofusion" },
             ],
           },
           200,

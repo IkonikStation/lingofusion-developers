@@ -1,3 +1,4 @@
+import { TranscriptionPanel } from '../components/TranscriptionPanel';
 import { waitForDubbing } from "../data/dubbingApi";
 import {
   Activity,
@@ -19,6 +20,7 @@ import {
   Link2,
   Loader2,
   Mail,
+  Mic,
   Music,
   Play,
   Plus,
@@ -341,8 +343,9 @@ export function PlaygroundPage({
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Playground modality: text translation vs in-image translation vs voice synthesis vs music generation vs dubbing
-  const [mode, setMode] = useState<"text" | "image" | "voice" | "music" | "dubbing">(() => {
+  const [mode, setMode] = useState<"text" | "image" | "voice" | "music" | "dubbing" | "transcription">(() => {
     const q = pageQuery().get("mode");
+    if (q === "transcription" || requestedModel?.includes("Transcribe")) return "transcription";
     if (q === "dubbing" || q === "dub") return "dubbing";
     if (q === "music") return "music";
     if (q === "voice" || q === "tts") return "voice";
@@ -354,6 +357,7 @@ export function PlaygroundPage({
     { id: "voice" as const, label: "Voice", icon: Volume2 },
     { id: "music" as const, label: "Music", icon: Music },
     { id: "dubbing" as const, label: "Dubbing", icon: Clapperboard },
+    { id: "transcription" as const, label: "Transcription", icon: Mic },
   ];
 
   // Dubbing studio state
@@ -1836,7 +1840,7 @@ export function PlaygroundPage({
               Playground
             </h1>
             <p className="mt-2 max-w-xl text-sm leading-6 text-neutral-500 dark:text-neutral-400">
-              {mode === "image"
+              {mode === "transcription" ? "Upload a recording or transcribe live audio into text." : mode === "image"
                 ? "Upload an image or paste a URL, then translate the text inside it."
                 : mode === "voice"
                   ? "Select a voice model, enter text, and generate speech."
@@ -2389,7 +2393,7 @@ export function PlaygroundPage({
           document.body,
         )}
 
-      <nav className="playground-modes mt-7 flex gap-1 border-b border-neutral-200 pb-3 dark:border-white/10" aria-label="Playground mode">
+      <nav className="playground-modes mt-7 flex overflow-x-auto gap-1 border-b border-neutral-200 pb-3 dark:border-white/10" aria-label="Playground mode">
         {PLAYGROUND_MODES.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -2406,6 +2410,7 @@ export function PlaygroundPage({
       </nav>
 
       {/* Workspace: configuration above the input and output. */}
+      {mode === "transcription" ? <TranscriptionPanel key={activeUserId} initialModel={requestedModel ?? undefined} onBalance={updateBalance} onSignIn={onOpenAuth} /> : (
       <div className="playground-workspace mt-5 rounded-2xl border border-neutral-200/90 bg-white shadow-sm dark:border-white/10 dark:bg-neutral-900/70">
         {/* Control Bar: Language Pair → Modality & Model → Options & Run */}
         <div className="playground-toolbar rounded-t-2xl border-b border-neutral-200/80 bg-neutral-50/60 p-4 dark:border-white/10 dark:bg-white/[0.02] sm:p-5">
@@ -3720,6 +3725,7 @@ export function PlaygroundPage({
           </div>
         )}
       </div>
+      )}
     </section>
   );
 }

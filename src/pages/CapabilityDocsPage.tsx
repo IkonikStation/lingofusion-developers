@@ -21,6 +21,19 @@ const guides: Record<string, Guide> = {
   -d '{"model":"LingoFusion","input":"Hello, world!","from_language":"en","to_language":"fr"}'`,
     prices: textModels.filter((m) => !m.local).map((m) => ({ name: m.model, amount: m.inputUsd, unit: "/ 1M input tokens", note: `$${m.outputUsd.toFixed(2)} / 1M output tokens` })),
   },
+  Transcription: {
+    title: "Transcription", eyebrow: "Audio", intro: "Turn recordings or live microphone audio into text.",
+    input: "Recorded or live audio", process: "Transcribe speech", output: "Text transcript",
+    overview: "Use LingoFusion Transcribe for recordings at $0.01 per minute, or LingoFusion Live Transcribe for live audio at $0.03 per minute. Copy or download your transcript from Playground.",
+    uses: ["Transcribe recorded notes and interviews", "Create live captions", "Make audio searchable"],
+    tips: ["Playground converts supported recordings automatically; uploads support up to 3 minutes and 25 MB.", "Live Playground sessions support one minute of microphone audio. Unused reserved credit is returned after settlement.", "API file uploads require mono PCM16 WAV at 24 kHz and an Idempotency-Key. Billing uses verified audio duration, rounded up once to six decimal USD places."],
+    mode: "transcription", endpoint: "/v1/audio/transcriptions", sample: `curl https://lingofusion-gateway.lingofusion-api.workers.dev/v1/audio/transcriptions \\
+  -H "Authorization: Bearer $LINGOFUSION_API_KEY" \\
+  -H "Idempotency-Key: recording-001" \\
+  -F 'model=LingoFusion Transcribe' \\
+  -F 'file=@audio.wav'`,
+    prices: transcriptionModels.map(m => ({ name: m.model, amount: m.priceUsd, unit: "/ minute" })),
+  },
   "Speech generation": {
     title: "Audio & speech", eyebrow: "Audio", intro: "Create spoken audio from text, or turn speech into text with the transcription model family.",
     input: "Text or audio", process: "Voice or transcription", output: "Speech or transcript",

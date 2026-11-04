@@ -971,6 +971,29 @@ export function recordBrowserStreamUsage({
   return state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance;
 }
 
+export function recordBrowserTranscriptionUsage(receipt: {
+  model: string; operation_id: string; duration_seconds: number; cost_usd: number; balance_usd: number;
+}): void {
+  const state = loadState();
+  if (!Number.isFinite(receipt.balance_usd) || !Number.isFinite(receipt.cost_usd)) fail("Server billing receipt missing");
+  state.dashboard.account.paidBalance = receipt.balance_usd;
+  if (state.dashboard.user) state.dashboard.user.balance_usd = receipt.balance_usd;
+  const id = `transcription-${receipt.operation_id}`;
+  // A recovered receipt updates the authoritative balance without counting usage twice.
+  if (!state.dashboard.requestLogs.some(log => log.id === id) && receipt.duration_seconds > 0) {
+    state.dashboard.account.lifetimeSpend = Number((state.dashboard.account.lifetimeSpend + receipt.cost_usd).toFixed(6));
+    const now = new Date().toISOString();
+    state.dashboard.usageLedger?.unshift({ id, user_id: state.dashboard.user?.id || "", api_key_id: null,
+      model_id: receipt.model, prompt_tokens: 0, completion_tokens: 0, cost_usd: receipt.cost_usd, source: "playground", created_at: now });
+    createChargeEntry(state, receipt.cost_usd, `${receipt.model} (${receipt.duration_seconds.toFixed(1)}s) via playground`);
+    logRequest(state, { id, timestamp: now, projectId: state.dashboard.projects[0]?.id || "proj_default",
+      keyId: "playground_session", endpoint: "/api/transcription", model: receipt.model, feature: "Transcription",
+      status: 200, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, totalTokens: 0, words: 0,
+      cost: receipt.cost_usd, latencyMs: 0, errorCode: "", streaming: receipt.model === "LingoFusion Live Transcribe" });
+  }
+  saveState(state);
+}
+
 export function recordBrowserMusicUsage({
   modelId,
   costUsd = 0.10,
