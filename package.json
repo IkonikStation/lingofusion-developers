@@ -9,6 +9,7 @@
     "test": "node scripts/test-platform.mjs",
     "test:localization": "node scripts/check-locales.mjs && node scripts/test-localization.mjs",
     "test:billing": "node --test scripts/test-billing.mjs && node scripts/test-gifts.mjs && node scripts/test-billing-node.mjs",
+    "test:text-billing": "node --test scripts/test-metered-text.mjs scripts/test-node-margin.mjs scripts/test-metered-ledger.mjs && node scripts/test-node-provider-margin.mjs",
     "test:stripe-sandbox": "node scripts/test-stripe-sandbox.mjs"
   },
   "dependencies": {

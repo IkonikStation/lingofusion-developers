@@ -4,7 +4,12 @@ export async function billing(env, body) {
   if (!env.BILLING || !env.GIFTS) throw new Error('Secure billing storage is not configured.');
   const response = await env.BILLING.get(env.BILLING.idFromName('ledger-v1')).fetch('https://billing/internal', { method: 'POST', body: JSON.stringify(body) });
   const value = await response.json();
-  if (!response.ok) throw new Error(value.message || 'Billing operation failed.');
+  if (!response.ok) {
+    const error = new Error(value.message || 'Billing operation failed.');
+    error.status = response.status;
+    error.code = value.error;
+    throw error;
+  }
   return value;
 }
 
@@ -37,12 +42,72 @@ export class BillingLedger {
     await this.project().catch(() => {});
   }
   async alarm() { await this.state.blockConcurrencyWhile(() => this.project()); }
+  async usageResult(key, record) {
+    if (!record.resultChunks) return record.result;
+    let raw = '';
+    for (let i = 0; i < record.resultChunks; i++) {
+      const part = await this.state.storage.get(`${key}:result:${i}`);
+      if (typeof part !== 'string') throw new Error('Stored response requires reconciliation.');
+      raw += part;
+    }
+    return JSON.parse(raw);
+  }
   async fetch(request) {
     return this.state.blockConcurrencyWhile(async () => {
       try {
         await this.project();
-        const { action, email, order, session, delta, operationId, gifts, hold, gift } = await request.json();
+        const { action, email, order, session, delta, operationId, gifts, hold, gift, fingerprint, maximumMicros, actualMicros, result, evidence } = await request.json();
         const storage = this.state.storage;
+        if (action === 'usageStatus') {
+          if (!email || !/^[A-Za-z0-9_-]{1,100}$/.test(operationId || '')) throw new Error('Invalid usage identity.');
+          const record = await storage.get(`meteredUsage:${email}:${operationId}`);
+          if (!record) return Response.json({ error: 'usage_not_found' }, { status: 404 });
+          return Response.json({ operation_id: operationId, status: record.status,
+            held_usd: record.status === 'settled' ? 0 : record.maximumMicros / 1e6,
+            cost_usd: record.actualMicros === undefined ? null : record.actualMicros / 1e6,
+            result: record.status === 'settled' ? await this.usageResult(`meteredUsage:${email}:${operationId}`, record) : null,
+            balance_usd: await this.initial(email) });
+        }
+        if (['usageReserve', 'usageFinish', 'usageUncertain'].includes(action)) {
+          if (!email || !operationId || operationId.length > 100 || !fingerprint) throw new Error('Invalid usage identity.');
+          const key = `meteredUsage:${email}:${operationId}`;
+          const prior = await storage.get(key);
+          if (prior && prior.fingerprint !== fingerprint) throw new Error('Idempotency conflict.');
+          if (action === 'usageReserve') {
+            if (prior) return Response.json({ ...prior, result: await this.usageResult(key, prior), replay: true, balance_usd: await this.initial(email) });
+            if (!Number.isSafeInteger(maximumMicros) || maximumMicros <= 0) throw new Error('Invalid reservation.');
+            const available = Math.round((await this.initial(email)) * 1e6);
+            if (available < maximumMicros) return Response.json({ message: 'Insufficient available funds.' }, { status: 402 });
+            // The durable record is written before dispatch. Replays never redispatch.
+            const record = { fingerprint, maximumMicros, status: 'dispatched', createdAt: Date.now() };
+            await this.write({ [key]: record }, { [email]: (available - maximumMicros) / 1e6 });
+            return Response.json({ ...record, replay: false });
+          }
+          if (!prior) throw new Error('Unknown reservation.');
+          if (action === 'usageUncertain') {
+            if (prior.status !== 'settled') await storage.put(key, { ...prior, status: 'uncertain' });
+            return Response.json({ held: prior.status !== 'settled' });
+          }
+          if (prior.status === 'settled') {
+            if (prior.actualMicros !== actualMicros) throw new Error('Conflicting settlement.');
+            return Response.json({ ...prior, replay: true, balance_usd: await this.initial(email) });
+          }
+          if (!Number.isSafeInteger(actualMicros) || actualMicros < 0 || actualMicros > prior.maximumMicros || !evidence?.providerRequestId) {
+            throw new Error('Verified bounded provider usage required.');
+          }
+          const receiptKey = `meteredProvider:${evidence.providerRequestId}`;
+          const receiptOwner = await storage.get(receiptKey);
+          if (receiptOwner && receiptOwner !== key) throw new Error('Provider receipt reused.');
+          const serialized = JSON.stringify(result);
+          if (typeof serialized !== 'string' || new TextEncoder().encode(serialized).length > 2000000) throw new Error('Response exceeds durable replay limit.');
+          const resultEntries = {};
+          const resultChunks = serialized.length > 16000 ? Math.ceil(serialized.length / 16000) : 0;
+          for (let i = 0; i < resultChunks; i++) resultEntries[`${key}:result:${i}`] = serialized.slice(i * 16000, (i + 1) * 16000);
+          const next = { ...prior, status: 'settled', actualMicros, result: resultChunks ? undefined : result, resultChunks, evidence };
+          const balance = Math.round((await this.initial(email)) * 1e6) + prior.maximumMicros - actualMicros;
+          await this.write({ ...resultEntries, [key]: next, [receiptKey]: key }, { [email]: balance / 1e6 });
+          return Response.json({ ...next, balance_usd: balance / 1e6 });
+        }
         if (action === 'order') {
           const existing = await storage.get(`order:${order.id}`);
           if (existing && JSON.stringify(existing) !== JSON.stringify(order)) throw new Error('Conflicting order.');

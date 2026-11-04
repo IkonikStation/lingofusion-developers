@@ -37,6 +37,7 @@ jobs:
           node --test scripts/test-billing.mjs
           node scripts/test-gifts.mjs
           node scripts/test-billing-node.mjs
+          npm run test:text-billing
 
       - name: Check localization
         run: pnpm test:localization

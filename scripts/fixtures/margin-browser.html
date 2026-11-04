@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Local margin billing fixture</title>
+<body style="font:16px system-ui;max-width:650px;margin:60px auto">
+<h1>Local synthetic billing test</h1>
+<p>This fixture signs in a synthetic local account. It uses the local Worker at port 8797 with mocked provider responses. It cannot make a paid AI request.</p>
+<button id="start">Open playground as synthetic tester</button>
+<button id="recovery">Test recovery of the stored synthetic request</button>
+<script>
+document.getElementById('start').onclick = () => {
+  if (!['127.0.0.1', 'localhost'].includes(location.hostname)) throw new Error('Local fixture only');
+  localStorage.setItem('lingofusion_auth_user_v2', JSON.stringify({ id: 'margin-runtime', name: 'Synthetic local tester',
+    email: 'margin-runtime@example.invalid', provider: 'google', createdAt: new Date().toISOString(), sessionToken: 'synthetic-only', expiresAt: Date.now()+3600000 }));
+  location.href='/playground?browser-api';
+};
+document.getElementById('recovery').onclick = () => {
+  if (!['127.0.0.1', 'localhost'].includes(location.hostname)) throw new Error('Local fixture only');
+  sessionStorage.setItem('lf-pending-text:margin-runtime:fixture-recovery', 'runtime-one');
+  document.getElementById('start').click();
+};
+</script></body></html>

@@ -146,10 +146,10 @@ export function PricingPage({
   const textPricingDescription = textPricingMode === "fast"
     ? "Fast mode is priced at 1.5× Default for supported models."
     : textPricingMode === "ultrafast"
-    ? "Translate up to 6× faster without compromising quality, for 4× the standard price."
+    ? "Ultrafast is 4× the Default price. Currently available for Ultra; Pro Ultrafast is unavailable."
     : textPricingMode === "instant"
     ? "Real-time streaming processing with immediate results."
-    : "Batch API offers 50% discount for asynchronous requests with 24-hour turnaround.";
+    : "Reference Batch rates are 50% of Default. Asynchronous Batch processing is not currently available on these translation routes.";
 
   const pricingLabels: PricingLabels = {
     model: t("tableModel"),
@@ -263,7 +263,7 @@ export function PricingPage({
               ))}
             </SelectField>
             <NumberField
-              label="Input tokens"
+              label="Total input tokens (including system instructions)"
               min={0}
               max={Infinity}
               step={1000}
@@ -279,6 +279,7 @@ export function PricingPage({
               onChange={setOutputTokens}
             />
           </SectionCalculator>
+          <p className="mt-3 text-xs text-neutral-500">Include built-in instructions and request overhead in your input count. Output includes reasoning tokens. Playground provides a request-specific maximum quote.</p>
 
           <PricingCard
             key={`text-${textPricingMode}-${currencyPresentationKey}`}

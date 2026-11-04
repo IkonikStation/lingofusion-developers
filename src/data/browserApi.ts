@@ -304,10 +304,6 @@ export function calculateTokenCost(
 ) {
   let p = Math.max(0, promptTokens);
   let c = Math.max(0, completionTokens);
-  // 50-token minimum billable floor for LingoFusion Nano micro-requests (~$0.00004)
-  if (modelId && modelId.toLowerCase().includes("nano") && (p + c) < 50) {
-    p = Math.max(p, 50 - c);
-  }
   const cost = (p * (inputPerMillion / 1_000_000)) + (c * (outputPerMillion / 1_000_000));
   return Number(cost.toFixed(6));
 }
@@ -667,6 +663,37 @@ function buildBrowserTranslationPrompt(fromLanguage: string, toLanguage: string,
   });
 }
 
+async function textOperationId(body: Record<string, any>): Promise<string> {
+  if (body.idempotency_key) return String(body.idempotency_key);
+  const signature = JSON.stringify({ model: body.model, messages: body.messages,
+    from: body.from_language, to: body.to_language, tone: body.tone,
+    mode: body.pricing_mode, reasoning: body.reasoning, reasoning_effort: body.reasoning_effort,
+    reasoning_enabled: body.reasoning_enabled, max: body.max, max_reasoning: body.max_reasoning,
+    temperature: body.temperature, allow_web_search: body.allow_web_search, web_search: body.web_search, stream: body.stream,
+    max_completion_tokens: body.max_completion_tokens ?? 512 });
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(signature));
+  const hash = Array.from(new Uint8Array(bytes), x => x.toString(16).padStart(2, "0")).join("");
+  const key = `lf-pending-text:${getCurrentUser().id}:${hash}`;
+  const previous = sessionStorage.getItem(key);
+  if (previous) return previous;
+  const id = crypto.randomUUID();
+  sessionStorage.setItem(key, id);
+  return id;
+}
+
+export function clearTextOperation(operationId: string) {
+  const prefix = `lf-pending-text:${getCurrentUser().id}:`;
+  for (const key of Object.keys(sessionStorage)) {
+    if (key.startsWith(prefix) && sessionStorage.getItem(key) === operationId) sessionStorage.removeItem(key);
+  }
+}
+
+export function pendingTextOperations(): string[] {
+  const prefix = `lf-pending-text:${getCurrentUser().id}:`;
+  return Object.keys(sessionStorage).filter(key => key.startsWith(prefix))
+    .map(key => sessionStorage.getItem(key)).filter((id): id is string => Boolean(id));
+}
+
 async function runChatCompletionBrowser(state: BrowserState, options?: RequestInit, source: "api" | "playground" = "playground") {
   const started = Date.now();
   let keyId: string | null = null;
@@ -707,6 +734,7 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
   let promptTokens = tokenEstimate(lastUser);
   let replyText = "";
   let completionTokens = 0;
+  let serverSettlement: { cost_usd: number; balance_usd: number; service_fee_usd: number } | null = null;
 
   // Attempt live behind-the-scenes model call via secure edge gateway
   try {
@@ -723,14 +751,20 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
       headers: {
         "Content-Type": "application/json",
         "X-LingoFusion-Client-Token": "lf_play_secure_649f7",
+        "X-LingoFusion-Billing-Version": "full-input-tokens-v1",
+        "Idempotency-Key": await textOperationId(body),
         ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       },
       body: JSON.stringify({
-        model: routing.upstreamModel,
+        // Send the product ID so the gateway can select its authoritative
+        // prompt, provider route, and price. Provider IDs bypass that mapping.
+        model: modelPricing.model_id,
         from_language: fromLanguage,
         to_language: toLanguage,
         tone: body.tone,
         pricing_mode: body.pricing_mode,
+        max_completion_tokens: body.max_completion_tokens ?? 512,
+        max_cost_usd: body.max_cost_usd,
         messages: [
           {
             role: "system",
@@ -761,13 +795,14 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
       if (content) {
         replyText = content;
         const reportedPromptTokens = Number(upstreamData.usage?.prompt_tokens);
-        // Absorb backend system prompt: only bill the user for their actual input tokens
-        if (Number.isFinite(reportedPromptTokens) && reportedPromptTokens <= promptTokens * 2) {
-          promptTokens = reportedPromptTokens;
-        } else {
-          promptTokens = tokenEstimate(lastUser);
-        }
+        // Full server input is billable, including built-in instructions.
+        // Never replace the authoritative receipt with a customer-text estimate.
+        if (!Number.isSafeInteger(reportedPromptTokens) || reportedPromptTokens < 0) fail("Server input usage missing");
+        promptTokens = reportedPromptTokens;
         completionTokens = Number(upstreamData.usage?.completion_tokens) || Math.max(1, tokenEstimate(replyText));
+        if (!Number.isFinite(upstreamData.cost_usd) || !Number.isFinite(upstreamData.balance_usd)) fail("Server billing receipt missing");
+        serverSettlement = { cost_usd: upstreamData.cost_usd, balance_usd: upstreamData.balance_usd, service_fee_usd: upstreamData.service_fee_usd || 0 };
+        if (typeof upstreamData.operation_id === "string") clearTextOperation(upstreamData.operation_id);
       }
     } else {
       const errorData = (await upstreamRes.json().catch(() => ({}))) as Record<string, any>;
@@ -800,9 +835,11 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
     modelPricing.output_per_million * priceMultiplier,
     modelPricing.model_id,
   );
-  const costUsd = Number((tokenCostUsd + (routing.webSearchCallFeeUsd || 0)).toFixed(6));
-
-  applyCharge(state, costUsd);
+  if (!serverSettlement) fail("Translation was not settled by the server. Please retry with the same request ID.");
+  const costUsd = serverSettlement.cost_usd;
+  state.dashboard.account.paidBalance = serverSettlement.balance_usd;
+  state.dashboard.account.lifetimeSpend = Number((state.dashboard.account.lifetimeSpend + costUsd).toFixed(6));
+  if (state.dashboard.user) state.dashboard.user.balance_usd = serverSettlement.balance_usd;
   const requestId = `chatcmpl-${randomId("browser")}`;
   const now = new Date().toISOString();
 
@@ -865,6 +902,7 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
       completion_tokens: completionTokens,
       total_tokens: promptTokens + completionTokens,
       cost_usd: costUsd,
+      service_fee_usd: serverSettlement.service_fee_usd,
       balance_usd: state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance,
     },
   };
@@ -876,15 +914,23 @@ export function recordBrowserStreamUsage({
   completionTokens,
   costUsd,
   source = "playground",
+  balanceUsd,
+  operationId,
 }: {
   modelId: string;
   promptTokens: number;
   completionTokens: number;
   costUsd: number;
   source?: "api" | "playground";
+  balanceUsd?: number;
+  operationId?: string;
 }): number {
   const state = loadState();
-  applyCharge(state, costUsd);
+  if (!Number.isFinite(balanceUsd)) fail("Server billing receipt missing");
+  state.dashboard.account.paidBalance = balanceUsd!;
+  state.dashboard.account.lifetimeSpend = Number((state.dashboard.account.lifetimeSpend + costUsd).toFixed(6));
+  if (state.dashboard.user) state.dashboard.user.balance_usd = balanceUsd!;
+  if (operationId) clearTextOperation(operationId);
   const now = new Date().toISOString();
   state.dashboard.usageLedger?.unshift({
     id: randomId("ulg"),
@@ -1031,14 +1077,18 @@ export async function streamChatCompletionBrowser(
     headers: {
       "Content-Type": "application/json",
       "X-LingoFusion-Client-Token": "lf_play_secure_649f7",
+      "X-LingoFusion-Billing-Version": "full-input-tokens-v1",
+      "Idempotency-Key": await textOperationId(body),
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     },
     body: JSON.stringify({
-      model: routing.upstreamModel,
+      model: modelPricing.model_id,
       from_language: fromLanguage,
       to_language: toLanguage,
       tone: body.tone,
       pricing_mode: body.pricing_mode,
+      max_completion_tokens: body.max_completion_tokens ?? 512,
+      max_cost_usd: body.max_cost_usd,
       messages: [
         {
           role: "system",
@@ -1227,62 +1277,28 @@ async function runImageTranslationBrowser(
   };
 }
 
-function runTranslation(state: BrowserState, options?: RequestInit) {
-  const started = Date.now();
-  const { key, project } = authorize(state, options);
+async function runTranslation(state: BrowserState, options?: RequestInit) {
+  const { key } = authorize(state, options);
   if (!key.scopes.includes("Text translation")) fail("missing_scope");
   const body = requestBody(options);
-  const pricingMode: TextPricingMode = body.pricing_mode === "ultrafast" ? "ultrafast" : body.pricing_mode === "fast" ? "fast" : body.pricing_mode === "batch" ? "batch" : "instant";
-  const model = textModelsByPricingMode[pricingMode].find((candidate) => candidate.model === body.model);
+  const mode: TextPricingMode = body.pricing_mode === "batch" ? "batch" : body.pricing_mode === "fast" ? "fast" : body.pricing_mode === "ultrafast" ? "ultrafast" : "instant";
+  const model = textModelsByPricingMode[mode].find(candidate => candidate.model === body.model);
   if (!model) fail("unsupported_model");
-  const input = String(body.input ?? "").trim();
-  const fromLanguage = String(body.from_language ?? "").trim();
-  const toLanguage = String(body.to_language ?? "").trim();
-  if (!input || !fromLanguage || !toLanguage) fail("invalid_request");
-
-  const outputText = translatePhrase(input, fromLanguage, toLanguage);
-  const inputTokens = tokenEstimate(input);
-  const outputTokens = tokenEstimate(outputText);
-  const cost = Number(((inputTokens / 1_000_000) * model.inputUsd + (outputTokens / 1_000_000) * model.outputUsd).toFixed(6));
-  const requestId = randomId("req");
-  applyCharge(state, cost);
-  createChargeEntry(state, cost, `${model.model}${pricingMode === "batch" ? " Batch" : pricingMode === "fast" ? " Fast" : pricingMode === "ultrafast" ? " Ultrafast" : ""} /v1/translate`);
-  logRequest(state, {
-    id: requestId,
-    timestamp: new Date().toISOString(),
-    projectId: project.id,
-    keyId: key.id,
-    endpoint: "/v1/translate",
-    model: model.model,
-    feature: "Text translation",
-    status: 200,
-    inputTokens,
-    outputTokens,
-    reasoningTokens: 0,
-    totalTokens: inputTokens + outputTokens,
-    words: input.split(/\s+/).length,
-    cost,
-    latencyMs: Math.max(18, Date.now() - started),
-    errorCode: "",
-    streaming: Boolean(body.stream),
-  });
-  return {
-    id: requestId,
-    model: model.model,
-    pricing_mode: pricingMode === "ultrafast" ? "ultrafast" : pricingMode === "fast" ? "fast" : pricingMode === "batch" ? "batch" : "default",
-    output_text: outputText,
-    stream: Boolean(body.stream),
-    usage: {
-      input_tokens: inputTokens,
-      source_text_tokens_estimate: inputTokens,
-      instruction_tokens_estimate: 0,
-      output_tokens: outputTokens,
-      reasoning_tokens: 0,
-      visible_output_tokens: outputTokens,
-      total_tokens: inputTokens + outputTokens,
-      cost_usd: cost,
-    },
-  };
+  const input = String(body.input || "").trim();
+  if (!input || !body.from_language || !body.to_language) fail("invalid_request");
+  if (model.local) {
+    const output = translatePhrase(input, String(body.from_language), String(body.to_language), model.model);
+    return { id: randomId("local"), model: model.model, output_text: output, usage: {
+      input_tokens: countTokens(input), output_tokens: countTokens(output), cost_usd: 0,
+    } };
+  }
+  const result = await runChatCompletionBrowser(state, { ...options, body: JSON.stringify({ ...body,
+    messages: [{ role: "user", content: input }], stream: false,
+  }) }, "api");
+  return { id: result.id, model: result.model, output_text: result.choices[0].message.content,
+    pricing_mode: body.pricing_mode || "default", stream: false,
+    usage: { ...result.usage, input_tokens: result.usage.prompt_tokens,
+      output_tokens: result.usage.completion_tokens, instruction_tokens_estimate: 0 } };
 }
 
 async function runSpeechBrowser(state: BrowserState, options?: RequestInit) {
@@ -2068,7 +2084,7 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
       result = { email, gifts: [], totalAvailableUsd: 0 };
     }
   } else if (method === "POST" && path === "/v1/translate") {
-    result = runTranslation(state, options);
+    result = await runTranslation(state, options);
   } else if (method === "POST" && (path === "/v1/music" || path === "/api/playground/music")) {
     result = await runMusic(state, options);
   } else if (method === "POST" && (path === "/v1/audio/speech" || path === "/api/playground/speech")) {

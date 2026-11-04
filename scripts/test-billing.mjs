@@ -29,7 +29,10 @@ globalThis.fetch=async (url,options={})=>{
   if(target.startsWith('https://api.stripe.com/v1/charges/')) {const s=[...sessions.values()].find(x=>new URL(target).pathname.endsWith('/'+x.payment_intent?.latest_charge?.id));return Response.json(s.payment_intent.latest_charge);}
   if(target==='https://gmail.googleapis.com/gmail/v1/users/me/messages/send') return Response.json({id:'mock-message'});
   if(target==='https://api.openai.com/v1/chat/completions') {
-    return Response.json({ id: 'chatcmpl-mock', object: 'chat.completion', created: 1730000000, model: 'gpt-4o', choices: [{ message: { role: 'assistant', content: 'Bonjour le monde' } }] });
+    const payload = JSON.parse(options.body);
+    return Response.json({ id: `chatcmpl-mock-${++serial}`, object: 'chat.completion', created: 1730000000, model: payload.model,
+      choices: [{ message: { role: 'assistant', content: 'Bonjour le monde' } }],
+      usage: { prompt_tokens: 3200, completion_tokens: 4, prompt_tokens_details: { cached_tokens: 0 } } });
   }
   if(target==='https://oauth2.googleapis.com/token') return Response.json({access_token:'mock'});
   throw new Error(`Unmocked network blocked: ${target}`);

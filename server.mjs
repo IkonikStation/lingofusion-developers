@@ -9,6 +9,20 @@ import { DatabaseSync } from "node:sqlite";
 import { LMStudioClient } from "@lmstudio/sdk";
 import Stripe from "stripe";
 import { getEncoding } from "js-tiktoken";
+import {
+  initTextReservationTable,
+  prepareNodeTextRequest,
+  quoteNodeTextRequest,
+  reserveNodeTextUsage,
+  settleNodeTextUsage,
+  markNodeTextUncertain,
+  settleSimulatedTextUsage,
+  priceTranslateUsage,
+  hashFingerprint,
+  countTextTokens,
+} from "./nodeTextMetered.mjs";
+import { buildModelSystemPrompt } from "./shared/systemPrompts.mjs";
+import { fetchTextProvider } from "./shared/textProvider.mjs";
 
 const o200kEnc = getEncoding("o200k_base");
 
@@ -51,6 +65,7 @@ sqlDb.exec(schemaSql);
 sqlDb.exec("CREATE TABLE IF NOT EXISTS billing_subscription_states (id TEXT PRIMARY KEY, status TEXT NOT NULL)");
 sqlDb.exec("CREATE TABLE IF NOT EXISTS billing_invoices (id TEXT PRIMARY KEY, subscription_id TEXT NOT NULL)");
 sqlDb.exec("CREATE TABLE IF NOT EXISTS billing_orders (id TEXT PRIMARY KEY, body TEXT NOT NULL, refunded_cents INTEGER NOT NULL DEFAULT 0, credited_cents INTEGER NOT NULL DEFAULT 0)");
+initTextReservationTable(sqlDb);
 
 const textModels = [
   { model: "LingoFusion Nano", input: 0.15, output: 0.85 },
@@ -1397,14 +1412,7 @@ Remain ExplainFusion at all times.`;
 }
 
 function buildTranslationSystemPrompt({ modelName = "LingoFusion", fromLanguage = "English", toLanguage = "French", tone = "" } = {}) {
-  const normName = String(modelName || "").trim();
-  if (normName === "LingoFusion Ultra") {
-    return buildUltraLingoFusionPrompt({ fromLanguage, toLanguage });
-  }
-  if (normName === "ExplainFusion" || normName === "LingoFusion Explain") {
-    return buildExplainFusionPrompt({ toLanguage });
-  }
-  return buildStandardLingoFusionPrompt({ fromLanguage, toLanguage, tone });
+  return buildModelSystemPrompt({ modelName, fromLanguage, toLanguage, tone });
 }
 
 // PLACEHOLDER — the final LingoFusion image-translation system prompt will be
@@ -1634,6 +1642,8 @@ async function runRealTranslation({ modelName, input, fromLanguage, toLanguage, 
       outputTokens: response.usage?.completion_tokens ?? response.usage?.output_tokens,
       reasoningTokens: response.usage?.completion_tokens_details?.reasoning_tokens ?? response.usage?.output_tokens_details?.reasoning_tokens,
       totalTokens: response.usage?.total_tokens,
+      cachedTokens: response.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+      cacheWriteTokens: response.usage?.prompt_tokens_details?.cache_write_tokens ?? 0,
     };
   }
 
@@ -1656,6 +1666,8 @@ async function runRealTranslation({ modelName, input, fromLanguage, toLanguage, 
     outputTokens: response.usage?.completion_tokens,
     reasoningTokens: response.usage?.completion_tokens_details?.reasoning_tokens,
     totalTokens: response.usage?.total_tokens,
+    cachedTokens: response.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+    cacheWriteTokens: response.usage?.prompt_tokens_details?.cache_write_tokens ?? 0,
   };
 }
 
@@ -2518,18 +2530,8 @@ async function handleTextToSpeech({ req, res, body, user, apiKeyId, source, db }
 // Handles both /v1/chat/completions (source='api') and /api/playground/chat (source='playground')
 async function handleChatCompletions({ req, res, body, user, apiKeyId, source, db }) {
   const started = Date.now();
-  // 1. Pre-check user balance
-  if (user.balance_usd <= 0) {
-    return send(res, 402, {
-      error: {
-        message: "Insufficient balance. Please deposit credits.",
-        type: "insufficient_quota",
-        code: "insufficient_quota",
-      },
-    });
-  }
 
-  // 2. Model Resolution against model_pricing
+  // 1. Model Resolution against model_pricing
   const requestedModel = String(body.model || "").trim();
   const modelPricing = resolveModelPricing(requestedModel);
   if (!modelPricing) {
@@ -2554,6 +2556,28 @@ async function handleChatCompletions({ req, res, body, user, apiKeyId, source, d
     });
   }
 
+  if (body.quote || req.headers["x-quote-only"]) {
+    try {
+      const quote = quoteNodeTextRequest(body, modelPricing.model_id);
+      return send(res, 200, quote);
+    } catch (err) {
+      return send(res, 400, { error: { message: err.message, type: "invalid_request_error" } });
+    }
+  }
+
+  let prepared;
+  try {
+    prepared = prepareNodeTextRequest(body, modelPricing.model_id);
+  } catch (err) {
+    return send(res, 400, {
+      error: {
+        message: err.message,
+        type: "invalid_request_error",
+        code: "invalid_request",
+      },
+    });
+  }
+
   const isStream = Boolean(body.stream);
   const temperature = body.temperature !== undefined ? Number(body.temperature) : 0.7;
   const maxTokens = body.max_tokens !== undefined ? Number(body.max_tokens) : undefined;
@@ -2562,42 +2586,241 @@ async function handleChatCompletions({ req, res, body, user, apiKeyId, source, d
 
   const routing = resolveBackendModelRouting(modelPricing.model_id, body);
   const upstreamConfig = realModelsEnabled() ? getUpstreamConfig(modelPricing) : null;
+  const operationId = req.headers["idempotency-key"] || body.idempotency_key || `op_${randomUUID()}`;
+  const fingerprint = hashFingerprint({ pricingVersion: prepared.pricingVersion, payload: prepared.payload, mode: prepared.mode });
 
-  // Prepare upstream messages (inject behind-the-scenes translation instruction when from_language/to_language are supplied)
-  const fromLang = String(body.from_language || "").trim();
-  const toLang = String(body.to_language || "").trim();
-  const hasSystemMsg = messages.some((m) => m?.role === "system" || m?.role === "developer");
-  const upstreamMessages =
-    !hasSystemMsg
-      ? [
-          {
-            role: "system",
-            content: buildTranslationSystemPrompt({
-              modelName: modelPricing.model_id,
-              fromLanguage: fromLang || "the source language",
-              toLanguage: toLang || "the target language",
-              tone: String(body.tone || "Natural (Default)"),
-            }),
+  if (upstreamConfig) {
+    const reservation = reserveNodeTextUsage(sqlDb, {
+      userId: user.id,
+      operationId,
+      fingerprint,
+      maximumMicros: prepared.maximum.chargeMicros,
+    });
+
+    if (reservation.error === "idempotency_conflict") {
+      return send(res, 409, { error: { message: "Idempotency conflict for operation", type: "invalid_request_error" } });
+    }
+    if (reservation.error === "insufficient_quota") {
+      return send(res, 402, {
+        error: { message: "Insufficient balance for reservation. Please deposit credits.", type: "insufficient_quota", code: "insufficient_quota" },
+      });
+    }
+    if (reservation.replay) {
+      if (reservation.status !== "settled" || !reservation.result) {
+        return send(res, 409, { error: { message: "Request pending reconciliation", type: "reconciliation_pending" }, operation_id: operationId });
+      }
+      if (isStream) {
+        res.writeHead(200, {
+          "content-type": "text/event-stream; charset=utf-8",
+          "cache-control": "no-cache, no-transform",
+          "connection": "keep-alive",
+          "access-control-allow-origin": "*",
+        });
+        const replayResult = reservation.result;
+        const deltaChunk = {
+          id: replayResult.id,
+          object: "chat.completion.chunk",
+          created,
+          model: modelPricing.model_id,
+          choices: [{ index: 0, delta: { content: replayResult.choices?.[0]?.message?.content || "" }, finish_reason: null }],
+        };
+        res.write(`data: ${JSON.stringify(deltaChunk)}\n\n`);
+        res.write(`data: ${JSON.stringify({ ...replayResult, choices: [] })}\n\n`);
+        res.write("data: [DONE]\n\n");
+        return res.end();
+      }
+      return send(res, 200, reservation.result);
+    }
+
+    if (isStream) {
+      res.writeHead(200, {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-cache, no-transform",
+        "connection": "keep-alive",
+        "access-control-allow-origin": "*",
+      });
+
+      let clientAborted = false;
+      res.on("close", () => {
+        clientAborted = true;
+      });
+
+      let upstreamRes;
+      try {
+        upstreamRes = await fetchTextProvider(prepared, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${upstreamConfig.apiKey}`,
+            "content-type": "application/json",
           },
-          ...messages,
-        ]
-      : messages;
+          signal: AbortSignal.timeout(120_000),
+        }, fetch, upstreamConfig.url);
+      } catch {
+        markNodeTextUncertain(sqlDb, operationId, user.id);
+        if (!res.writableEnded) {
+          res.write(`data: ${JSON.stringify({ error: { message: "The configured model provider could not be reached.", code: "provider_unreachable" } })}\n\n`);
+          res.end();
+        }
+        return;
+      }
 
-  // Map reasoningEffort ('max' -> 'xhigh' for chat/completions compatibility)
-  const upstreamReasoningEffort =
-    routing.reasoningEffort === "max" ? "xhigh" : routing.reasoningEffort;
+      if (!upstreamRes.ok || !upstreamRes.body) {
+        markNodeTextUncertain(sqlDb, operationId, user.id);
+        if (!res.writableEnded) {
+          res.write(`data: ${JSON.stringify({ error: { message: "The configured model provider returned an error.", code: "provider_request_failed" } })}\n\n`);
+          res.end();
+        }
+        return;
+      }
 
-  // Build clean upstream payload with dynamic behind-the-scenes model & reasoning config
-  const upstreamPayload = {
-    model: routing.upstreamModel,
-    messages: upstreamMessages,
-    stream: isStream,
-    ...(upstreamReasoningEffort ? { reasoning_effort: upstreamReasoningEffort } : {}),
-    ...(["LingoFusion", "LingoFusion Lite"].includes(modelPricing.model_id) && !routing.webSearch && Number.isFinite(temperature)
-      ? { temperature: Math.min(2, Math.max(0, temperature)) }
-      : {}),
-    ...(isStream ? { stream_options: { ...(body.stream_options || {}), include_usage: true } } : {}),
-  };
+      const reader = upstreamRes.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let accumulatedText = "";
+      let finalUsage = null;
+      let providerChunkId = null;
+      let providerChunkModel = null;
+      let providerTier;
+      let providerFinishReason = null;
+
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value || new Uint8Array(), { stream: true });
+          buffer = buffer.replace(/\r\n/g, "\n");
+          if (buffer.length > 2000000) throw new Error("Provider stream frame too large");
+          const events = buffer.split("\n\n");
+          buffer = events.pop() || "";
+
+          for (const evt of events) {
+            const lines = evt.split("\n");
+            for (const line of lines) {
+              if (!line.startsWith("data:")) continue;
+              const dataStr = line.slice(5).trim();
+              if (!dataStr || dataStr === "[DONE]") continue;
+              try {
+                const parsed = JSON.parse(dataStr);
+                if (parsed.error || (parsed.id && providerChunkId && parsed.id !== providerChunkId) || (parsed.model && providerChunkModel && parsed.model !== providerChunkModel)) throw new Error("Provider stream identity mismatch");
+                if (parsed.id) providerChunkId = parsed.id;
+                if (parsed.model) providerChunkModel = parsed.model;
+                const deltaText = parsed.choices?.[0]?.delta?.content || "";
+                if (deltaText) accumulatedText += deltaText;
+                if (parsed.usage) { finalUsage = parsed.usage; providerTier = parsed.service_tier; }
+                if (parsed.choices?.[0]?.finish_reason) providerFinishReason = parsed.choices[0].finish_reason;
+                if (accumulatedText.length > 1000000) throw new Error("Provider output too large");
+                if (!parsed.usage && !res.writableEnded && !clientAborted) {
+                  res.write(`data: ${JSON.stringify({ ...parsed, model: modelPricing.model_id })}\n\n`);
+                }
+              } catch (err) { throw err; }
+            }
+          }
+        }
+      } catch {
+        {
+          markNodeTextUncertain(sqlDb, operationId, user.id);
+          if (!res.writableEnded) res.end();
+          return;
+        }
+      }
+
+      if (finalUsage && providerChunkId && providerChunkModel && !buffer.trim()) {
+        let settlement;
+        try {
+          settlement = settleNodeTextUsage(sqlDb, {
+            userId: user.id,
+            apiKeyId,
+            operationId,
+            fingerprint,
+            prepared,
+            providerData: {
+              id: providerChunkId,
+              model: providerChunkModel,
+              service_tier: providerTier,
+              usage: finalUsage,
+              choices: [{ message: { role: "assistant", content: accumulatedText }, finish_reason: providerFinishReason }],
+            },
+            source,
+            db,
+          });
+        } catch {
+          markNodeTextUncertain(sqlDb, operationId, user.id);
+          if (!res.writableEnded) res.end();
+          return;
+        }
+
+        if (!res.writableEnded && !clientAborted) {
+          const finalUsageChunk = {
+            ...settlement.result,
+            id: providerChunkId,
+            object: "chat.completion.chunk",
+            created,
+            model: modelPricing.model_id,
+            choices: [],
+            usage: settlement.result.usage,
+          };
+          res.write(`data: ${JSON.stringify(finalUsageChunk)}\n\n`);
+          res.write("data: [DONE]\n\n");
+          res.end();
+        }
+      } else {
+        markNodeTextUncertain(sqlDb, operationId, user.id);
+        if (!res.writableEnded) res.end();
+      }
+      return;
+    }
+
+    // Real non-streaming
+    let upstreamRes;
+    try {
+      upstreamRes = await fetchTextProvider(prepared, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${upstreamConfig.apiKey}`,
+          "content-type": "application/json",
+        },
+        signal: AbortSignal.timeout(60_000),
+      }, fetch, upstreamConfig.url);
+    } catch {
+      markNodeTextUncertain(sqlDb, operationId, user.id);
+      return send(res, 502, { error: { message: "The configured model provider could not be reached.", code: "provider_unreachable" }, operation_id: operationId });
+    }
+
+    if (!upstreamRes.ok) {
+      markNodeTextUncertain(sqlDb, operationId, user.id);
+      return send(res, 502, { error: { message: "The configured model provider returned an error.", code: "provider_request_failed" }, operation_id: operationId });
+    }
+
+    let settlement;
+    try {
+      const upstreamData = await upstreamRes.json();
+      settlement = settleNodeTextUsage(sqlDb, {
+        userId: user.id,
+        apiKeyId,
+        operationId,
+        fingerprint,
+        prepared,
+        providerData: upstreamData,
+        source,
+        db,
+      });
+    } catch (err) {
+      markNodeTextUncertain(sqlDb, operationId, user.id);
+      return send(res, 502, { error: { message: err.message, code: "usage_requires_reconciliation" }, operation_id: operationId });
+    }
+    return send(res, 200, settlement.result);
+  }
+
+  // Local simulated fallback
+  if (user.balance_usd <= 0) {
+    return send(res, 402, {
+      error: {
+        message: "Insufficient balance. Please deposit credits.",
+        type: "insufficient_quota",
+        code: "insufficient_quota",
+      },
+    });
+  }
 
   if (isStream) {
     res.writeHead(200, {
@@ -2607,162 +2830,14 @@ async function handleChatCompletions({ req, res, body, user, apiKeyId, source, d
       "access-control-allow-origin": "*",
     });
 
-    let promptTokens = estimateMessagesTokens(messages);
-    let completionTokens = 0;
-    let settled = false;
     let clientAborted = false;
+    req.on("close", () => { clientAborted = true; });
 
-    const finalizeStreamBilling = () => {
-      if (settled) return null;
-      settled = true;
-      const tokenCostUsd = calculateTokenCostUsd(
-        promptTokens,
-        completionTokens,
-        modelPricing.input_per_million,
-        modelPricing.output_per_million,
-        modelPricing.model_id,
-      );
-      const costUsd = Number((tokenCostUsd + (routing.webSearchCallFeeUsd || 0)).toFixed(6));
-      const deduction = deductUserBalanceAndLogUsage({
-        userId: user.id,
-        apiKeyId,
-        modelId: modelPricing.model_id,
-        promptTokens,
-        completionTokens,
-        costUsd,
-        source,
-        db,
-      });
-
-      if (db) {
-        db.requestLogs.unshift({
-          id: completionId,
-          timestamp: nowIso(),
-          projectId: db.projects[0]?.id || "proj_default",
-          keyId: apiKeyId || "playground_session",
-          endpoint: source === "api" ? "/v1/chat/completions" : "/api/playground/chat",
-          model: modelPricing.model_id,
-          feature: routing.webSearch ? "Web search translation" : "Chat completions",
-          method: "POST",
-          status: 200,
-          processingStatus: clientAborted ? "aborted_partial" : "complete",
-          streaming: true,
-          inputTokens: promptTokens,
-          outputTokens: completionTokens,
-          reasoningTokens: 0,
-          totalTokens: promptTokens + completionTokens,
-          words: 0,
-          costMicroCents: dollarsToMicroCents(costUsd),
-          creditSource: "paid",
-          latencyMs: Date.now() - started,
-          errorCode: "",
-          retry: "",
-        });
-        saveDb(db).catch(() => {});
-      }
-
-      return { costUsd, balanceUsd: deduction.balanceUsd ?? user.balance_usd, ledgerId: deduction.ledgerId };
-    };
-
-    req.on("close", () => {
-      if (!res.writableEnded) {
-        clientAborted = true;
-        finalizeStreamBilling();
-      }
-    });
-
-    // If real upstream is configured, stream from upstream
-    if (upstreamConfig) {
-      try {
-        const abortController = new AbortController();
-        req.on("close", () => abortController.abort());
-        const upstreamRes = await fetch(upstreamConfig.url, {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${upstreamConfig.apiKey}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify(upstreamPayload),
-          signal: abortController.signal,
-        });
-
-        if (upstreamRes.ok && upstreamRes.body) {
-          const reader = upstreamRes.body.getReader();
-          const decoder = new TextDecoder();
-          let buffer = "";
-
-          while (true) {
-            const { value, done } = await reader.read();
-            if (clientAborted) break;
-            buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-            const events = buffer.split("\n\n");
-            buffer = events.pop() || "";
-
-            for (const evt of events) {
-              const lines = evt.split("\n");
-              for (const line of lines) {
-                if (!line.startsWith("data:")) continue;
-                const dataStr = line.slice(5).trim();
-                if (!dataStr || dataStr === "[DONE]") continue;
-                try {
-                  const parsed = JSON.parse(dataStr);
-                  const deltaText = parsed.choices?.[0]?.delta?.content || "";
-                  if (deltaText) {
-                    completionTokens += tokenEstimate(deltaText);
-                  }
-                  if (parsed.usage) {
-                    if (Number.isFinite(parsed.usage.prompt_tokens) && parsed.usage.prompt_tokens <= promptTokens * 2) promptTokens = parsed.usage.prompt_tokens;
-                    if (Number.isFinite(parsed.usage.completion_tokens)) completionTokens = parsed.usage.completion_tokens;
-                  }
-                  if (!res.writableEnded) {
-                    res.write(`data: ${JSON.stringify(parsed)}\n\n`);
-                  }
-                } catch {
-                  // ignore malformed SSE chunk
-                }
-              }
-            }
-            if (done) break;
-          }
-
-          const settlement = finalizeStreamBilling();
-          if (!res.writableEnded && settlement) {
-            const finalUsageChunk = {
-              id: completionId,
-              object: "chat.completion.chunk",
-              created,
-              model: modelPricing.model_id,
-              choices: [],
-              usage: {
-                prompt_tokens: promptTokens,
-                completion_tokens: completionTokens,
-                total_tokens: promptTokens + completionTokens,
-                cost_usd: settlement.costUsd,
-                balance_usd: settlement.balanceUsd,
-              },
-            };
-            res.write(`data: ${JSON.stringify(finalUsageChunk)}\n\n`);
-            res.write("data: [DONE]\n\n");
-            res.end();
-          }
-          return;
-        }
-      } catch {
-        if (clientAborted) {
-          finalizeStreamBilling();
-          return;
-        }
-        // Fallback to local streaming generator if upstream fails
-      }
-    }
-
-    // Local standard SSE stream
     const fullReply = generateAssistantReply(modelPricing, messages, temperature, body);
     const rawTokens = fullReply.match(/\S+\s*/g) || [fullReply];
     const limitedTokens = maxTokens ? rawTokens.slice(0, Math.max(1, maxTokens)) : rawTokens;
     const streamDelayMs = Number(body.stream_delay_ms) > 0 ? Math.min(200, Number(body.stream_delay_ms)) : 12;
 
-    // Initial assistant role chunk
     const roleChunk = {
       id: completionId,
       object: "chat.completion.chunk",
@@ -2774,30 +2849,33 @@ async function handleChatCompletions({ req, res, body, user, apiKeyId, source, d
       res.write(`data: ${JSON.stringify(roleChunk)}\n\n`);
     }
 
+    let completionTokens = 0;
     for (let i = 0; i < limitedTokens.length; i++) {
-      if (clientAborted || res.writableEnded || res.destroyed) {
-        break;
-      }
-      const tokenPiece = limitedTokens[i];
+      if (clientAborted || res.writableEnded || res.destroyed) break;
       completionTokens += 1;
       const chunk = {
         id: completionId,
         object: "chat.completion.chunk",
         created,
         model: modelPricing.model_id,
-        choices: [
-          {
-            index: 0,
-            delta: { content: tokenPiece },
-            finish_reason: null,
-          },
-        ],
+        choices: [{ index: 0, delta: { content: limitedTokens[i] }, finish_reason: null }],
       };
       res.write(`data: ${JSON.stringify(chunk)}\n\n`);
       await new Promise((r) => setTimeout(r, streamDelayMs));
     }
 
-    const settlement = finalizeStreamBilling();
+    const settlement = settleSimulatedTextUsage(sqlDb, {
+      userId: user.id,
+      apiKeyId,
+      modelName: modelPricing.model_id,
+      userTokens: prepared.userTokens,
+      systemTokens: prepared.systemTokens,
+      outputTokens: completionTokens,
+      mode: prepared.mode,
+      source,
+      db,
+    });
+
     if (!clientAborted && !res.writableEnded && settlement) {
       const stopChunk = {
         id: completionId,
@@ -2808,7 +2886,6 @@ async function handleChatCompletions({ req, res, body, user, apiKeyId, source, d
       };
       res.write(`data: ${JSON.stringify(stopChunk)}\n\n`);
 
-      // Final usage chunk triggered by stream_options: { include_usage: true }
       const usageChunk = {
         id: completionId,
         object: "chat.completion.chunk",
@@ -2816,10 +2893,12 @@ async function handleChatCompletions({ req, res, body, user, apiKeyId, source, d
         model: modelPricing.model_id,
         choices: [],
         usage: {
-          prompt_tokens: promptTokens,
+          prompt_tokens: settlement.price.prompt_tokens,
           completion_tokens: completionTokens,
-          total_tokens: promptTokens + completionTokens,
+          total_tokens: settlement.price.prompt_tokens + completionTokens,
           cost_usd: settlement.costUsd,
+          service_fee_usd: settlement.price.service_fee_usd,
+          token_cost_usd: settlement.price.token_cost_usd,
           balance_usd: settlement.balanceUsd,
         },
       };
@@ -2830,68 +2909,26 @@ async function handleChatCompletions({ req, res, body, user, apiKeyId, source, d
     return;
   }
 
-  // Non-streaming path
-  let replyContent = "";
-  let promptTokens = estimateMessagesTokens(messages);
-  let completionTokens = 0;
+  // Simulated non-streaming fallback
+  const fullReply = generateAssistantReply(modelPricing, messages, temperature, body);
+  const words = fullReply.match(/\S+\s*/g) || [fullReply];
+  const limitedWords = maxTokens ? words.slice(0, Math.max(1, maxTokens)) : words;
+  const replyContent = limitedWords.join("");
+  const completionTokens = limitedWords.length;
 
-  if (upstreamConfig) {
-    try {
-      const upstreamRes = await fetch(upstreamConfig.url, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${upstreamConfig.apiKey}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(upstreamPayload),
-        signal: AbortSignal.timeout(60_000),
-      });
-      if (upstreamRes.ok) {
-        const upstreamData = await upstreamRes.json();
-        replyContent = String(upstreamData.choices?.[0]?.message?.content || "");
-        if (Number.isFinite(upstreamData.usage?.prompt_tokens) && upstreamData.usage.prompt_tokens <= promptTokens * 2) {
-          promptTokens = upstreamData.usage.prompt_tokens;
-        }
-        if (Number.isFinite(upstreamData.usage?.completion_tokens)) {
-          completionTokens = upstreamData.usage.completion_tokens;
-        } else {
-          completionTokens = tokenEstimate(replyContent);
-        }
-      }
-    } catch {
-      // Fallback to local response
-    }
-  }
-
-  if (!replyContent) {
-    const fullReply = generateAssistantReply(modelPricing, messages, temperature, body);
-    const words = fullReply.match(/\S+\s*/g) || [fullReply];
-    const limitedWords = maxTokens ? words.slice(0, Math.max(1, maxTokens)) : words;
-    replyContent = limitedWords.join("");
-    completionTokens = limitedWords.length;
-  }
-
-  const tokenCostUsd = calculateTokenCostUsd(
-    promptTokens,
-    completionTokens,
-    modelPricing.input_per_million,
-    modelPricing.output_per_million,
-    modelPricing.model_id,
-  );
-  const costUsd = Number((tokenCostUsd + (routing.webSearchCallFeeUsd || 0)).toFixed(6));
-
-  const deduction = deductUserBalanceAndLogUsage({
+  const settlement = settleSimulatedTextUsage(sqlDb, {
     userId: user.id,
     apiKeyId,
-    modelId: modelPricing.model_id,
-    promptTokens,
-    completionTokens,
-    costUsd,
+    modelName: modelPricing.model_id,
+    userTokens: prepared.userTokens,
+    systemTokens: prepared.systemTokens,
+    outputTokens: completionTokens,
+    mode: prepared.mode,
     source,
     db,
   });
 
-  if (!deduction.success) {
+  if (!settlement.success) {
     return send(res, 402, {
       error: {
         message: "Insufficient balance. Please deposit credits.",
@@ -2899,33 +2936,6 @@ async function handleChatCompletions({ req, res, body, user, apiKeyId, source, d
         code: "insufficient_quota",
       },
     });
-  }
-
-  if (db) {
-    db.requestLogs.unshift({
-      id: completionId,
-      timestamp: nowIso(),
-      projectId: db.projects[0]?.id || "proj_default",
-      keyId: apiKeyId || "playground_session",
-      endpoint: source === "api" ? "/v1/chat/completions" : "/api/playground/chat",
-      model: modelPricing.model_id,
-      feature: routing.webSearch ? "Web search translation" : "Chat completions",
-      method: "POST",
-      status: 200,
-      processingStatus: "complete",
-      streaming: false,
-      inputTokens: promptTokens,
-      outputTokens: completionTokens,
-      reasoningTokens: 0,
-      totalTokens: promptTokens + completionTokens,
-      words: replyContent.trim().split(/\s+/).filter(Boolean).length,
-      costMicroCents: dollarsToMicroCents(costUsd),
-      creditSource: "paid",
-      latencyMs: Date.now() - started,
-      errorCode: "",
-      retry: "",
-    });
-    await saveDb(db);
   }
 
   return send(res, 200, {
@@ -2950,11 +2960,13 @@ async function handleChatCompletions({ req, res, body, user, apiKeyId, source, d
       },
     ],
     usage: {
-      prompt_tokens: promptTokens,
+      prompt_tokens: settlement.price.prompt_tokens,
       completion_tokens: completionTokens,
-      total_tokens: promptTokens + completionTokens,
-      cost_usd: costUsd,
-      balance_usd: deduction.balanceUsd,
+      total_tokens: settlement.price.prompt_tokens + completionTokens,
+      cost_usd: settlement.costUsd,
+      service_fee_usd: settlement.price.service_fee_usd,
+      token_cost_usd: settlement.price.token_cost_usd,
+      balance_usd: settlement.balanceUsd,
     },
   });
 }
@@ -3754,6 +3766,19 @@ async function route(req, res) {
       });
     }
 
+    // =========================================================================
+    // 6b. Text Pricing Quote Endpoint: POST /api/pricing/text (and /api/pricing/quote)
+    // =========================================================================
+    if (req.method === "POST" && (url.pathname === "/api/pricing/text" || url.pathname === "/api/pricing/quote")) {
+      const body = await parseBody(req);
+      try {
+        const quote = quoteNodeTextRequest(body, body.model || "LingoFusion");
+        return send(res, 200, quote);
+      } catch (err) {
+        return send(res, 400, { error: { message: err.message, type: "invalid_request_error" } });
+      }
+    }
+
     if (req.method === "GET" && url.pathname === "/api/dashboard") {
       return send(res, 200, publicDashboard(db));
     }
@@ -3920,10 +3945,18 @@ async function route(req, res) {
       const auth = requireKey(db, req);
       const requestId = id("req");
       const body = await parseBody(req);
+
+      if (auth.error) {
+        return send(res, 401, { error: auth.error, request_id: requestId });
+      }
+      if (!auth.key.scopes.includes("Text translation")) {
+        return send(res, 403, { error: "missing_scope", required_scope: "Text translation", request_id: requestId });
+      }
+
       const idempotencyKey = req.headers["idempotency-key"];
-      const bodyHash = hashSecret(JSON.stringify(body));
+      const bodyHash = hashSecret(JSON.stringify({ pricingVersion: "full-input-tokens-v1", body }));
       const existingIdempotency = idempotencyKey
-        ? db.idempotency.find((item) => item.key === idempotencyKey)
+        ? db.idempotency.find((item) => item.key === idempotencyKey && item.keyId === auth.key.id)
         : null;
 
       if (existingIdempotency) {
@@ -3933,13 +3966,6 @@ async function route(req, res) {
         return send(res, 200, existingIdempotency.response);
       }
 
-      if (auth.error) {
-        return send(res, 401, { error: auth.error, request_id: requestId });
-      }
-      if (!auth.key.scopes.includes("Text translation")) {
-        return send(res, 403, { error: "missing_scope", required_scope: "Text translation", request_id: requestId });
-      }
-
       const pricingMode = normalizePricingMode(body.pricing_mode);
       const model = normalizeModelName(body.model, pricingMode);
       if (!model) return send(res, 400, { error: "unsupported_model", supported_models: (pricingMode === "batch" ? batchTextModels : pricingMode === "fast" ? textModels.filter((item) => ["LingoFusion Nano", "LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(item.model)) : pricingMode === "ultrafast" ? textModels.filter((item) => ["LingoFusion Pro", "LingoFusion Ultra"].includes(item.model)) : textModels).map((item) => item.model), request_id: requestId });
@@ -3947,71 +3973,154 @@ async function route(req, res) {
         return send(res, 400, { error: "invalid_request", message: "model, input, from_language, and to_language are required", request_id: requestId });
       }
 
-      let execution = "simulated";
-      let outputText;
-      let inputTokens;
-      let outputTokens;
-      let reasoningTokens = 0;
-      let totalTokens;
-      try {
-        if (shouldRunLiveModel(model.model)) {
-          const result = await runRealTranslation({
-            modelName: model.model,
-            input: String(body.input),
-            fromLanguage: String(body.from_language),
-            toLanguage: String(body.to_language),
-            tone: String(body.tone || "Natural (Default)"),
-            stream: Boolean(body.stream),
-            pricingMode,
-          });
-          execution = "live";
-          outputText = result.outputText;
-          inputTokens = providerTokenCount(result.inputTokens) ?? tokenEstimate(body.input);
-          outputTokens = providerTokenCount(result.outputTokens) ?? tokenEstimate(outputText);
-          reasoningTokens = providerTokenCount(result.reasoningTokens) ?? 0;
-          totalTokens = providerTokenCount(result.totalTokens) ?? inputTokens + outputTokens;
-        } else {
-          outputText = syntheticTranslation(body.input, body.from_language, body.to_language);
-          inputTokens = tokenEstimate(body.input);
-          outputTokens = tokenEstimate(outputText);
-          totalTokens = inputTokens + outputTokens;
-        }
-      } catch (error) {
-        db.requestLogs.unshift({
-          id: requestId,
-          timestamp: nowIso(),
-          projectId: auth.project.id,
-          keyId: auth.key.id,
-          endpoint: "/v1/translate",
+      if (shouldRunLiveModel(model.model)) {
+        const textBody = {
+          ...body,
           model: model.model,
-          feature: "Text translation",
-          method: "POST",
-          status: error.status || 502,
-          processingStatus: "failed",
-          streaming: false,
-          inputTokens: tokenEstimate(body.input),
-          outputTokens: 0,
-          reasoningTokens: 0,
-          totalTokens: tokenEstimate(body.input),
-          words: String(body.input).trim().split(/\s+/).filter(Boolean).length,
-          costMicroCents: 0,
-          creditSource: "none",
-          latencyMs: Date.now() - started,
-          errorCode: error.code || "provider_request_failed",
-          retry: "Retry after confirming provider configuration.",
+          pricing_mode: pricingMode,
+          messages: [{ role: "user", content: String(body.input) }],
+          stream: false,
+        };
+        let prepared;
+        try {
+          prepared = prepareNodeTextRequest(textBody, model.model);
+        } catch (err) {
+          return send(res, 400, { error: "invalid_request", message: err.message, request_id: requestId });
+        }
+
+        const operationId = idempotencyKey || requestId;
+        const fingerprint = hashFingerprint({ pricingVersion: prepared.pricingVersion, payload: prepared.payload, mode: prepared.mode, format: "translate" });
+
+        const reservation = reserveNodeTextUsage(sqlDb, {
+          userId: auth.user.id,
+          operationId,
+          fingerprint,
+          maximumMicros: prepared.maximum.chargeMicros,
         });
+
+        if (reservation.error === "idempotency_conflict") {
+          return send(res, 409, { error: "idempotency_key_conflict" });
+        }
+        if (reservation.error === "insufficient_quota") {
+          return send(res, 402, { error: "insufficient_balance", request_id: requestId });
+        }
+        if (reservation.replay) {
+          if (reservation.status !== "settled" || !reservation.result) {
+            return send(res, 409, { error: "request_pending_reconciliation", operation_id: operationId });
+          }
+          return send(res, 200, { ...reservation.result,
+            output_text: reservation.result.choices?.[0]?.message?.content || "",
+            usage: { ...reservation.result.usage, input_tokens: reservation.result.usage.prompt_tokens, output_tokens: reservation.result.usage.completion_tokens } });
+        }
+
+        const modelPricing = resolveModelPricing(model.model);
+        const upstreamConfig = getUpstreamConfig(modelPricing);
+        if (!upstreamConfig) {
+          markNodeTextUncertain(sqlDb, operationId, auth.user.id);
+          return send(res, 503, { error: "provider_not_configured", operation_id: operationId, message: "Upstream model provider is not configured." });
+        }
+
+        let upstreamRes;
+        try {
+          upstreamRes = await fetchTextProvider(prepared, {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${upstreamConfig.apiKey}`,
+              "content-type": "application/json",
+            },
+            signal: AbortSignal.timeout(90_000),
+          }, fetch, upstreamConfig.url);
+        } catch (err) {
+          markNodeTextUncertain(sqlDb, operationId, auth.user.id);
+          return send(res, 502, { error: "provider_unreachable", operation_id: operationId, message: "The configured model provider could not be reached." });
+        }
+
+        if (!upstreamRes.ok) {
+          markNodeTextUncertain(sqlDb, operationId, auth.user.id);
+          return send(res, 502, { error: "provider_request_failed", operation_id: operationId, message: "The configured model provider returned an error." });
+        }
+
+        let upstreamData;
+        try {
+          upstreamData = await upstreamRes.json();
+        } catch {
+          markNodeTextUncertain(sqlDb, operationId, auth.user.id);
+          return send(res, 502, { error: "provider_empty_response", operation_id: operationId, message: "The configured model provider returned an empty or invalid response." });
+        }
+
+        let settlement;
+        try {
+          settlement = settleNodeTextUsage(sqlDb, {
+            userId: auth.user.id,
+            apiKeyId: auth.sqlKey?.id || auth.key.id,
+            operationId,
+            fingerprint,
+            prepared,
+            providerData: upstreamData,
+            source: "api",
+            db,
+          });
+        } catch (err) {
+          markNodeTextUncertain(sqlDb, operationId, auth.user.id);
+          return send(res, 502, { error: "usage_requires_reconciliation", operation_id: operationId, message: err.message });
+        }
+
+        const outputText = String(upstreamData.choices?.[0]?.message?.content || outputTextFromUpstreamResponse(upstreamData)).trim();
+        const price = settlement.price;
+        const reasoningTokens = Number(upstreamData.usage?.completion_tokens_details?.reasoning_tokens ?? 0);
+        const completionTokens = price.completion_tokens;
+        const totalTokens = price.prompt_tokens + completionTokens;
+
+        const response = {
+          id: requestId,
+          model: model.model,
+          pricing_mode: pricingMode,
+          output_text: outputText,
+          stream: false,
+          requested_stream: Boolean(body.stream),
+          execution: "live",
+          usage: {
+            input_tokens: price.prompt_tokens,
+            source_text_tokens_estimate: prepared.userTokens,
+            instruction_and_overhead_tokens: price.instruction_and_overhead_tokens,
+            output_tokens: completionTokens,
+            reasoning_tokens: reasoningTokens,
+            visible_output_tokens: Math.max(0, completionTokens - reasoningTokens),
+            total_tokens: totalTokens,
+            cost_usd: price.cost_usd,
+            service_fee_usd: price.service_fee_usd,
+            token_cost_usd: price.token_cost_usd,
+            pricing_version: "full-input-tokens-v1",
+            balance_usd: settlement.balanceUsd,
+          },
+          cost_usd: price.cost_usd,
+          service_fee_usd: price.service_fee_usd,
+          token_cost_usd: price.token_cost_usd,
+          pricing_version: "full-input-tokens-v1",
+          operation_id: operationId,
+        };
+
+        if (idempotencyKey) {
+          db.idempotency.push({ key: idempotencyKey, keyId: auth.key.id, bodyHash, response, createdAt: nowIso() });
+        }
         await saveDb(db);
-        return send(res, error.status || 502, { error: error.code || "provider_request_failed", message: error.message, request_id: requestId });
+        return send(res, 200, response);
       }
-      const pricedModel = pricingMode === "ultrafast"
-        ? { ...model, input: model.input * 4, output: model.output * 4 }
-        : pricingMode === "fast"
-          ? { ...model, input: model.input * 1.5, output: model.output * 1.5 }
-          : model;
-      const costMicroCents = centsCostMicro(inputTokens, outputTokens, pricedModel);
-      const sourceTextTokensEstimate = tokenEstimate(body.input);
-      const instructionTokensEstimate = Math.max(0, inputTokens - sourceTextTokensEstimate);
-      const charge = applyCharge(db, costMicroCents, model.model, inputTokens, outputTokens, auth.sqlKey?.id || null);
+
+      // Simulated local fallback
+      let outputText;
+      let inputTokens = countTextTokens(body.input);
+      let outputTokens;
+      outputText = syntheticTranslation(body.input, body.from_language, body.to_language);
+      outputTokens = countTextTokens(outputText);
+      const price = priceTranslateUsage({
+        modelName: model.model,
+        inputTokens: price.prompt_tokens,
+        outputTokens,
+        pricingMode,
+      });
+      const costMicroCents = Math.round(price.cost_usd * MICRO_CENTS_PER_DOLLAR);
+      const charge = applyCharge(db, costMicroCents, model.model, price.prompt_tokens, outputTokens, auth.sqlKey?.id || null);
 
       if (!charge) {
         const log = {
@@ -4042,6 +4151,7 @@ async function route(req, res) {
         return send(res, 402, { error: "insufficient_balance", request_id: requestId });
       }
 
+      const totalTokens = price.prompt_tokens + outputTokens;
       const response = {
         id: requestId,
         model: model.model,
@@ -4049,17 +4159,25 @@ async function route(req, res) {
         output_text: outputText,
         stream: false,
         requested_stream: Boolean(body.stream),
-        execution,
+        execution: "simulated",
         usage: {
-          input_tokens: inputTokens,
-          source_text_tokens_estimate: sourceTextTokensEstimate,
-          instruction_tokens_estimate: instructionTokensEstimate,
+          input_tokens: price.prompt_tokens,
+          source_text_tokens_estimate: inputTokens,
+          instruction_and_overhead_tokens: price.instruction_and_overhead_tokens,
           output_tokens: outputTokens,
-          reasoning_tokens: reasoningTokens,
-          visible_output_tokens: Math.max(0, outputTokens - reasoningTokens),
+          reasoning_tokens: 0,
+          visible_output_tokens: outputTokens,
           total_tokens: totalTokens,
-          cost_usd: microCentsToDollars(costMicroCents),
+          cost_usd: price.cost_usd,
+          service_fee_usd: price.service_fee_usd,
+          token_cost_usd: price.token_cost_usd,
+          pricing_version: "full-input-tokens-v1",
+          balance_usd: microCentsToDollars(db.account.paidBalanceMicroCents),
         },
+        cost_usd: price.cost_usd,
+        service_fee_usd: price.service_fee_usd,
+        token_cost_usd: price.token_cost_usd,
+        pricing_version: "full-input-tokens-v1",
       };
 
       db.requestLogs.unshift({
@@ -4074,19 +4192,23 @@ async function route(req, res) {
         status: 200,
         processingStatus: "complete",
         streaming: Boolean(body.stream),
-        inputTokens,
+        inputTokens: price.prompt_tokens,
         outputTokens,
-        reasoningTokens,
+        reasoningTokens: 0,
         totalTokens,
         words: String(body.input).trim().split(/\s+/).filter(Boolean).length,
         costMicroCents,
         creditSource: charge.reward ? "reward" : "paid",
+        serviceFeeUsd: price.service_fee_usd,
+        tokenCostUsd: price.token_cost_usd,
+        instructionAndOverheadTokens: price.instruction_and_overhead_tokens,
+        grossProfitLowerBoundUsd: price.gross_profit_lower_bound_usd,
         latencyMs: Date.now() - started,
         errorCode: "",
         retry: idempotencyKey ? "Original result stored" : "No idempotency key",
       });
       if (idempotencyKey) {
-        db.idempotency.push({ key: idempotencyKey, bodyHash, response, createdAt: nowIso() });
+        db.idempotency.push({ key: idempotencyKey, keyId: auth.key.id, bodyHash, response, createdAt: nowIso() });
       }
       await saveDb(db);
       return send(res, 200, response);
@@ -4246,7 +4368,7 @@ async function route(req, res) {
         retry: idempotencyKey ? "Original result stored" : "No idempotency key",
       });
       if (idempotencyKey) {
-        db.idempotency.push({ key: idempotencyKey, bodyHash, response, createdAt: nowIso() });
+        db.idempotency.push({ key: idempotencyKey, keyId: auth.key.id, bodyHash, response, createdAt: nowIso() });
       }
       await saveDb(db);
       return send(res, 200, response);

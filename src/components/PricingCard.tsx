@@ -85,7 +85,6 @@ export function PricingCard(props: PricingCardProps) {
 }
 
 function TextTable({ rows, labels }: { rows: DisplayTextModel[]; labels: PricingLabels }) {
-  const hasNano = rows.some((row) => row.model.toLowerCase().includes("nano"));
   return (
     <>
       <table className="mobile-record-table w-full min-w-[500px] text-left text-xs">
@@ -107,11 +106,7 @@ function TextTable({ rows, labels }: { rows: DisplayTextModel[]; labels: Pricing
                       {labels.recommended}
                     </span>
                   )}
-                  {row.model.toLowerCase().includes("nano") && (
-                    <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
-                      *50-token min (~$0.00004)
-                    </span>
-                  )}
+
                 </div>
               </td>
               <td data-label={labels.input} className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.input}</td>
@@ -120,9 +115,9 @@ function TextTable({ rows, labels }: { rows: DisplayTextModel[]; labels: Pricing
           ))}
         </tbody>
       </table>
-      {hasNano && (
+      {rows.length > 0 && (
         <div className="border-t border-neutral-200 bg-neutral-50/50 px-5 py-2.5 text-[11px] text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900/30 dark:text-neutral-400">
-          *<strong>Micro-Request Minimum:</strong> LingoFusion Nano requests are subject to a 50-token (~35 words) minimum charge per API call (~$0.00004). All requests above 50 tokens are billed strictly on exact token count.
+          <strong>Text translation pricing:</strong> Input tokens include your text, built-in system instructions, and request overhead. All input, including cached input, is billed at the displayed input rate. Output usage includes reasoning tokens. There is no additional service fee. Playground shows the maximum price before translation. The combined token charge rounds up once to six decimal USD places.
         </div>
       )}
     </>

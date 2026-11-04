@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHmac } from "node:crypto";
-import {
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+// The server initializes its database when imported. Isolate it before import
+// and pass the same synthetic directory to the child API process.
+process.env.LINGOFUSION_SKIP_LOCAL_ENV = "true";
+process.env.LINGOFUSION_DATA_DIR = await mkdtemp(join(tmpdir(), "lf-platform-test-"));
+const {
   calculateGrossDepositCents,
   calculateTokenCostUsd,
   resolveBackendModelRouting,
-} from "../server.mjs";
+} = await import("../server.mjs");
 import {
   calculateUltraPrice,
   dubbingMinutesToSlider,

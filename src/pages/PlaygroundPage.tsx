@@ -52,6 +52,8 @@ import {
   getWebSearchCallRateUsd,
   recordBrowserMusicUsage,
   recordBrowserStreamUsage,
+  pendingTextOperations,
+  clearTextOperation,
   shouldUseBrowserApi,
   streamChatCompletionBrowser,
   syncCloudBalance,
@@ -63,6 +65,7 @@ import { getCurrentUser, subscribeAuth } from "../data/auth";
 import { formatUsd, pageQuery } from "../lib/utils";
 
 type TranslationRun = {
+  serviceFeeUsd?: number;
   id: string;
   model: string;
   provider?: string;
@@ -197,6 +200,10 @@ export function PlaygroundPage({
   const [userInput, setUserInput] = useState<string>("");
   const [translatedOutput, setTranslatedOutput] = useState<string>("");
   const [latestRun, setLatestRun] = useState<TranslationRun | null>(null);
+  const [textPriceQuote, setTextPriceQuote] = useState<{ key: string; maximum_cost_usd: number; input_tokens: number; customer_input_tokens: number } | null>(null);
+  const [textPriceError, setTextPriceError] = useState<string | null>(null);
+  const [pendingTextOperation, setPendingTextOperation] = useState<string | null>(() => pendingTextOperations().slice(-1)[0] || null);
+  const [checkingTextOperation, setCheckingTextOperation] = useState(false);
 
   // Speed / pricing mode for text models: "default" | "fast" | "ultrafast"
   const [speedMode, setSpeedMode] = useState<"default" | "fast" | "ultrafast">("default");
@@ -205,6 +212,7 @@ export function PlaygroundPage({
   const [ultraMaxEnabled, setUltraMaxEnabled] = useState<boolean>(false);
   const [allowWebSearch, setAllowWebSearch] = useState<boolean>(false);
   const [streamToggle, setStreamToggle] = useState<boolean>(true);
+  const [outputTokenLimit, setOutputTokenLimit] = useState<number>(2048);
 
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
@@ -711,23 +719,41 @@ export function PlaygroundPage({
   );
 
   // Live token estimate & pricing calculator while typing in Playground
+  const textQuoteBody = JSON.stringify({ model: activeModel.model_id,
+    from_language: fromLanguage, to_language: toLanguage,
+    messages: [{ role: "user", content: userInput.trim() }], pricing_mode: speedMode,
+    reasoning_enabled: activeModel.model_id === "LingoFusion Pro" && proReasoningEnabled,
+    allow_web_search: allowWebSearch, max_completion_tokens: outputTokenLimit });
+  useEffect(() => {
+    setTextPriceQuote(null);
+    setTextPriceError(null);
+    if (!userInput.trim() || activeModel.local) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const user = getCurrentUser();
+        if (!user.sessionToken) { setTextPriceError("Sign in to see the full price before translating."); return; }
+        const response = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/pricing/text`, {
+          method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${user.sessionToken}` },
+          body: textQuoteBody, signal: controller.signal,
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || "Price quote unavailable");
+        if (!controller.signal.aborted) setTextPriceQuote({ ...data, key: textQuoteBody });
+      } catch (error) {
+        if (!controller.signal.aborted) setTextPriceError(error instanceof Error ? error.message : "Price quote unavailable");
+      }
+    }, 400);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [textQuoteBody, activeModel.local, currentUserEmail]);
+
   const liveTokenMetrics = useMemo(() => {
     const rawTokens = countTokens(userInput.trim());
     const isNano = activeModel.model_id.toLowerCase().includes("nano");
-    // Billable floor for Nano: 50 tokens
-    const billableInput = isNano && rawTokens > 0 && rawTokens < 50 ? 50 : rawTokens;
+    const billableInput = activeModel.local ? rawTokens : textPriceQuote?.key === textQuoteBody ? textPriceQuote.input_tokens : null;
     const isLocal = activeModel.model_id.startsWith("LingoFusion Native-") || Boolean(activeModel.local);
 
-    const speedMultiplier =
-      speedMode === "ultrafast" ? 4 : speedMode === "fast" ? 1.5 : 1;
-    const inRate = (activeModel.input_per_million * speedMultiplier) / 1_000_000;
-    const outRate = (activeModel.output_per_million * speedMultiplier) / 1_000_000;
-    const webSearch = allowWebSearch ? getWebSearchCallRateUsd(activeModel.model_id) : 0;
-
-    // Estimated total cost assuming output is roughly similar length to input
-    const estimatedCost = isLocal
-      ? 0
-      : Number((webSearch + (billableInput * inRate) + (billableInput * outRate)).toFixed(6));
+    const estimatedCost = isLocal ? 0 : textPriceQuote?.key === textQuoteBody ? textPriceQuote.maximum_cost_usd : null;
 
     return {
       rawTokens,
@@ -736,7 +762,7 @@ export function PlaygroundPage({
       isLocal,
       isNano,
     };
-  }, [userInput, activeModel, speedMode, allowWebSearch]);
+  }, [userInput, activeModel, speedMode, allowWebSearch, textPriceQuote, textQuoteBody]);
 
   const activeImageModel = useMemo(
     () => imageModels.find((model) => model.label === selectedImageModel) ?? imageModels[0],
@@ -830,6 +856,10 @@ export function PlaygroundPage({
 
   const handleRunTranslation = async () => {
     if (!userInput.trim() || isRunning) return;
+    if (!activeModel.local && (!textPriceQuote || textPriceQuote.key !== textQuoteBody)) {
+      setErrorBanner(textPriceError || "Please wait for the full price quote before translating.");
+      return;
+    }
     if (liveBalance <= 0) {
       setInsufficientModalOpen(true);
       return;
@@ -858,6 +888,8 @@ export function PlaygroundPage({
       messages: [{ role: "user", content: currentInput }],
       stream: streamToggle,
       pricing_mode: effectiveSpeedMode,
+      max_completion_tokens: outputTokenLimit,
+      max_cost_usd: textPriceQuote?.maximum_cost_usd,
       ...(["LingoFusion", "LingoFusion Lite"].includes(activeModel.model_id) && !allowWebSearch ? { temperature } : {}),
       ...(allowWebSearch ? { allow_web_search: true } : {}),
       ...(activeModel.model_id === "LingoFusion Pro" && proReasoningEnabled
@@ -900,6 +932,7 @@ export function PlaygroundPage({
             completion_tokens: number;
             total_tokens: number;
             cost_usd: number;
+            service_fee_usd?: number;
             balance_usd?: number;
           };
         }>("/api/playground/chat", {
@@ -918,16 +951,19 @@ export function PlaygroundPage({
           promptTokens: pTokens,
           completionTokens: cTokens,
           costUsd,
+          serviceFeeUsd: response.usage?.service_fee_usd,
           streaming: false,
         };
         setTranslatedOutput(fullContent);
         setLatestRun(completedRun);
+        setPendingTextOperation(null);
 
         if (typeof response.usage?.balance_usd === "number") {
           updateBalance(response.usage.balance_usd);
         }
         await loadModelsAndState();
       } catch (err) {
+        setPendingTextOperation(pendingTextOperations().slice(-1)[0] || null);
         const message = err instanceof Error ? err.message : "Request failed";
         if (message.toLowerCase().includes("insufficient") || message.toLowerCase().includes("deposit")) {
           setInsufficientModalOpen(true);
@@ -972,6 +1008,7 @@ export function PlaygroundPage({
           `HTTP ${response.status}`;
         throw new Error(errMsg.trim() || `HTTP ${response.status}`);
       }
+      setPendingTextOperation(response.headers.get("X-LingoFusion-Operation-Id"));
 
       if (!response.body) {
         throw new Error("Streaming body unavailable");
@@ -981,9 +1018,13 @@ export function PlaygroundPage({
       const decoder = new TextDecoder();
       let buffer = "";
       let accumulatedText = "";
-      let promptTokens = countTokens(currentInput);
+      let promptTokens = textPriceQuote?.input_tokens ?? countTokens(currentInput);
+      let receivedInputUsage = false;
       let completionTokens = 0;
       let finalCostUsd: number | undefined;
+      let finalBalanceUsd: number | undefined;
+      let finalOperationId: string | undefined;
+      let finalServiceFeeUsd: number | undefined;
 
       while (true) {
         const { value, done } = await reader.read();
@@ -1003,14 +1044,7 @@ export function PlaygroundPage({
               if (typeof deltaContent === "string" && deltaContent.length > 0) {
                 accumulatedText += deltaContent;
                 completionTokens += 1;
-                const speedMultiplier = effectiveSpeedMode === "ultrafast" ? 4 : effectiveSpeedMode === "fast" ? 1.5 : 1;
-                const liveCost = Number(
-                  (
-                    webSearchFee +
-                    promptTokens * ((activeModel.input_per_million * speedMultiplier) / 1_000_000) +
-                    completionTokens * ((activeModel.output_per_million * speedMultiplier) / 1_000_000)
-                  ).toFixed(6),
-                );
+                const liveCost = textPriceQuote?.maximum_cost_usd ?? 0;
                 setTranslatedOutput(accumulatedText);
                 setLatestRun({
                   ...initialRun,
@@ -1022,9 +1056,12 @@ export function PlaygroundPage({
                 });
               }
               if (parsed.usage) {
-                // Absorb backend system prompt: bill user strictly for their input text
-                if (typeof parsed.usage.prompt_tokens === "number" && parsed.usage.prompt_tokens <= promptTokens * 2) {
+                if (typeof parsed.usage.service_fee_usd === "number") finalServiceFeeUsd = parsed.usage.service_fee_usd;
+                if (typeof parsed.operation_id === "string") finalOperationId = parsed.operation_id;
+                // Full provider input, including built-in instructions, is billed.
+                if (Number.isSafeInteger(parsed.usage.prompt_tokens) && parsed.usage.prompt_tokens >= 0) {
                   promptTokens = parsed.usage.prompt_tokens;
+                  receivedInputUsage = true;
                 }
                 if (typeof parsed.usage.completion_tokens === "number") {
                   completionTokens = parsed.usage.completion_tokens;
@@ -1033,6 +1070,7 @@ export function PlaygroundPage({
                   finalCostUsd = parsed.usage.cost_usd;
                 }
                 if (typeof parsed.usage.balance_usd === "number") {
+                  finalBalanceUsd = parsed.usage.balance_usd;
                   updateBalance(parsed.usage.balance_usd);
                 }
               }
@@ -1044,28 +1082,19 @@ export function PlaygroundPage({
         if (done) break;
       }
 
-      let billablePrompt = promptTokens;
-      let billableCompletion = completionTokens;
-      if (activeModel.model_id.toLowerCase().includes("nano") && (billablePrompt + billableCompletion) < 50) {
-        billablePrompt = Math.max(billablePrompt, 50 - billableCompletion);
-      }
-      const computedCost =
-        finalCostUsd ??
-        Number(
-          (
-            webSearchFee +
-            billablePrompt * (activeModel.input_per_million / 1_000_000) +
-            billableCompletion * (activeModel.output_per_million / 1_000_000)
-          ).toFixed(6),
-        );
+      if (!receivedInputUsage || finalCostUsd === undefined) throw new Error("Final server usage is pending reconciliation. Recover this request before submitting it again.");
+      const computedCost = finalCostUsd;
 
       if (shouldUseBrowserApi()) {
+        if (finalCostUsd === undefined || finalBalanceUsd === undefined) throw new Error("Server settlement is pending. Refresh your balance before retrying.");
         const remaining = recordBrowserStreamUsage({
           modelId: activeModel.model_id,
           promptTokens,
           completionTokens,
           costUsd: computedCost,
           source: "playground",
+          balanceUsd: finalBalanceUsd,
+          operationId: finalOperationId,
         });
         updateBalance(remaining);
       }
@@ -1076,12 +1105,15 @@ export function PlaygroundPage({
         promptTokens,
         completionTokens,
         costUsd: computedCost,
+        serviceFeeUsd: finalServiceFeeUsd,
         streaming: false,
       };
       setTranslatedOutput(accumulatedText);
       setLatestRun(completedRun);
+      setPendingTextOperation(null);
       await loadModelsAndState();
     } catch (err) {
+      setPendingTextOperation(pendingTextOperations().slice(-1)[0] || null);
       if ((err as Error)?.name === "AbortError") {
         setLatestRun((prev) =>
           prev ? { ...prev, streaming: false, aborted: true } : null,
@@ -1104,6 +1136,46 @@ export function PlaygroundPage({
 
   const handleStopStream = () => {
     abortControllerRef.current?.abort();
+  };
+
+  const handleCheckTextOperation = async () => {
+    if (!pendingTextOperation || checkingTextOperation) return;
+    setCheckingTextOperation(true);
+    try {
+      const user = getCurrentUser();
+      const response = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/api/usage/${encodeURIComponent(pendingTextOperation)}`, {
+        headers: { Authorization: `Bearer ${user.sessionToken || ""}` },
+      });
+      const data = await response.json();
+      if (response.status === 404 && data.error === "usage_not_found") {
+        clearTextOperation(pendingTextOperation);
+        setPendingTextOperation(null);
+        setErrorBanner("No reserved request was found. You can submit the translation again.");
+        return;
+      }
+      if (!response.ok) throw new Error("Previous request status is unavailable. Keep its request ID for support.");
+      updateBalance(data.balance_usd);
+      if (data.status !== "settled") {
+        setErrorBanner(`Request ${pendingTextOperation} is ${data.status}. $${Number(data.held_usd).toFixed(6)} remains reserved; it has not been submitted again.`);
+        return;
+      }
+      const result = data.result;
+      const output = result?.choices?.[0]?.message?.content || "";
+      const usage = result.usage;
+      recordBrowserStreamUsage({ modelId: result.model, promptTokens: usage.prompt_tokens,
+        completionTokens: usage.completion_tokens, costUsd: data.cost_usd,
+        balanceUsd: data.balance_usd, operationId: pendingTextOperation });
+      setTranslatedOutput(output);
+      if (result.from_language) setFromLanguage(result.from_language);
+      if (result.to_language) setToLanguage(result.to_language);
+      setLatestRun({ id: result.id, model: result.model, fromLanguage: result.from_language || fromLanguage, toLanguage: result.to_language || toLanguage,
+        inputText: userInput, outputText: output, promptTokens: usage.prompt_tokens,
+        completionTokens: usage.completion_tokens, costUsd: data.cost_usd,
+        serviceFeeUsd: result.service_fee_usd, createdAt: new Date().toISOString(), streaming: false });
+      setPendingTextOperation(null);
+      setErrorBanner(null);
+    } catch (error) { setErrorBanner(error instanceof Error ? error.message : "Unable to recover previous request"); }
+    finally { setCheckingTextOperation(false); }
   };
 
   const handleImageFile = async (file?: File | null) => {
@@ -2278,6 +2350,13 @@ export function PlaygroundPage({
         )}
 
       {/* Error Alert */}
+      {pendingTextOperation && !isRunning && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-neutral-200 p-3 text-xs dark:border-white/10">
+          <span>A previous request may still be settling. Check it before submitting the same work again.</span>
+          <button type="button" disabled={checkingTextOperation} onClick={() => void handleCheckTextOperation()}
+            className="font-medium underline disabled:opacity-50">{checkingTextOperation ? "Checking…" : "Check previous request"}</button>
+        </div>
+      )}
       {errorBanner && (
         <div
           role="alert"
@@ -2642,6 +2721,13 @@ export function PlaygroundPage({
                 >
                   {() => (
                     <>
+                      <div className="mb-2 rounded-lg border border-neutral-200 p-3 dark:border-white/10">
+                        <label htmlFor="playground-output-limit" className="text-xs font-semibold">Output token limit</label>
+                        <input id="playground-output-limit" type="number" min="1" max="128000" value={outputTokenLimit}
+                          onChange={event => setOutputTokenLimit(Math.min(128000, Math.max(1, Math.trunc(Number(event.target.value) || 1))))}
+                          className="mt-2 w-full rounded border border-neutral-200 bg-transparent p-2 text-xs dark:border-white/10" />
+                        <p className="mt-1 text-[11px] text-neutral-500">Includes reasoning. Sets your maximum price; unused tokens are not charged.</p>
+                      </div>
                       {["LingoFusion", "LingoFusion Lite"].includes(activeModel.model_id) && (
                         <div className="mb-1 rounded-lg border border-neutral-200 p-3 dark:border-white/10" data-testid="playground-temperature-control">
                           <div className="flex items-center justify-between gap-3">
@@ -2820,7 +2906,7 @@ export function PlaygroundPage({
               ) : (
                 <button
                   type="button"
-                  disabled={isRunning || !userInput.trim()}
+                  disabled={isRunning || !userInput.trim() || (!activeModel.local && textPriceQuote?.key !== textQuoteBody)}
                   onClick={handleRunTranslation}
                   data-testid="playground-run-btn"
                   className="pressable inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-neutral-950 px-5 text-xs font-semibold text-white shadow-xs transition hover:bg-neutral-800 disabled:opacity-50 sm:flex-none dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
@@ -2832,6 +2918,20 @@ export function PlaygroundPage({
             </div>
           </div>
         </div>
+
+        {mode === "text" && !activeModel.local && userInput.trim() && !isRunning && (
+          <div data-testid="playground-price-quote" className="border-t border-neutral-200/60 px-4 py-2 text-xs text-neutral-600 dark:border-white/10 dark:text-neutral-400 sm:px-5">
+            {textPriceQuote?.key === textQuoteBody ? (
+              <>
+                <span className="font-medium text-neutral-900 dark:text-neutral-100">Next translation: up to ${textPriceQuote.maximum_cost_usd.toFixed(6)}</span>
+                {" · Input includes built-in instructions. No additional service fee."}
+                <span className="ml-1" title={`Up to ${textPriceQuote.input_tokens.toLocaleString()} input tokens, including built-in instructions and request overhead.`}>
+                  {`Output limit: ${outputTokenLimit.toLocaleString()} tokens, including reasoning.`}
+                </span>
+              </>
+            ) : textPriceError || "Calculating full price…"}
+          </div>
+        )}
 
         {/* Clean Side-by-Side Input & Output Panes */}
         <div className="playground-panes grid divide-y divide-neutral-200/80 dark:divide-white/10 md:grid-cols-2 md:divide-x md:divide-y-0">
@@ -2922,14 +3022,14 @@ export function PlaygroundPage({
               </div>
 
               {/* Clean Live Token & Price Counter at Bottom of Translation */}
-              {(latestRun || isRunning || (userInput.trim() && translatedOutput)) && (
+              {(latestRun || isRunning) && (
                 <div
                   data-testid="playground-telemetry-bar"
                   className="mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-neutral-200/60 pt-3 text-[11px] font-mono text-neutral-500 dark:border-white/10 dark:text-neutral-400"
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-neutral-700 dark:text-neutral-300">
-                      {latestRun
+                      {isRunning ? "Final token usage pending" : latestRun
                         ? `${latestRun.promptTokens + latestRun.completionTokens} tokens (${latestRun.promptTokens} in / ${latestRun.completionTokens} out)`
                         : `~${liveTokenMetrics.rawTokens} tokens`}
                     </span>
@@ -2937,9 +3037,13 @@ export function PlaygroundPage({
                     <span className="font-semibold text-neutral-900 dark:text-white">
                       {liveTokenMetrics.isLocal
                         ? "Free"
+                        : isRunning && textPriceQuote?.key === textQuoteBody
+                        ? `Up to $${textPriceQuote.maximum_cost_usd.toFixed(6)}`
                         : latestRun
                         ? `$${Number(latestRun.costUsd || 0).toFixed(6)}`
-                        : `~$${liveTokenMetrics.estimatedCost.toFixed(6)}`}
+                        : textPriceQuote?.key === textQuoteBody
+                        ? `Up to $${textPriceQuote.maximum_cost_usd.toFixed(6)}`
+                        : "Full price pending"}
                     </span>
                     {latestRun?.streaming && (
                       <>
@@ -2953,8 +3057,11 @@ export function PlaygroundPage({
                   </div>
 
                   <div className="text-[10px] text-neutral-400 dark:text-neutral-500">
-                    {activeModel.model_id}
-                    {liveTokenMetrics.isNano && " · 50-token min"}
+                    {latestRun?.model || activeModel.model_id}
+                    {!liveTokenMetrics.isLocal && latestRun && " · Input includes built-in instructions"}
+                    {!liveTokenMetrics.isLocal && !latestRun && (textPriceQuote?.key === textQuoteBody
+                      ? ` · Input includes built-in instructions. Output limit: ${outputTokenLimit.toLocaleString()} tokens, including reasoning.`
+                      : ` · ${textPriceError || "Calculating full price…"}`)}
                   </div>
                 </div>
               )}
