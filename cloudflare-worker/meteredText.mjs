@@ -1,8 +1,8 @@
-import { prepareTextRequest, verifyAndPrice } from '../shared/textRequest.mjs';
+import { prepareTextRequest, verifyAndPrice } from '../shared/textRequestCore.mjs';
 import { fetchTextProvider } from '../shared/textProvider.mjs';
 import { TEXT_PRICING_VERSION } from '../shared/textPricing.mjs';
 import { billing } from './billing.mjs';
-export { prepareTextRequest } from '../shared/textRequest.mjs';
+export { prepareTextRequest } from '../shared/textRequestCore.mjs';
 
 const hash = async text => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))].map(x => x.toString(16).padStart(2, '0')).join('');
 
@@ -15,7 +15,7 @@ export async function meteredText(request, env, auth, respond, quoteOnly = false
   const { maximum, policy, payload, userTokens } = prepared;
   if (quoteOnly) return respond({ model: policy.model, pricing_version: TEXT_PRICING_VERSION,
     maximum_cost_usd: maximum.cost_usd, maximum_service_fee_usd: 0,
-    input_tokens: prepared.rawMaximum, customer_input_tokens: userTokens, instruction_tokens_estimate: prepared.systemTokens, max_completion_tokens: prepared.maxOutput,
+    input_tokens: prepared.rawMaximum, customer_input_tokens: prepared.exactInputCount ? userTokens : null, input_count_is_upper_bound: !prepared.exactInputCount, instruction_tokens_estimate: prepared.systemTokens, max_completion_tokens: prepared.maxOutput,
     notice: 'Total input is billed at the published input rate. Output includes reasoning. No additional service fee. Final token charges round up once to six decimal USD places.' });
   if (!env.BILLING || !env.GIFTS || !env.OPENAI_API_KEY) return respond({ error: 'metered_text_not_configured' }, 503);
   const operationId = request.headers.get('Idempotency-Key') || crypto.randomUUID();
@@ -43,11 +43,11 @@ export async function meteredText(request, env, auth, respond, quoteOnly = false
       from_language: prepared.settings.fromLanguage, to_language: prepared.settings.toLanguage,
       ...(new URL(request.url).pathname === '/v1/translate' ? { output_text: data.choices?.[0]?.message?.content || '' } : {}),
       usage: { ...data.usage, prompt_tokens: price.prompt_tokens, total_tokens: price.prompt_tokens + data.usage.completion_tokens,
-        customer_input_tokens: userTokens, instruction_and_overhead_tokens: price.instruction_and_overhead_tokens,
+        customer_input_tokens: prepared.exactInputCount ? userTokens : null, instruction_and_overhead_tokens: prepared.exactInputCount ? price.instruction_and_overhead_tokens : null,
         prompt_tokens_details: undefined, cost_usd: price.cost_usd, service_fee_usd: price.service_fee_usd,
         token_cost_usd: price.token_cost_usd },
       cost_usd: price.cost_usd, service_fee_usd: price.service_fee_usd, token_cost_usd: price.token_cost_usd,
-      pricing_version: TEXT_PRICING_VERSION, instruction_and_overhead_tokens: price.instruction_and_overhead_tokens, operation_id: operationId };
+      pricing_version: TEXT_PRICING_VERSION, instruction_and_overhead_tokens: prepared.exactInputCount ? price.instruction_and_overhead_tokens : null, operation_id: operationId };
     const settled = await billing(env, { action: 'usageFinish', ...identity, actualMicros: price.chargeMicros, result,
       evidence: { providerRequestId: data.id, upstreamModel: data.model, rawUsage, ...price } });
     return { ...result, usage: { ...result.usage, balance_usd: settled.balance_usd }, balance_usd: settled.balance_usd };

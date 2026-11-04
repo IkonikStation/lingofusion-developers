@@ -40,6 +40,7 @@ jobs:
           npm run test:text-billing
           npm run test:transcription
           npm run test:unlimited-balance
+          node --test scripts/test-edge-input-bounds.mjs scripts/test-gateway-async-errors.mjs
 
       - name: Check localization
         run: pnpm test:localization

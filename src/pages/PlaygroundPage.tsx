@@ -2306,6 +2306,12 @@ export function PlaygroundPage({
       {pendingTextOperation && !isRunning && (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-neutral-200 p-3 text-xs dark:border-white/10">
           <span>A previous request may still be settling. Check it before submitting the same work again.</span>
+          <button type="button" disabled={checkingTextOperation} onClick={() => {
+            if (!window.confirm("The previous request may already have run and remains recorded for reconciliation. Starting a separate request can incur another charge. Continue?")) return;
+            clearTextOperation(pendingTextOperation);
+            setPendingTextOperation(null);
+            setErrorBanner(null);
+          }} className="font-medium underline disabled:opacity-50">Start a separate request</button>
           <button type="button" disabled={checkingTextOperation} onClick={() => void handleCheckTextOperation()}
             className="font-medium underline disabled:opacity-50">{checkingTextOperation ? "Checking…" : "Check previous request"}</button>
         </div>
