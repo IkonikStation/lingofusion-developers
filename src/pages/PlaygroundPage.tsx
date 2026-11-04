@@ -1,3 +1,4 @@
+import { LOOKUP_POLICY } from "../../shared/webTranslation.mjs";
 import { buildPromptMessages } from "../../shared/promptMessages.mjs";
 import { TranscriptionPanel } from '../components/TranscriptionPanel';
 import { waitForDubbing } from "../data/dubbingApi";
@@ -68,6 +69,7 @@ import { getCurrentUser, subscribeAuth } from "../data/auth";
 import { formatUsd, pageQuery } from "../lib/utils";
 
 type TranslationRun = {
+  webSearchSources?: Array<{url:string; title:string}>;
   serviceFeeUsd?: number;
   id: string;
   model: string;
@@ -679,6 +681,10 @@ export function PlaygroundPage({
     [models, selectedModelId],
   );
 
+  useEffect(() => {
+    if (!["LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(activeModel.model_id) || speedMode !== "default") setAllowWebSearch(false);
+  }, [activeModel.model_id, speedMode]);
+
   // Live token estimate & pricing calculator while typing in Playground
   const textQuoteBody = JSON.stringify({ model: activeModel.model_id,
     from_language: fromLanguage, to_language: toLanguage,
@@ -815,7 +821,6 @@ export function PlaygroundPage({
     const runId = `run-${Date.now()}`;
     const currentInput = userInput.trim();
 
-    const webSearchFee = allowWebSearch ? getWebSearchCallRateUsd(activeModel.model_id) : 0;
 
     const effectiveSpeedMode =
       speedMode === "ultrafast" && ["LingoFusion Pro", "LingoFusion Ultra"].includes(activeModel.model_id)
@@ -870,6 +875,7 @@ export function PlaygroundPage({
           id: string;
           model: string;
           provider?: string;
+          web_search_sources?: Array<{url:string;title:string}>;
           choices: Array<{ message: { content: string } }>;
           usage: {
             prompt_tokens: number;
@@ -892,6 +898,7 @@ export function PlaygroundPage({
         const completedRun: TranslationRun = {
           ...initialRun,
           outputText: fullContent,
+          webSearchSources: response.web_search_sources,
           promptTokens: pTokens,
           completionTokens: cTokens,
           costUsd,
@@ -963,9 +970,11 @@ export function PlaygroundPage({
       let buffer = "";
       let accumulatedText = "";
       const prompt = buildPromptMessages({ modelName: activeModel.model_id, fromLanguage, toLanguage, tone: "Natural (Default)" }, activeModel.upstream_model_name !== "gpt-5-nano");
-      let promptTokens = countTokens(prompt.text) + countTokens(currentInput) + (prompt.messages.length + 1) * 3 + 3;
+      let promptTokens = countTokens(prompt.text + (allowWebSearch ? "\n\n" + LOOKUP_POLICY : "")) + countTokens(currentInput) + (prompt.messages.length + 1) * 3 + 3;
       let receivedInputUsage = false;
       let completionTokens = 0;
+      let liveSearchCalls = 0;
+      let finalWebSearchSources: Array<{url:string;title:string}> = [];
       let finalCostUsd: number | undefined;
       let finalBalanceUsd: number | undefined;
       let finalOperationId: string | undefined;
@@ -985,12 +994,13 @@ export function PlaygroundPage({
             if (!rawData || rawData === "[DONE]") continue;
             try {
               const parsed = JSON.parse(rawData);
+              if (Number.isInteger(parsed.web_search_calls) && parsed.web_search_calls >= 0 && parsed.web_search_calls <= 1) liveSearchCalls = parsed.web_search_calls;
               const deltaContent = parsed.choices?.[0]?.delta?.content;
               if (typeof deltaContent === "string" && deltaContent.length > 0) {
                 accumulatedText += deltaContent;
                 completionTokens = countTokens(accumulatedText);
                 const multiplier = effectiveSpeedMode === "ultrafast" ? 4 : effectiveSpeedMode === "fast" ? 1.5 : 1;
-                const liveCost = Math.ceil((promptTokens * activeModel.input_per_million + completionTokens * activeModel.output_per_million) * multiplier) / 1e6;
+                const liveCost = Math.ceil((promptTokens * activeModel.input_per_million + completionTokens * activeModel.output_per_million) * multiplier) / 1e6 + liveSearchCalls * getWebSearchCallRateUsd(activeModel.model_id);
                 setTranslatedOutput(accumulatedText);
                 setLatestRun({
                   ...initialRun,
@@ -1001,6 +1011,7 @@ export function PlaygroundPage({
                   streaming: true,
                 });
               }
+              if (Array.isArray(parsed.web_search_sources)) finalWebSearchSources = parsed.web_search_sources;
               if (parsed.usage) {
                 if (typeof parsed.usage.service_fee_usd === "number") finalServiceFeeUsd = parsed.usage.service_fee_usd;
                 if (typeof parsed.operation_id === "string") finalOperationId = parsed.operation_id;
@@ -1048,6 +1059,7 @@ export function PlaygroundPage({
       const completedRun: TranslationRun = {
         ...initialRun,
         outputText: accumulatedText,
+        webSearchSources: finalWebSearchSources,
         promptTokens,
         completionTokens,
         costUsd: computedCost,
@@ -1115,7 +1127,7 @@ export function PlaygroundPage({
       if (result.from_language) setFromLanguage(result.from_language);
       if (result.to_language) setToLanguage(result.to_language);
       setLatestRun({ id: result.id, model: result.model, fromLanguage: result.from_language || fromLanguage, toLanguage: result.to_language || toLanguage,
-        inputText: userInput, outputText: output, promptTokens: usage.prompt_tokens,
+        webSearchSources: result.web_search_sources, inputText: userInput, outputText: output, promptTokens: usage.prompt_tokens,
         completionTokens: usage.completion_tokens, costUsd: data.cost_usd,
         serviceFeeUsd: result.service_fee_usd, createdAt: new Date().toISOString(), streaming: false });
       setPendingTextOperation(null);
@@ -1357,13 +1369,21 @@ export function PlaygroundPage({
     };
 
     const gatewayUrl = DEFAULT_EDGE_GATEWAY_URL || getApiBaseUrl();
+    const musicSession = getCurrentUser();
+    if (!musicSession.sessionToken) {
+      setMusicRunning(false);
+      onOpenAuth?.();
+      setErrorBanner("Sign in before generating music.");
+      return;
+    }
+    const musicHeaders = { "X-LingoFusion-Client-Token": "lf_play_secure_649f7", Authorization: `Bearer ${musicSession.sessionToken}` };
 
     try {
       const res = await fetch(`${gatewayUrl}/api/playground/music`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "X-LingoFusion-Client-Token": "lf_play_secure_649f7",
+          ...musicHeaders,
         },
         body: JSON.stringify(payload),
       });
@@ -1406,7 +1426,7 @@ export function PlaygroundPage({
       while (Date.now() - pollStart < 360000) {
         await new Promise((r) => setTimeout(r, 2000));
         const pollRes = await fetch(`${gatewayUrl}/api/playground/music?id=${encodeURIComponent(taskId)}`, {
-          headers: { "X-LingoFusion-Client-Token": "lf_play_secure_649f7" },
+          headers: musicHeaders,
         });
 
         if (pollRes.ok) {
@@ -2708,13 +2728,18 @@ export function PlaygroundPage({
                         onChange={setStreamToggle}
                         testId="playground-stream-toggle"
                       />
+                      {["LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(activeModel.model_id) && (
+                        <>
                       <SwitchRow
                         icon={Globe}
                         label="Allow web search"
                         checked={allowWebSearch}
-                        onChange={setAllowWebSearch}
+                        onChange={(enabled) => { setAllowWebSearch(enabled); if (enabled) setSpeedMode("default"); }}
                         testId="playground-web-search-toggle"
                       />
+                          <p className="px-2.5 text-[11px] leading-5 text-neutral-500">Optional term lookup only. Up to one search at ${getWebSearchCallRateUsd(activeModel.model_id).toFixed(3)} per search, plus token usage. No search fee if no lookup runs.</p>
+                        </>
+                      )}
                       {activeModel.model_id === "LingoFusion Pro" && (
                         <SwitchRow
                           icon={Sparkles}
@@ -2860,6 +2885,7 @@ export function PlaygroundPage({
               {mode === "text" && latestRun?.outputText && latestRun.inputText === userInput.trim() && (
                 <div className="mt-2 text-right text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400" role="status" aria-label="Translation price" title={latestRun.streaming || latestRun.aborted ? "Live total estimates input and visible output. Provider-only usage, including reasoning, is confirmed at completion." : "Verified final cost from provider usage."}>
                   Cost: ${formatCostBadge(latestRun.costUsd)}
+                  {Boolean(latestRun.webSearchSources?.length) && <div className="mt-1 flex flex-wrap justify-end gap-2"><span>Lookup sources:</span>{latestRun.webSearchSources?.map((source,index) => <a key={source.url+index} href={source.url} target="_blank" rel="noopener noreferrer" className="underline">{source.title}</a>)}</div>}
                 </div>
               )}
         </div>

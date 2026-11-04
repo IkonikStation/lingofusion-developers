@@ -173,7 +173,7 @@ export function resolveBackendModelRouting(
     allow_web_search?: boolean;
     web_search?: boolean;
   },
-) {
+): { upstreamModel: string; displayModel: string; reasoning?: string; reasoningEffort?: string; webSearch: boolean; webSearchCallFeeUsd: number } {
   const name = String(modelName || "LingoFusion").trim();
   const webSearchEnabled = Boolean(options?.allow_web_search || options?.web_search);
   const reasoningEnabled = Boolean(
@@ -189,14 +189,9 @@ export function resolveBackendModelRouting(
   );
 
   if (webSearchEnabled) {
-    return {
-      upstreamModel: "gpt-5-search-api",
-      displayModel: "GPT-5 Search API",
-      reasoning: undefined,
-      reasoningEffort: undefined,
-      webSearch: true,
-      webSearchCallFeeUsd: getWebSearchCallRateUsd(name),
-    };
+    if (!["LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(name)) throw new Error("Terminology lookup is available on LingoFusion, Pro and Ultra.");
+    const selected = resolveBackendModelRouting(name, { ...options, allow_web_search: false, web_search: false });
+    return { ...selected, webSearch: true, webSearchCallFeeUsd: getWebSearchCallRateUsd(name) };
   }
 
   if (name === "LingoFusion Nano") {
@@ -739,6 +734,7 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
   let promptTokens = tokenEstimate(lastUser);
   let replyText = "";
   let completionTokens = 0;
+  let webSearchSources: Array<{url:string;title:string}> = [];
   let serverSettlement: { cost_usd: number; balance_usd: number; service_fee_usd: number } | null = null;
 
   // Attempt live behind-the-scenes model call via secure edge gateway
@@ -770,6 +766,7 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
         pricing_mode: body.pricing_mode,
         max_completion_tokens: body.max_completion_tokens ?? 512,
         max_cost_usd: body.max_cost_usd,
+        allow_web_search: routing.webSearch,
         messages: [
           {
             role: "system",
@@ -806,6 +803,7 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
         promptTokens = reportedPromptTokens;
         completionTokens = Number(upstreamData.usage?.completion_tokens) || Math.max(1, tokenEstimate(replyText));
         if (!Number.isFinite(upstreamData.cost_usd) || !Number.isFinite(upstreamData.balance_usd)) fail("Server billing receipt missing");
+        webSearchSources = upstreamData.web_search_sources || [];
         serverSettlement = { cost_usd: upstreamData.cost_usd, balance_usd: upstreamData.balance_usd, service_fee_usd: upstreamData.service_fee_usd || 0 };
         if (typeof upstreamData.operation_id === "string") clearTextOperation(upstreamData.operation_id);
       }
@@ -889,6 +887,7 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
     provider: modelPricing.provider,
     upstream_model: routing.upstreamModel,
     upstream_display_model: routing.displayModel,
+    web_search_sources: webSearchSources,
     allow_web_search: routing.webSearch,
     ...(routing.reasoning ? { reasoning: routing.reasoning } : {}),
     ...(routing.reasoningEffort ? { reasoning_effort: routing.reasoningEffort } : {}),
@@ -1117,6 +1116,7 @@ export async function streamChatCompletionBrowser(
       pricing_mode: body.pricing_mode,
       max_completion_tokens: body.max_completion_tokens ?? 512,
       max_cost_usd: body.max_cost_usd,
+        allow_web_search: routing.webSearch,
       messages: [
         {
           role: "system",

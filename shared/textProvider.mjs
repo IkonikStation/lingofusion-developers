@@ -5,9 +5,16 @@ function chatResult(response) {
     throw new Error('Provider response did not complete with usage');
   }
   const usage = response.usage;
+  const toolCalls = (response.output || []).filter(x => x.type === 'web_search_call');
+  if (toolCalls.some(x => !['search','open_page','find_in_page'].includes(x.action?.type))) throw new Error('Unknown search action');
+  const sources = (response.output || []).filter(x => x.type === 'message').flatMap(x => x.content || [])
+    .flatMap(x => x.annotations || []).filter(x => x.type === 'url_citation' && /^https?:\/\//.test(x.url || ''))
+    .map(x => ({url:x.url,title:x.title || x.url})).slice(0,20);
   const content = (response.output || []).filter(x => x.type === 'message')
     .flatMap(x => x.content || []).filter(x => x.type === 'output_text').map(x => x.text).join('');
   return { id: response.id, model: response.model, service_tier: response.service_tier,
+    web_search_sources: sources, web_search_call_count: toolCalls.length,
+    web_search_calls: (response.output || []).filter(x => x.type === 'web_search_call' && x.action?.type === 'search').length,
     choices: [{ index: 0, message: { role: 'assistant', content },
       finish_reason: response.status === 'incomplete' ? 'length' : 'stop' }],
     usage: { prompt_tokens: usage.input_tokens, completion_tokens: usage.output_tokens,
@@ -18,7 +25,7 @@ function chatResult(response) {
 export async function fetchTextProvider(prepared, options, providerFetch = fetch,
   endpoint = 'https://api.openai.com/v1/chat/completions') {
   const payload = prepared.payload;
-  if (prepared.mode !== 'ultrafast') {
+  if (prepared.mode !== 'ultrafast' && !prepared.webSearch) {
     return providerFetch(endpoint, { ...options, body: JSON.stringify(payload) });
   }
   if (endpoint !== 'https://api.openai.com/v1/chat/completions') throw new Error('Unverified Ultrafast endpoint');
@@ -26,7 +33,9 @@ export async function fetchTextProvider(prepared, options, providerFetch = fetch
     content: Array.isArray(message.content) ? message.content.map(part => ({ ...part, type: 'input_text' })) : message.content }));
   const response = await providerFetch('https://api.openai.com/v1/responses', { ...options,
     body: JSON.stringify({ model: payload.model, input, stream: payload.stream,
-      service_tier: 'ultrafast', max_output_tokens: payload.max_completion_tokens,
+      service_tier: prepared.webSearch ? 'default' : 'ultrafast',
+      ...(prepared.webSearch ? { tools: [{type:'web_search',search_context_size:'low'}], tool_choice:'auto', max_tool_calls:1, parallel_tool_calls:false } : {}),
+      max_output_tokens: payload.max_completion_tokens,
       reasoning: { effort: payload.reasoning_effort },
       prompt_cache_options: payload.prompt_cache_options }) });
   if (!response.ok) return response;
@@ -46,6 +55,7 @@ export async function fetchTextProvider(prepared, options, providerFetch = fetch
           if (!line.startsWith('data:')) continue;
           const event = JSON.parse(line.slice(5).trim());
           if (event.type === 'response.created') { id = event.response.id; model = event.response.model; }
+          if (prepared.webSearch && event.type === 'response.output_item.done' && event.item?.type === 'web_search_call' && event.item.action?.type === 'search') emit({id,model,web_search_calls:1,choices:[]});
           if (event.type === 'response.output_text.delta') emit({ id, model, choices: [{ index: 0, delta: { content: event.delta } }] });
           if (event.type === 'response.completed' || event.type === 'response.incomplete') {
             const result = chatResult(event.response);

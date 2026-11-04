@@ -45,7 +45,7 @@ export async function meteredText(request, env, auth, respond, quoteOnly = false
       usage: { ...data.usage, prompt_tokens: price.prompt_tokens, total_tokens: price.prompt_tokens + data.usage.completion_tokens,
         customer_input_tokens: prepared.exactInputCount ? userTokens : null, instruction_and_overhead_tokens: prepared.exactInputCount ? price.instruction_and_overhead_tokens : null,
         prompt_tokens_details: undefined, cost_usd: price.cost_usd, service_fee_usd: price.service_fee_usd,
-        token_cost_usd: price.token_cost_usd },
+        token_cost_usd: price.token_cost_usd, web_search_cost_usd: price.web_search_cost_usd ?? 0 },
       cost_usd: price.cost_usd, service_fee_usd: price.service_fee_usd, token_cost_usd: price.token_cost_usd,
       pricing_version: TEXT_PRICING_VERSION, instruction_and_overhead_tokens: prepared.exactInputCount ? price.instruction_and_overhead_tokens : null, operation_id: operationId };
     const settled = await billing(env, { action: 'usageFinish', ...identity, actualMicros: price.chargeMicros, result,
