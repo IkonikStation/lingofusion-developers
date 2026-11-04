@@ -227,13 +227,14 @@ await test('edge gateway API keys work for OpenAI compatibility, balance checks,
   });
   assert.equal((await worker.fetch(revokedReq, h.env)).status, 401);
 
-  // 11. Test Developer $0.10 special offer credit grant
+  // Retired routes must not grant or reverse any existing credit.
   const testGrantUser = 'grantuser@example.com';
+  h.records.set(`user_balance:${testGrantUser}`, '0.37');
   assert.equal((await h.api('/api/developer/claim-test-credit', {}, '')).status, 401);
-  const grantRes = await h.api('/api/developer/claim-test-credit', {}, testGrantUser);
-  assert.equal(grantRes.status, 200);
-  const grantData = await grantRes.json();
-  assert.equal(grantData.balance_usd, 0.10);
-  assert.equal((await h.api('/api/developer/claim-test-credit', {}, testGrantUser)).status, 400);
+  for (const path of ['/api/account/special-offer', '/api/developer/claim-test-credit']) {
+    assert.equal((await h.api(path, {}, testGrantUser)).status, 410);
+    assert.equal(h.records.get(`user_balance:${testGrantUser}`), '0.37');
+  }
+
 });
 } finally {globalThis.fetch=realFetch;}

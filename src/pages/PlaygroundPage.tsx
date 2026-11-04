@@ -297,63 +297,6 @@ export function PlaygroundPage({
     claimUrl?: string;
   } | null>(null);
   const [claimCopied, setClaimCopied] = useState<boolean>(false);
-  const [specialOfferBusy, setSpecialOfferBusy] = useState<boolean>(false);
-  const [specialOfferClaimed, setSpecialOfferClaimed] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    const user = getCurrentUser();
-    if (user.provider === "guest" || !user.email) return false;
-    return localStorage.getItem(`lingofusion_special_offer_${user.email}`) === "claimed";
-  });
-
-  const handleClaimSpecialOffer = async () => {
-    const user = getCurrentUser();
-    if (user.provider === "guest" || !user.sessionToken) {
-      onOpenAuth?.();
-      setPaymentNotice({
-        type: "cancelled",
-        message: "Please sign in to claim your $0.10 special offer.",
-      });
-      return;
-    }
-    setSpecialOfferBusy(true);
-    try {
-      const res = await callApi<{ success: boolean; credited?: number; balance_usd?: number; message?: string }>(
-        "/api/account/special-offer",
-        { method: "POST" }
-      );
-      if (typeof res.balance_usd === "number") {
-        updateBalance(res.balance_usd);
-      } else {
-        updateBalance(Number((liveBalance + 0.10).toFixed(2)));
-      }
-      setSpecialOfferClaimed(true);
-      try {
-        localStorage.setItem(`lingofusion_special_offer_${user.email}`, "claimed");
-      } catch {}
-      setPaymentNotice({
-        type: "success",
-        message: "Special offer applied! +$0.10 credit added to your account.",
-      });
-      if (insufficientModalOpen) {
-        setInsufficientModalOpen(false);
-      }
-    } catch (err: any) {
-      const msg = err instanceof Error ? err.message : String(err || "");
-      if (msg.includes("already claimed") || msg.includes("already been claimed")) {
-        setSpecialOfferClaimed(true);
-        try {
-          localStorage.setItem(`lingofusion_special_offer_${user.email}`, "claimed");
-        } catch {}
-      }
-      setPaymentNotice({
-        type: "cancelled",
-        message: msg || "Special offer could not be claimed.",
-      });
-    } finally {
-      setSpecialOfferBusy(false);
-    }
-  };
-
   const fundingDialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!depositModalOpen) return;
@@ -580,11 +523,6 @@ export function PlaygroundPage({
     const unsub = subscribeAuth((user) => {
       setActiveUserId(user.id);
       setCurrentUserEmail(user.email);
-      if (user.provider !== "guest" && user.email) {
-        setSpecialOfferClaimed(localStorage.getItem(`lingofusion_special_offer_${user.email}`) === "claimed");
-      } else {
-        setSpecialOfferClaimed(false);
-      }
       if (resumeClaimRef.current && user.provider !== "guest") {
         resumeClaimRef.current = false;
         setClaimModalOpen(true);
@@ -1913,23 +1851,6 @@ export function PlaygroundPage({
 
         {/* Wallet balance and deposit shortcut */}
         <div className="playground-wallet flex shrink-0 flex-wrap items-center gap-2.5">
-          {!specialOfferClaimed && (
-            <button
-              type="button"
-              data-testid="playground-special-offer-btn"
-              disabled={specialOfferBusy}
-              onClick={handleClaimSpecialOffer}
-              className="pressable inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-500/10 via-amber-500/15 to-orange-500/10 px-3.5 text-xs font-semibold text-amber-700 shadow-2xs transition hover:border-amber-500/60 hover:from-amber-500/20 hover:to-orange-500/20 dark:border-amber-400/30 dark:text-amber-300"
-              title="Special Offer: +$0.10 for your account"
-            >
-              {specialOfferBusy ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-500" />
-              ) : (
-                <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-              )}
-              Special offer: <strong>+$0.10</strong>
-            </button>
-          )}
 
           <div
             data-testid="playground-live-balance"
@@ -2443,21 +2364,6 @@ export function PlaygroundPage({
               </div>
 
               <div className="mt-6 flex flex-wrap items-center justify-end gap-2.5">
-                {!specialOfferClaimed && (
-                  <button
-                    type="button"
-                    disabled={specialOfferBusy}
-                    onClick={handleClaimSpecialOffer}
-                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3.5 text-xs font-semibold text-amber-700 hover:bg-amber-500/20 dark:border-amber-400/30 dark:text-amber-300"
-                  >
-                    {specialOfferBusy ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-500" />
-                    ) : (
-                      <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                    )}
-                    Claim $0.10 Special Offer
-                  </button>
-                )}
                 <button
                   type="button"
                   onClick={() => setInsufficientModalOpen(false)}

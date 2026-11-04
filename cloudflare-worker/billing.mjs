@@ -128,12 +128,7 @@ export class BillingLedger {
           return Response.json({ balance_usd: await this.initial(email), subscription });
         }
         if (action === 'grantTestCredit' || action === 'grantSpecialOffer') {
-          const key = `specialOffer:${email}`;
-          if (await storage.get(key) || await storage.get(`testGrant:${email}`)) throw new Error('Special offer credit has already been claimed for this account.');
-          const current = await this.initial(email);
-          const newBal = Number((current + 0.10).toFixed(6));
-          await this.write({ [key]: true }, { [email]: newBal });
-          return Response.json({ balance_usd: newBal, credited: 0.10 });
+          throw new Error('Promotional credit grants are disabled.');
         }
         if (action === 'deduct') {
           if (!Number.isFinite(delta) || delta >= 0 || !operationId || operationId.length > 100) throw new Error('Only authenticated usage deductions are accepted.');
