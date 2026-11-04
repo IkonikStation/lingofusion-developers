@@ -1,0 +1,1 @@
+export function buildPromptMessages(settings: {modelName: string; fromLanguage?: string; toLanguage?: string; tone?: string}, explicit?: boolean): {text: string; messages: Array<{role: string; content: unknown}>; cacheOptions?: {mode: string; ttl: string}};

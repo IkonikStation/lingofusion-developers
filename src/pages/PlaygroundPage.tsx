@@ -1,3 +1,4 @@
+import { buildPromptMessages } from "../../shared/promptMessages.mjs";
 import { TranscriptionPanel } from '../components/TranscriptionPanel';
 import { waitForDubbing } from "../data/dubbingApi";
 import {
@@ -961,7 +962,8 @@ export function PlaygroundPage({
       const decoder = new TextDecoder();
       let buffer = "";
       let accumulatedText = "";
-      let promptTokens = textPriceQuote?.input_tokens ?? countTokens(currentInput);
+      const prompt = buildPromptMessages({ modelName: activeModel.model_id, fromLanguage, toLanguage, tone: "Natural (Default)" }, activeModel.upstream_model_name !== "gpt-5-nano");
+      let promptTokens = countTokens(prompt.text) + countTokens(currentInput) + (prompt.messages.length + 1) * 3 + 3;
       let receivedInputUsage = false;
       let completionTokens = 0;
       let finalCostUsd: number | undefined;
@@ -988,7 +990,7 @@ export function PlaygroundPage({
                 accumulatedText += deltaContent;
                 completionTokens = countTokens(accumulatedText);
                 const multiplier = effectiveSpeedMode === "ultrafast" ? 4 : effectiveSpeedMode === "fast" ? 1.5 : 1;
-                const liveCost = Math.ceil(completionTokens * activeModel.output_per_million * multiplier) / 1e6;
+                const liveCost = Math.ceil((promptTokens * activeModel.input_per_million + completionTokens * activeModel.output_per_million) * multiplier) / 1e6;
                 setTranslatedOutput(accumulatedText);
                 setLatestRun({
                   ...initialRun,
@@ -2856,8 +2858,8 @@ export function PlaygroundPage({
             </div>
           </div>
               {mode === "text" && latestRun?.outputText && latestRun.inputText === userInput.trim() && (
-                <div className="mt-2 text-right text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400" role="status" aria-label="Translation price" title={latestRun.streaming || latestRun.aborted ? "Output received so far, estimated from visible text. Input and any reasoning usage are included in the verified final cost." : "Verified final cost from provider usage."}>
-                  Cost: ${formatCostBadge(latestRun.costUsd)}{(latestRun.streaming || latestRun.aborted) && " · output so far"}
+                <div className="mt-2 text-right text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400" role="status" aria-label="Translation price" title={latestRun.streaming || latestRun.aborted ? "Live total estimates input and visible output. Provider-only usage, including reasoning, is confirmed at completion." : "Verified final cost from provider usage."}>
+                  Cost: ${formatCostBadge(latestRun.costUsd)}
                 </div>
               )}
         </div>
