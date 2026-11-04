@@ -988,7 +988,7 @@ export function PlaygroundPage({
                 accumulatedText += deltaContent;
                 completionTokens = countTokens(accumulatedText);
                 const multiplier = effectiveSpeedMode === "ultrafast" ? 4 : effectiveSpeedMode === "fast" ? 1.5 : 1;
-                const liveCost = Math.ceil((promptTokens * activeModel.input_per_million + completionTokens * activeModel.output_per_million) * multiplier) / 1e6;
+                const liveCost = Math.ceil(completionTokens * activeModel.output_per_million * multiplier) / 1e6;
                 setTranslatedOutput(accumulatedText);
                 setLatestRun({
                   ...initialRun,
@@ -2856,8 +2856,8 @@ export function PlaygroundPage({
             </div>
           </div>
               {mode === "text" && latestRun?.outputText && latestRun.inputText === userInput.trim() && (
-                <div className="mt-2 text-right text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400" role="status" aria-label="Translation price" title="Live cost is provisional until final provider usage arrives.">
-                  Cost: ${formatCostBadge(latestRun.costUsd)}
+                <div className="mt-2 text-right text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400" role="status" aria-label="Translation price" title={latestRun.streaming || latestRun.aborted ? "Output received so far, estimated from visible text. Input and any reasoning usage are included in the verified final cost." : "Verified final cost from provider usage."}>
+                  Cost: ${formatCostBadge(latestRun.costUsd)}{(latestRun.streaming || latestRun.aborted) && " · output so far"}
                 </div>
               )}
         </div>
