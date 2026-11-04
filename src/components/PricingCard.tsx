@@ -109,7 +109,7 @@ function TextTable({ rows, labels }: { rows: DisplayTextModel[]; labels: Pricing
                   )}
                   {row.deprecated && (
                     <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
-                      Deprecated
+                      Deprecated on December 5th
                     </span>
                   )}
 
