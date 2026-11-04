@@ -347,7 +347,7 @@ export default {
 
       if (request.method === 'GET' && path === '/api/transcription/socket') {
         if (requestOrigin && !ALLOWED_ORIGINS.includes(requestOrigin)) return jsonResponse({error:'origin_not_allowed'},403,requestOrigin);
-        return connectLiveTranscription(request,env,(data,status=200)=>jsonResponse(data,status,requestOrigin),context);
+        return await connectLiveTranscription(request,env,(data,status=200)=>jsonResponse(data,status,requestOrigin),context);
       }
       if (request.method === 'POST' && ['/api/transcription/file','/v1/audio/transcriptions','/api/transcription/live','/api/transcription/cancel'].includes(path)) {
         const user = await authenticateUser();
@@ -359,7 +359,7 @@ export default {
           catch(error) { return respond({error:'reconciliation_required',message:error.message},409); }
         }
 
-        return path === '/api/transcription/live' ? createLiveTranscription(request,env,user,respond) : transcriptionRequest(request,env,user,respond);
+        return await (path === '/api/transcription/live' ? createLiveTranscription(request,env,user,respond) : transcriptionRequest(request,env,user,respond));
       }
 
       // 1b. Models List (/v1/models) - OpenAI compatibility
@@ -897,7 +897,7 @@ export default {
           textRequest = new Request(request.url, { method: 'POST', headers: request.headers,
             body: JSON.stringify({ ...body, messages: [{ role: 'user', content: body.input }] }) });
         }
-        return meteredText(textRequest, env, { email: user.email.toLowerCase() },
+        return await meteredText(textRequest, env, { email: user.email.toLowerCase() },
           (data, status = 200) => jsonResponse(data, status, requestOrigin), path === "/api/pricing/text", context);
       }
 
@@ -1169,7 +1169,7 @@ export default {
 
       return jsonResponse({ error: "not_found" }, 404);
     } catch (err) {
-      return jsonResponse({ error: "internal_error", message: err?.message || "Gateway error" }, 500);
+      return jsonResponse({ error: "internal_error", message: err?.message || "Gateway error" }, 500, requestOrigin);
     }
   },
 };

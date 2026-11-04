@@ -2850,8 +2850,8 @@ export function PlaygroundPage({
             </div>
           </div>
               {mode === "text" && latestRun?.outputText && latestRun.inputText === userInput.trim() && (
-                <div className="mt-2 text-right text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400" role="status" aria-label="Translation price">
-                  {latestRun.streaming ? "Estimated: " : "Cost: "}${formatCostBadge(latestRun.costUsd)}
+                <div className="mt-2 text-right text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400" role="status" aria-label="Translation price" title="Live cost is provisional until final provider usage arrives.">
+                  Cost: ${formatCostBadge(latestRun.costUsd)}
                 </div>
               )}
         </div>
