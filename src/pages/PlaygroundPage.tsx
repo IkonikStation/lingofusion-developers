@@ -2765,9 +2765,9 @@ export function PlaygroundPage({
                 </Popover>
               )}
 
-              {mode === "text" && isRunning && latestRun?.streaming && latestRun.outputText && (
+              {mode === "text" && latestRun?.outputText && latestRun.inputText === userInput.trim() && (
                 <span className="text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400" role="status" aria-label="Translation price">
-                  Estimated: ${formatCostBadge(latestRun.costUsd)}
+                  {latestRun.streaming ? "Estimated: " : "Cost: "}${formatCostBadge(latestRun.costUsd)}
                 </span>
               )}
               {mode === "dubbing" ? (
