@@ -288,7 +288,7 @@ print(response.output_text)`,
             Pass custom idempotency keys on batch operations to safely retry transient connection failures without duplicate token billing.
           </DocCard>
           <DocCard icon={Activity} title="Cost Accounting" tc={tc}>
-            Text translations are billed for the full provider-reported input, including built-in system instructions and request overhead, plus output tokens including reasoning. All input, including cached input, uses the published input rate. There is no additional service fee. Request a maximum spending quote before translation; final charges use actual usage and round up once to six decimal USD places.
+            Text translations are billed for the full provider-reported input plus output tokens including reasoning. All input, including cached input, uses the published input rate. There is no additional service fee. Request a maximum spending quote before translation; final charges use actual usage and round up once to six decimal USD places.
           </DocCard>
         </div>
       </section>

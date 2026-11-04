@@ -373,7 +373,7 @@ export function ModelDetailPage({
             </div>
           ) : (
             <>
-              <p className="mb-4 text-xs leading-5 text-neutral-500">Input includes built-in system instructions and request overhead, billed at the displayed input rate. Output includes reasoning tokens. There is no additional service fee. Playground shows the maximum price before translation; some processing modes may be unavailable.</p>
+              <p className="mb-4 text-xs leading-5 text-neutral-500">Total input is billed at the displayed input rate. Output includes reasoning tokens. There is no additional service fee. Playground shows the maximum price before translation; some processing modes may be unavailable.</p>
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-xl border border-neutral-200/80 bg-neutral-50/80 p-4 dark:border-white/[0.08] dark:bg-white/[0.03]">
                   <p className="text-xs text-neutral-500">Input / 1M</p>

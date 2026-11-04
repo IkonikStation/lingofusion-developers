@@ -117,7 +117,7 @@ function TextTable({ rows, labels }: { rows: DisplayTextModel[]; labels: Pricing
       </table>
       {rows.length > 0 && (
         <div className="border-t border-neutral-200 bg-neutral-50/50 px-5 py-2.5 text-[11px] text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900/30 dark:text-neutral-400">
-          <strong>Text translation pricing:</strong> Input tokens include your text, built-in system instructions, and request overhead. All input, including cached input, is billed at the displayed input rate. Output usage includes reasoning tokens. There is no additional service fee. Playground shows the maximum price before translation. The combined token charge rounds up once to six decimal USD places.
+          <strong>Text translation pricing:</strong> Total input, including cached input, is billed at the displayed input rate. Output usage includes reasoning tokens. There is no additional service fee. Playground shows the maximum price before translation. The combined token charge rounds up once to six decimal USD places.
         </div>
       )}
     </>

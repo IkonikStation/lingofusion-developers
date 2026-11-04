@@ -799,7 +799,7 @@ export function DashboardModal({
                         </div>
                         {tryResult && (
                           <div className="space-y-2">
-                            <p className="text-xs leading-5 text-neutral-500 dark:text-neutral-400">Input token totals include the source text, translation instructions, and request formatting. Source-text and instruction estimates are included in the usage object.</p>
+                            <p className="text-xs leading-5 text-neutral-500 dark:text-neutral-400">Input token totals reflect the full request usage reported by the model.</p>
                             <CodeBlock
                               code={tryResult}
                               language="JSON"

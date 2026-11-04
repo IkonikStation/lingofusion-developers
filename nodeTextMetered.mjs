@@ -58,7 +58,7 @@ export function quoteNodeTextRequest(body, defaultModelName = "LingoFusion") {
     customer_input_tokens: prepared.userTokens,
     instruction_tokens_estimate: prepared.systemTokens,
     max_completion_tokens: prepared.maxOutput,
-    notice: "Input includes built-in system instructions and request overhead at the published input rate. Output includes reasoning. No additional service fee. Final token charges round up once to six decimal USD places.",
+    notice: "Total input is billed at the published input rate. Output includes reasoning. No additional service fee. Final token charges round up once to six decimal USD places.",
   };
 }
 

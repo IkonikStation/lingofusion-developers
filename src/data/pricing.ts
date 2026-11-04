@@ -110,7 +110,7 @@ export const textModelPresentations: Record<string, TextModelPresentation> = {
     imageScale: 1.73,
     capability: "Fast, efficient translation for high-volume utility tasks and latency-sensitive workflows.",
     bestFor: "Simple, high-volume language tasks where speed and cost matter most.",
-    features: ["Fast multilingual translation", "Text classification", "Structured extraction", "Input includes system instructions"],
+    features: ["Fast multilingual translation", "Text classification", "Structured extraction", "Per-token pricing"],
   },
   "LingoFusion Lite": {
     image: "/assets/models/lingofusion-lite.png",

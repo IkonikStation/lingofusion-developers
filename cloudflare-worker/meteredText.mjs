@@ -16,7 +16,7 @@ export async function meteredText(request, env, auth, respond, quoteOnly = false
   if (quoteOnly) return respond({ model: policy.model, pricing_version: TEXT_PRICING_VERSION,
     maximum_cost_usd: maximum.cost_usd, maximum_service_fee_usd: 0,
     input_tokens: prepared.rawMaximum, customer_input_tokens: userTokens, instruction_tokens_estimate: prepared.systemTokens, max_completion_tokens: prepared.maxOutput,
-    notice: 'Input includes built-in system instructions and request overhead at the published input rate. Output includes reasoning. No additional service fee. Final token charges round up once to six decimal USD places.' });
+    notice: 'Total input is billed at the published input rate. Output includes reasoning. No additional service fee. Final token charges round up once to six decimal USD places.' });
   if (!env.BILLING || !env.GIFTS || !env.OPENAI_API_KEY) return respond({ error: 'metered_text_not_configured' }, 503);
   const operationId = request.headers.get('Idempotency-Key') || crypto.randomUUID();
   if (!/^[A-Za-z0-9_-]{1,100}$/.test(operationId)) return respond({ error: 'invalid_idempotency_key' }, 400);

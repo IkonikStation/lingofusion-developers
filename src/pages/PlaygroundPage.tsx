@@ -2052,7 +2052,7 @@ export function PlaygroundPage({
         >
           <h2 id="extra-input-title" className="text-lg font-normal leading-7">Where did these extra input tokens come from?</h2>
           <div id="extra-input-description" className="mt-4 space-y-3 text-sm leading-6 text-neutral-600 dark:text-neutral-300">
-            <p>Cloud translation requests include your text plus translation instructions and language settings. These help the model translate accurately and consistently, so the total input can be larger than the text you typed.</p>
+            <p>Input usage is the full request total reported by the model and may be higher than the text you typed.</p>
             <p>All of that input is billed at the listed input-token rate. Output tokens are billed separately, with no additional service fee.</p>
             <p>Local models run on your device and do not use cloud credits.</p>
           </div>
@@ -2948,8 +2948,8 @@ export function PlaygroundPage({
             {textPriceQuote?.key === textQuoteBody ? (
               <>
                 <span className="font-medium text-neutral-900 dark:text-neutral-100">Next translation: up to ${textPriceQuote.maximum_cost_usd.toFixed(6)}</span>
-                {" · Input includes built-in instructions. No additional service fee."}
-                <span className="ml-1" title={`Up to ${textPriceQuote.input_tokens.toLocaleString()} input tokens, including built-in instructions and request overhead.`}>
+                {" · No additional service fee."}
+                <span className="ml-1" title={`Up to ${textPriceQuote.input_tokens.toLocaleString()} total input tokens.`}>
                   {`Output limit: ${outputTokenLimit.toLocaleString()} tokens, including reasoning.`}
                 </span>
               </>
@@ -3225,10 +3225,10 @@ export function PlaygroundPage({
                         <span
                           data-testid="playground-image-absorbed-counter"
                           className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-300"
-                          title="LingoFusion system prompt absorbed by the platform at no charge"
+                          title="Included at no additional charge"
                         >
                           <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-                          <span>System prompt absorbed ({imageRun.systemTokensAbsorbed ?? 209} tokens • $0.00)</span>
+                          <span>Included at no additional charge</span>
                         </span>
 
                         <span

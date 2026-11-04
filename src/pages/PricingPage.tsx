@@ -263,7 +263,7 @@ export function PricingPage({
               ))}
             </SelectField>
             <NumberField
-              label="Total input tokens (including system instructions)"
+              label="Total input tokens"
               min={0}
               max={Infinity}
               step={1000}
@@ -279,7 +279,7 @@ export function PricingPage({
               onChange={setOutputTokens}
             />
           </SectionCalculator>
-          <p className="mt-3 text-xs text-neutral-500">Include built-in instructions and request overhead in your input count. Output includes reasoning tokens. Playground provides a request-specific maximum quote.</p>
+          <p className="mt-3 text-xs text-neutral-500">Output includes reasoning tokens. Playground provides a request-specific maximum quote.</p>
 
           <PricingCard
             key={`text-${textPricingMode}-${currencyPresentationKey}`}
