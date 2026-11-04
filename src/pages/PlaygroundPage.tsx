@@ -3437,9 +3437,6 @@ export function PlaygroundPage({
                   </label>
                   {userInput && (
                     <div className="flex items-center gap-3">
-                      <span className="font-mono text-[11px] text-neutral-400 dark:text-neutral-500">
-                        {userInput.length.toLocaleString()} chars
-                      </span>
                       <button
                         type="button"
                         onClick={() => {
