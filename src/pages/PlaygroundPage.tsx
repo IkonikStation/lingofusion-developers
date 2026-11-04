@@ -228,7 +228,7 @@ export function PlaygroundPage({
   const [ultraMaxEnabled, setUltraMaxEnabled] = useState<boolean>(false);
   const [allowWebSearch, setAllowWebSearch] = useState<boolean>(false);
   const [streamToggle, setStreamToggle] = useState<boolean>(true);
-  const [outputTokenLimit, setOutputTokenLimit] = useState<number>(2048);
+  const outputTokenLimit = 2048;
 
   const [isRunning, setIsRunning] = useState<boolean>(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
@@ -2745,13 +2745,6 @@ export function PlaygroundPage({
                 >
                   {() => (
                     <>
-                      <div className="mb-2 rounded-lg border border-neutral-200 p-3 dark:border-white/10">
-                        <label htmlFor="playground-output-limit" className="text-xs font-semibold">Output token limit</label>
-                        <input id="playground-output-limit" type="number" min="1" max="128000" value={outputTokenLimit}
-                          onChange={event => setOutputTokenLimit(Math.min(128000, Math.max(1, Math.trunc(Number(event.target.value) || 1))))}
-                          className="mt-2 w-full rounded border border-neutral-200 bg-transparent p-2 text-xs dark:border-white/10" />
-                        <p className="mt-1 text-[11px] text-neutral-500">Includes reasoning. Sets your maximum price; unused tokens are not charged.</p>
-                      </div>
                       {["LingoFusion", "LingoFusion Lite"].includes(activeModel.model_id) && (
                         <div className="mb-1 rounded-lg border border-neutral-200 p-3 dark:border-white/10" data-testid="playground-temperature-control">
                           <div className="flex items-center justify-between gap-3">
@@ -2943,18 +2936,8 @@ export function PlaygroundPage({
           </div>
         </div>
 
-        {mode === "text" && !activeModel.local && userInput.trim() && !isRunning && (textPriceQuote?.key === textQuoteBody || textPriceError) && (
-          <div data-testid="playground-price-quote" className="border-t border-neutral-200/60 px-4 py-2 text-xs text-neutral-600 dark:border-white/10 dark:text-neutral-400 sm:px-5">
-            {textPriceQuote?.key === textQuoteBody ? (
-              <>
-                <span className="font-medium text-neutral-900 dark:text-neutral-100">Next translation: up to ${textPriceQuote.maximum_cost_usd.toFixed(6)}</span>
-                {" · No additional service fee."}
-                <span className="ml-1" title={`Up to ${textPriceQuote.input_tokens.toLocaleString()} total input tokens.`}>
-                  {`Output limit: ${outputTokenLimit.toLocaleString()} tokens, including reasoning.`}
-                </span>
-              </>
-            ) : textPriceError}
-          </div>
+        {mode === "text" && textPriceError && userInput.trim() && (
+          <p role="alert" className="px-4 py-2 text-xs text-red-600 dark:text-red-400 sm:px-5">{textPriceError}</p>
         )}
 
         {/* Clean Side-by-Side Input & Output Panes */}
