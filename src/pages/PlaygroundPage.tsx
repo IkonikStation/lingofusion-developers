@@ -986,8 +986,9 @@ export function PlaygroundPage({
               const deltaContent = parsed.choices?.[0]?.delta?.content;
               if (typeof deltaContent === "string" && deltaContent.length > 0) {
                 accumulatedText += deltaContent;
-                completionTokens += 1;
-                const liveCost = textPriceQuote?.maximum_cost_usd ?? 0;
+                completionTokens = countTokens(accumulatedText);
+                const multiplier = effectiveSpeedMode === "ultrafast" ? 4 : effectiveSpeedMode === "fast" ? 1.5 : 1;
+                const liveCost = Math.ceil((promptTokens * activeModel.input_per_million + completionTokens * activeModel.output_per_million) * multiplier) / 1e6;
                 setTranslatedOutput(accumulatedText);
                 setLatestRun({
                   ...initialRun,
@@ -2764,6 +2765,11 @@ export function PlaygroundPage({
                 </Popover>
               )}
 
+              {mode === "text" && latestRun && (
+                <span className="text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400" role="status" aria-label="Translation price">
+                  {isRunning ? "Estimated: " : "Cost: "}${formatCostBadge(latestRun.costUsd)}
+                </span>
+              )}
               {mode === "dubbing" ? (
                 <button
                   type="button"
