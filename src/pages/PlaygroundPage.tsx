@@ -2765,11 +2765,6 @@ export function PlaygroundPage({
                 </Popover>
               )}
 
-              {mode === "text" && latestRun?.outputText && latestRun.inputText === userInput.trim() && (
-                <span className="text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400" role="status" aria-label="Translation price">
-                  {latestRun.streaming ? "Estimated: " : "Cost: "}${formatCostBadge(latestRun.costUsd)}
-                </span>
-              )}
               {mode === "dubbing" ? (
                 <button
                   type="button"
@@ -2854,6 +2849,11 @@ export function PlaygroundPage({
               )}
             </div>
           </div>
+              {mode === "text" && latestRun?.outputText && latestRun.inputText === userInput.trim() && (
+                <div className="mt-2 text-right text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400" role="status" aria-label="Translation price">
+                  {latestRun.streaming ? "Estimated: " : "Cost: "}${formatCostBadge(latestRun.costUsd)}
+                </div>
+              )}
         </div>
 
         {mode === "text" && textPriceError && userInput.trim() && (
