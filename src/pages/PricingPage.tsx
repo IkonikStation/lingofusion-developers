@@ -162,6 +162,7 @@ export function PricingPage({
 
   const displayedTextModels = visibleTextModels.map((model) => ({
     ...model,
+    deprecated: model.model === "LingoFusion Nano",
     input: model.local ? "Free" : displayCurrency(model.inputUsd, true),
     output: model.local ? "Free" : displayCurrency(model.outputUsd, true),
   }));
