@@ -111,7 +111,7 @@ test('gateway quote makes no paid request; settlement/replay bills full input an
     const data = await first.json();
     assert.equal(data.usage.prompt_tokens, 3200);
     assert.equal(data.cost_usd, 0.000322);
-    assert.ok(data.instruction_and_overhead_tokens > 3000);
+    assert.equal(data.instruction_and_overhead_tokens, null, "edge reports no fabricated exact input split");
     assert.equal(data.service_fee_usd, 0);
     assert.equal(data.balance_usd, 1 - data.cost_usd);
     const replay = await h.api('/api/playground/chat', body, email, headers);
