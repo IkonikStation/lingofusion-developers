@@ -11,7 +11,8 @@
     "test:billing": "node --test scripts/test-billing.mjs && node scripts/test-gifts.mjs && node scripts/test-billing-node.mjs",
     "test:text-billing": "node --test scripts/test-metered-text.mjs scripts/test-node-margin.mjs scripts/test-metered-ledger.mjs && node scripts/test-node-provider-margin.mjs",
     "test:stripe-sandbox": "node scripts/test-stripe-sandbox.mjs",
-    "test:transcription": "node --test scripts/test-transcription.mjs"
+    "test:transcription": "node --test scripts/test-transcription.mjs",
+    "test:unlimited-balance": "node --test scripts/test-unlimited-balance.mjs"
   },
   "dependencies": {
     "@lmstudio/sdk": "^1.5.0",

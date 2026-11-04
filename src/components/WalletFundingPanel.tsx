@@ -8,6 +8,7 @@ type WalletFundingPanelProps = {
   amount: number;
   onAmountChange: (amount: number) => void;
   balance: number;
+  unlimitedBalance?: boolean;
   credit: number;
   fee: number;
   total: number;
@@ -123,8 +124,8 @@ export function WalletFundingPanel(props: WalletFundingPanelProps) {
           ) : (
             <div className="funding-balance">
               <Wallet className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-              <div className="min-w-0 flex-1"><p className="text-xs text-neutral-500 dark:text-neutral-400">Your balance after adding credits</p><p className="mt-1 text-lg font-semibold tabular-nums text-neutral-950 dark:text-white">${formatUsd(props.balance + props.credit)} <span className="text-xs font-normal text-neutral-400">USD</span></p></div>
-              <span className="text-xs tabular-nums text-neutral-400">${formatUsd(props.balance)} now</span>
+              <div className="min-w-0 flex-1"><p className="text-xs text-neutral-500 dark:text-neutral-400">Your balance after adding credits</p><p className="mt-1 text-lg font-semibold tabular-nums text-neutral-950 dark:text-white">{props.unlimitedBalance ? "∞" : `$${formatUsd(props.balance + props.credit)}`} <span className="text-xs font-normal text-neutral-400">USD</span></p></div>
+              <span className="text-xs tabular-nums text-neutral-400">{props.unlimitedBalance ? "∞" : `$${formatUsd(props.balance)}`} now</span>
             </div>
           )}
         </div>

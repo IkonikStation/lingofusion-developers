@@ -39,6 +39,7 @@ jobs:
           node scripts/test-billing-node.mjs
           npm run test:text-billing
           npm run test:transcription
+          npm run test:unlimited-balance
 
       - name: Check localization
         run: pnpm test:localization

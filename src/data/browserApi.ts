@@ -102,6 +102,7 @@ type BrowserDashboard = {
   usageLedger?: UsageLedgerRecord[];
   depositLedger?: DepositLedgerRecord[];
   account: {
+    unlimitedBalance?: boolean;
     paidBalance: number;
     rewardBalance: number;
     pendingCharges: number;
@@ -563,6 +564,7 @@ function translatePhrase(input: string, fromLanguage: string, toLanguage: string
 
 function applyCharge(state: BrowserState, cost: number) {
   const account = state.dashboard.account;
+  if (account.unlimitedBalance) return;
   if (account.paidBalance + account.rewardBalance < cost || account.paidBalance + account.rewardBalance <= 0) {
     fail("Insufficient balance. Please deposit credits.");
   }
@@ -587,8 +589,8 @@ function logRequest(state: BrowserState, log: BrowserRequestLog) {
 function createChargeEntry(state: BrowserState, amount: number, description: string) {
   state.dashboard.ledger.unshift({
     id: randomId("ch"),
-    type: "api_usage_charge",
-    amount: -amount,
+    type: state.dashboard.account.unlimitedBalance ? "complimentary_usage" : "api_usage_charge",
+    amount: state.dashboard.account.unlimitedBalance ? 0 : -amount,
     description,
     status: "succeeded",
     createdAt: new Date().toISOString(),
@@ -613,13 +615,16 @@ export async function syncCloudBalance(targetEmail?: string, targetUserId?: stri
     });
     if (!res.ok) return null;
     const data = await res.json();
+    if (getCurrentUser().id !== currentUser.id || userId !== currentUser.id) return null;
     if (typeof data.balance_usd === "number") {
       const state = loadState(userId);
       state.dashboard.account.paidBalance = data.balance_usd;
+      state.dashboard.account.unlimitedBalance = data.unlimited_balance === true;
       if (state.dashboard.user) {
         state.dashboard.user.balance_usd = data.balance_usd;
       }
       saveState(state, userId);
+      window.dispatchEvent(new CustomEvent("lingofusion-balance-status", { detail: { userId, unlimited: data.unlimited_balance === true } }));
       return data.balance_usd;
     }
   } catch {
@@ -705,7 +710,7 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
     projectId = auth.project.id;
   }
 
-  if ((state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) <= 0) {
+  if (!state.dashboard.account.unlimitedBalance && (state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) <= 0) {
     fail("Insufficient balance. Please deposit credits.");
   }
 
@@ -838,7 +843,7 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
   if (!serverSettlement) fail("Translation was not settled by the server. Please retry with the same request ID.");
   const costUsd = serverSettlement.cost_usd;
   state.dashboard.account.paidBalance = serverSettlement.balance_usd;
-  state.dashboard.account.lifetimeSpend = Number((state.dashboard.account.lifetimeSpend + costUsd).toFixed(6));
+  if (!state.dashboard.account.unlimitedBalance) state.dashboard.account.lifetimeSpend = Number((state.dashboard.account.lifetimeSpend + costUsd).toFixed(6));
   if (state.dashboard.user) state.dashboard.user.balance_usd = serverSettlement.balance_usd;
   const requestId = `chatcmpl-${randomId("browser")}`;
   const now = new Date().toISOString();
@@ -928,7 +933,7 @@ export function recordBrowserStreamUsage({
   const state = loadState();
   if (!Number.isFinite(balanceUsd)) fail("Server billing receipt missing");
   state.dashboard.account.paidBalance = balanceUsd!;
-  state.dashboard.account.lifetimeSpend = Number((state.dashboard.account.lifetimeSpend + costUsd).toFixed(6));
+  if (!state.dashboard.account.unlimitedBalance) state.dashboard.account.lifetimeSpend = Number((state.dashboard.account.lifetimeSpend + costUsd).toFixed(6));
   if (state.dashboard.user) state.dashboard.user.balance_usd = balanceUsd!;
   if (operationId) clearTextOperation(operationId);
   const now = new Date().toISOString();
@@ -981,7 +986,7 @@ export function recordBrowserTranscriptionUsage(receipt: {
   const id = `transcription-${receipt.operation_id}`;
   // A recovered receipt updates the authoritative balance without counting usage twice.
   if (!state.dashboard.requestLogs.some(log => log.id === id) && receipt.duration_seconds > 0) {
-    state.dashboard.account.lifetimeSpend = Number((state.dashboard.account.lifetimeSpend + receipt.cost_usd).toFixed(6));
+    if (!state.dashboard.account.unlimitedBalance) state.dashboard.account.lifetimeSpend = Number((state.dashboard.account.lifetimeSpend + receipt.cost_usd).toFixed(6));
     const now = new Date().toISOString();
     state.dashboard.usageLedger?.unshift({ id, user_id: state.dashboard.user?.id || "", api_key_id: null,
       model_id: receipt.model, prompt_tokens: 0, completion_tokens: 0, cost_usd: receipt.cost_usd, source: "playground", created_at: now });
@@ -1054,7 +1059,7 @@ export async function streamChatCompletionBrowser(
   signal?: AbortSignal,
 ): Promise<Response> {
   const state = loadState();
-  if ((state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) <= 0) {
+  if (!state.dashboard.account.unlimitedBalance && (state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) <= 0) {
     fail("Insufficient balance. Please deposit credits.");
   }
 
@@ -1157,7 +1162,7 @@ async function runImageTranslationBrowser(
   source: "api" | "playground" = "playground",
 ) {
   const started = Date.now();
-  if ((state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) <= 0) {
+  if (!state.dashboard.account.unlimitedBalance && (state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) <= 0) {
     fail("Insufficient balance. Please deposit credits.");
   }
 
@@ -1342,7 +1347,7 @@ async function runSpeechBrowser(state: BrowserState, options?: RequestInit) {
   const modelName = isFlash ? "LingoFusion Voice Flash" : "LingoFusion Voice";
   const cost = Number(((input.length / 1000) * rate).toFixed(6));
 
-  if ((state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) < cost) {
+  if (!state.dashboard.account.unlimitedBalance && (state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) < cost) {
     fail("Insufficient balance. Please deposit credits.");
   }
 
@@ -1438,7 +1443,7 @@ async function runMusic(state: BrowserState, options?: RequestInit) {
   const durationMinutes = durationSeconds / 60;
   const cost = Number((model.priceUsd ?? 0.10).toFixed(4));
 
-  if ((state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) < cost) {
+  if (!state.dashboard.account.unlimitedBalance && (state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) < cost) {
     fail("Insufficient balance. Please deposit credits.");
   }
 
@@ -1574,7 +1579,7 @@ async function runDubbingBrowser(state: BrowserState, options?: RequestInit) {
   const durationMinutes = durationSeconds / 60;
   const cost = Number(((model.priceUsd ?? 3.50) * durationMinutes).toFixed(6));
 
-  if ((state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) < cost) {
+  if (!state.dashboard.account.unlimitedBalance && (state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) < cost) {
     fail("Insufficient balance. Please deposit credits.");
   }
 
@@ -1650,8 +1655,9 @@ export function shouldUseBrowserApi() {
 
 export async function browserApi<T>(path: string, options?: RequestInit): Promise<T> {
   await Promise.resolve();
-  const state = loadState();
   const method = options?.method ?? "GET";
+  if (method === "GET" && path === "/api/dashboard") await syncCloudBalance();
+  const state = loadState();
   let result: unknown;
 
   if (method === "GET" && path === "/api/dashboard") {

@@ -25,6 +25,7 @@ type HeaderProps = {
   mobileOpen: boolean;
   searchItems: string[];
   balanceUsd?: number;
+  unlimitedBalance?: boolean;
   currentUser?: AuthUser;
   onOpenAuth?: () => void;
   onSignOut?: () => void;
@@ -53,6 +54,7 @@ export function Header({
   mobileOpen,
   searchItems,
   balanceUsd = 0,
+  unlimitedBalance = false,
   currentUser,
   onOpenAuth,
   onSignOut,
@@ -197,7 +199,7 @@ export function Header({
             <Wallet className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             <span className="hidden text-[11px] font-medium text-emerald-700/80 xl:inline dark:text-emerald-300/80">Balance:</span>
             <span className="font-sans tabular-nums tracking-tight" data-testid="header-balance-amount">
-              ${formatUsd(Number(balanceUsd) || 0)}
+              {unlimitedBalance ? "∞" : `$${formatUsd(Number(balanceUsd) || 0)}`}
             </span>
             <PlusCircle className="h-3 w-3 text-emerald-600/80 dark:text-emerald-400/80" />
           </button>
@@ -320,7 +322,7 @@ export function Header({
                       <div className="mt-2.5 flex items-center justify-between rounded-lg bg-neutral-50 px-2.5 py-1.5 text-xs dark:bg-white/[0.04]">
                         <span className="text-neutral-500">Balance</span>
                         <span className="font-sans font-bold text-emerald-600 dark:text-emerald-400">
-                          ${formatUsd(Number(balanceUsd) || 0)}
+                          {unlimitedBalance ? "∞" : `$${formatUsd(Number(balanceUsd) || 0)}`}
                         </span>
                       </div>
                     </div>

@@ -179,6 +179,7 @@ function formatFileSize(bytes: number): string {
 
 export function PlaygroundPage({
   balanceUsd,
+  unlimitedBalance = false,
   onBalanceChange,
   onOpenAuth,
 }: {
@@ -186,6 +187,7 @@ export function PlaygroundPage({
   onOpenAuth?: () => void;
   onNavigate?: (page: string) => void;
   balanceUsd?: number;
+  unlimitedBalance?: boolean;
   onBalanceChange?: (newBalance: number) => void;
 }) {
   const requestedModel = pageQuery().get("model");
@@ -801,7 +803,7 @@ export function PlaygroundPage({
       setErrorBanner(textPriceError || "Please wait for the full price quote before translating.");
       return;
     }
-    if (liveBalance <= 0) {
+    if (!unlimitedBalance && liveBalance <= 0) {
       setInsufficientModalOpen(true);
       return;
     }
@@ -1160,7 +1162,7 @@ export function PlaygroundPage({
 
   const handleRunImageTranslation = async () => {
     if (imageRunning) return;
-    if (liveBalance <= 0) {
+    if (!unlimitedBalance && liveBalance <= 0) {
       setInsufficientModalOpen(true);
       return;
     }
@@ -1243,7 +1245,7 @@ export function PlaygroundPage({
   const handleRunVoiceSynthesis = async () => {
     const textToSpeak = userInput.trim() || translatedOutput.trim();
     if (!textToSpeak || voiceRunning) return;
-    if (liveBalance <= 0) {
+    if (!unlimitedBalance && liveBalance <= 0) {
       setInsufficientModalOpen(true);
       return;
     }
@@ -1333,7 +1335,7 @@ export function PlaygroundPage({
     const prompt = userInput.trim() || translatedOutput.trim();
     if (!prompt || musicRunning) return;
     const songCost = 0.10;
-    if (liveBalance < songCost || liveBalance <= 0) {
+    if (!unlimitedBalance && (liveBalance < songCost || liveBalance <= 0)) {
       setInsufficientModalOpen(true);
       return;
     }
@@ -1518,7 +1520,7 @@ export function PlaygroundPage({
 
   const handleRunDubbing = async () => {
     if (!dubbingFile || dubbingRunning) return;
-    if (liveBalance <= 0) {
+    if (!unlimitedBalance && liveBalance <= 0) {
       setInsufficientModalOpen(true);
       return;
     }
@@ -1866,7 +1868,7 @@ export function PlaygroundPage({
               data-testid="live-balance-value"
               className="font-sans tabular-nums text-sm font-semibold text-neutral-950 dark:text-white"
             >
-              ${formatUsd(liveBalance)}
+              {unlimitedBalance ? "∞" : `$${formatUsd(liveBalance)}`}
             </span>
           </div>
 
@@ -2038,6 +2040,7 @@ export function PlaygroundPage({
                 amount={depositAmount}
                 onAmountChange={setDepositAmount}
                 balance={liveBalance}
+                unlimitedBalance={unlimitedBalance}
                 credit={depositBreakdown.netDepositedUsd}
                 fee={depositBreakdown.estimatedStripeFeeUsd}
                 total={depositBreakdown.grossChargedUsd}

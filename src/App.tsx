@@ -79,6 +79,7 @@ export default function App() {
   const [dashboardInitialTab, setDashboardInitialTab] = useState<string>("Overview");
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<AuthUser>(() => getCurrentUser());
+  const [unlimitedBalance, setUnlimitedBalance] = useState(false);
   const [balanceUsd, setBalanceUsd] = useState<number>(0.0);
   const [proVariantKey, setProVariantKey] = useState<ProVariantKey>(() =>
     ["750k", "1m"].includes(window.localStorage.getItem("lingofusion-pro-variant") ?? "") ? "750k" : "350k",
@@ -109,15 +110,20 @@ export default function App() {
   }, [mobileOpen]);
 
   const refreshLiveBalance = async () => {
+    const ownerId = getCurrentUser().id;
     try {
       if (shouldUseBrowserApi()) {
-        const dash = await browserApi<{ user?: { balance_usd: number }; account: { paidBalance: number } }>("/api/dashboard");
+        const dash = await browserApi<{ user?: { balance_usd: number }; account: { paidBalance: number; unlimitedBalance?: boolean } }>("/api/dashboard");
+        if (getCurrentUser().id !== ownerId) return;
+        setUnlimitedBalance(dash.account.unlimitedBalance === true);
         setBalanceUsd(Number((dash.user?.balance_usd ?? dash.account.paidBalance ?? 0).toFixed(6)));
         return;
       }
       const res = await fetch(`${getApiBaseUrl()}/api/dashboard`);
       if (res.ok) {
         const dash = await res.json();
+        if (getCurrentUser().id !== ownerId) return;
+        setUnlimitedBalance(dash.account?.unlimitedBalance === true);
         setBalanceUsd(Number((dash.user?.balance_usd ?? dash.account?.paidBalance ?? 0).toFixed(6)));
       }
     } catch {
@@ -128,9 +134,15 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = subscribeAuth((user) => {
       setCurrentUser(user);
+      setUnlimitedBalance(false);
       void refreshLiveBalance();
     });
-    return unsubscribe;
+    const balanceStatus = (event: Event) => {
+      const detail = (event as CustomEvent<{ userId: string; unlimited: boolean }>).detail;
+      if (detail?.userId === getCurrentUser().id) setUnlimitedBalance(detail.unlimited === true);
+    };
+    window.addEventListener("lingofusion-balance-status", balanceStatus);
+    return () => { unsubscribe(); window.removeEventListener("lingofusion-balance-status", balanceStatus); };
   }, []);
 
   useEffect(() => {
@@ -324,6 +336,7 @@ export default function App() {
         theme={theme}
         mobileOpen={mobileOpen}
         searchItems={searchItems}
+        unlimitedBalance={unlimitedBalance}
         balanceUsd={balanceUsd}
         currentUser={currentUser}
         onOpenAuth={() => setAuthModalOpen(true)}
@@ -418,6 +431,7 @@ export default function App() {
                     onOpenAuth={() => setAuthModalOpen(true)}
                     onOpenDashboard={() => setDashboardOpen(true)}
                     onNavigate={navigate}
+                    unlimitedBalance={unlimitedBalance}
                     balanceUsd={balanceUsd}
                     onBalanceChange={setBalanceUsd}
                   />

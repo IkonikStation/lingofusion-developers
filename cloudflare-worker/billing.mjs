@@ -17,6 +17,12 @@ export async function billing(env, body) {
 // KV is a compatibility projection, never the source of truth after first adoption.
 export class BillingLedger {
   constructor(state, env) { this.state = state; this.env = env; }
+  async unlimited(email) {
+    const ownerHash = this.env.UNLIMITED_OWNER_EMAIL_SHA256;
+    if (!/^[a-f0-9]{64}$/.test(ownerHash || '') || typeof email !== 'string') return false;
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(email.trim().toLowerCase()));
+    return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('') === ownerHash;
+  }
   async initial(email) {
     const saved = await this.state.storage.get(`balance:${email}`);
     if (saved !== undefined) return saved;
@@ -63,8 +69,10 @@ export class BillingLedger {
           const record = await storage.get(`meteredUsage:${email}:${operationId}`);
           if (!record) return Response.json({ error: 'usage_not_found' }, { status: 404 });
           return Response.json({ operation_id: operationId, status: record.status,
-            held_usd: record.status === 'settled' ? 0 : record.maximumMicros / 1e6,
+            held_usd: record.status === 'settled' || record.unlimited ? 0 : record.maximumMicros / 1e6,
             cost_usd: record.actualMicros === undefined ? null : record.actualMicros / 1e6,
+            billed_usd: record.actualMicros === undefined ? null : (record.unlimited ? 0 : record.actualMicros / 1e6),
+            complimentary: record.unlimited === true,
             result: record.status === 'settled' ? await this.usageResult(`meteredUsage:${email}:${operationId}`, record) : null,
             balance_usd: await this.initial(email) });
         }
@@ -76,7 +84,7 @@ export class BillingLedger {
           if (prior.status === 'settled') return Response.json({ result: await this.usageResult(key, prior), balance_usd: await this.initial(email) });
           if (prior.liveClaimed) throw new Error('Provider session was claimed; reconciliation required.');
           const result = { model: 'LingoFusion Live Transcribe', text: '', duration_seconds: 0, cost_usd: 0, operation_id: operationId };
-          const balance = (Math.round((await this.initial(email)) * 1e6) + prior.maximumMicros) / 1e6;
+          const balance = (Math.round((await this.initial(email)) * 1e6) + (prior.unlimited ? 0 : prior.maximumMicros)) / 1e6;
           await this.write({ [key]: { ...prior, status: 'settled', actualMicros: 0, result, evidence: { confirmedNoDispatch: true } } }, { [email]: balance });
           return Response.json({ result, balance_usd: balance });
         }
@@ -89,10 +97,11 @@ export class BillingLedger {
             if (prior) return Response.json({ ...prior, result: await this.usageResult(key, prior), replay: true, balance_usd: await this.initial(email) });
             if (!Number.isSafeInteger(maximumMicros) || maximumMicros <= 0) throw new Error('Invalid reservation.');
             const available = Math.round((await this.initial(email)) * 1e6);
-            if (available < maximumMicros) return Response.json({ message: 'Insufficient available funds.' }, { status: 402 });
+            const unlimited = await this.unlimited(email);
+            if (!unlimited && available < maximumMicros) return Response.json({ message: 'Insufficient available funds.' }, { status: 402 });
             // The durable record is written before dispatch. Replays never redispatch.
-            const record = { fingerprint, maximumMicros, status: 'dispatched', createdAt: Date.now() };
-            await this.write({ [key]: record }, { [email]: (available - maximumMicros) / 1e6 });
+            const record = { fingerprint, maximumMicros, ...(unlimited ? { unlimited: true } : {}), status: 'dispatched', createdAt: Date.now() };
+            await this.write({ [key]: record }, unlimited ? {} : { [email]: (available - maximumMicros) / 1e6 });
             return Response.json({ ...record, replay: false });
           }
           if (!prior) throw new Error('Unknown reservation.');
@@ -120,8 +129,8 @@ export class BillingLedger {
           const resultEntries = {};
           const resultChunks = serialized.length > 16000 ? Math.ceil(serialized.length / 16000) : 0;
           for (let i = 0; i < resultChunks; i++) resultEntries[`${key}:result:${i}`] = serialized.slice(i * 16000, (i + 1) * 16000);
-          const next = { ...prior, status: 'settled', actualMicros, result: resultChunks ? undefined : result, resultChunks, evidence };
-          const balance = Math.round((await this.initial(email)) * 1e6) + prior.maximumMicros - actualMicros;
+          const next = { ...prior, status: 'settled', actualMicros, billedMicros: prior.unlimited ? 0 : actualMicros, result: resultChunks ? undefined : result, resultChunks, evidence };
+          const balance = Math.round((await this.initial(email)) * 1e6) + (prior.unlimited ? 0 : prior.maximumMicros - actualMicros);
           await this.write({ ...resultEntries, [key]: next, [receiptKey]: key }, { [email]: balance / 1e6 });
           return Response.json({ ...next, balance_usd: balance / 1e6 });
         }
@@ -142,7 +151,7 @@ export class BillingLedger {
         if (action === 'balance') {
           const subscription = await storage.get(`subscription:${email}`) || null;
           if (subscription?.periodEnd && subscription.periodEnd * 1000 <= Date.now()) subscription.status = 'expired';
-          return Response.json({ balance_usd: await this.initial(email), subscription });
+          return Response.json({ balance_usd: await this.initial(email), unlimited_balance: await this.unlimited(email), subscription });
         }
         if (action === 'grantTestCredit' || action === 'grantSpecialOffer') {
           throw new Error('Promotional credit grants are disabled.');
@@ -150,7 +159,10 @@ export class BillingLedger {
         if (action === 'deduct') {
           if (!Number.isFinite(delta) || delta >= 0 || !operationId || operationId.length > 100) throw new Error('Only authenticated usage deductions are accepted.');
           const key = `deduct:${email}:${operationId}`;
-          if (!await storage.get(key)) await this.write({ [key]: true }, { [email]: Number(((await this.initial(email)) + delta).toFixed(6)) });
+          if (!await storage.get(key)) {
+            const unlimited = await this.unlimited(email);
+            await this.write({ [key]: unlimited ? { unlimited: true, usageDelta: delta, billedMicros: 0, createdAt: Date.now() } : true }, unlimited ? {} : { [email]: Number(((await this.initial(email)) + delta).toFixed(6)) });
+          }
           return Response.json({ balance_usd: await this.initial(email) });
         }
         if (action === 'settle') {

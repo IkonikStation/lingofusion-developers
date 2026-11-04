@@ -276,14 +276,16 @@ export default {
         }
         const email = user.email.toLowerCase();
         let balanceUsd = 0;
+        let unlimitedBalance = false;
         if (env.BILLING) {
           const b = await billingLedger(env, { action: "balance", email });
           balanceUsd = Number(b.balance_usd || 0);
+          unlimitedBalance = b.unlimited_balance === true;
         } else if (env.GIFTS) {
           const raw = await env.GIFTS.get(`user_balance:${email}`);
           balanceUsd = raw !== null ? Number(raw) : 0;
         }
-        if (balanceUsd <= 0) {
+        if (!unlimitedBalance && balanceUsd <= 0) {
           return { error: jsonResponse({ error: { message: "Insufficient balance. Please deposit credits.", type: "insufficient_quota", code: "insufficient_quota" } }, 402, requestOrigin) };
         }
         return { user, email, balanceUsd, apiKeyId: user.apiKeyId || null };
@@ -887,7 +889,7 @@ export default {
         }
         if (path !== "/api/pricing/text" && !request.headers.has("Idempotency-Key")) {
           const funds = await billingLedger(env, { action: "balance", email: user.email.toLowerCase() });
-          if (funds.balance_usd <= 0) return jsonResponse({ error: { code: "insufficient_quota", message: "Insufficient balance. Please deposit credits." } }, 402, requestOrigin);
+          if (!funds.unlimited_balance && funds.balance_usd <= 0) return jsonResponse({ error: { code: "insufficient_quota", message: "Insufficient balance. Please deposit credits." } }, 402, requestOrigin);
         }
         let textRequest = request;
         if (path === '/v1/translate') {

@@ -124,6 +124,7 @@ type DashboardData = {
     created_at: string;
   }>;
   account: {
+    unlimitedBalance?: boolean;
     paidBalance: number;
     rewardBalance: number;
     pendingCharges: number;
@@ -678,7 +679,7 @@ export function DashboardModal({
                   >
                     <MetricGrid
                       items={[
-                        ["Current balance", dollars(data.account.paidBalance + data.account.rewardBalance), "Paid and reward credit available."],
+                        ["Current balance", (data.account.unlimitedBalance ? "∞" : dollars(data.account.paidBalance + data.account.rewardBalance)), "Paid and reward credit available."],
                         ["Pending charges", dollars(data.account.pendingCharges), "Authorized usage waiting to settle."],
                         ["Lifetime API spend", dollars(data.account.lifetimeSpend), "Qualifying paid API consumption."],
                         ["Total requests", data.usage.totalRequests.toLocaleString(), `${data.usage.successfulRequests} successful, ${data.usage.failedRequests} failed.`],
@@ -829,7 +830,7 @@ export function DashboardModal({
                         <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 dark:border-white/10 dark:bg-white/[0.04]">
                           <p className="text-sm text-neutral-500 dark:text-neutral-500">{tc("Available fake balance")}</p>
                           <p className="mt-1 text-3xl font-semibold text-neutral-950 dark:text-neutral-50">
-                            {dollars(data.account.paidBalance + data.account.rewardBalance)}
+                            {(data.account.unlimitedBalance ? "∞" : dollars(data.account.paidBalance + data.account.rewardBalance))}
                           </p>
                           <p className="mt-2 text-sm leading-5 text-neutral-600 dark:text-neutral-400">
                             {tc("Simulated calls deduct from this local test balance. No real payment method is charged.")}
@@ -1061,7 +1062,7 @@ export function DashboardModal({
                     {/* Spend Metrics Grid */}
                     <MetricGrid
                       items={[
-                        ["Available Balance", `$${formatUsd(data.account.paidBalance + data.account.rewardBalance)} USD`, "Prepaid balance available to run requests."],
+                        ["Available Balance", (data.account.unlimitedBalance ? "∞" : `$${formatUsd(data.account.paidBalance + data.account.rewardBalance)} USD`), "Prepaid balance available to run requests."],
                         ["Lifetime Spend", `$${data.account.lifetimeSpend.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 6 })} USD`, "Qualifying paid consumption across all models."],
                         ["Total Deposited", `$${formatUsd(data.account.totalPaidCreditPurchased)} USD`, "Total lifetime credit added via Stripe Checkout."],
                         ["Total Requests Run", data.usage.totalRequests.toLocaleString(), `${data.usage.successfulRequests.toLocaleString()} succeeded / ${data.usage.failedRequests.toLocaleString()} failed.`],
