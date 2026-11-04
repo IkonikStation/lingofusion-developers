@@ -2943,7 +2943,7 @@ export function PlaygroundPage({
           </div>
         </div>
 
-        {mode === "text" && !activeModel.local && userInput.trim() && !isRunning && (
+        {mode === "text" && !activeModel.local && userInput.trim() && !isRunning && (textPriceQuote?.key === textQuoteBody || textPriceError) && (
           <div data-testid="playground-price-quote" className="border-t border-neutral-200/60 px-4 py-2 text-xs text-neutral-600 dark:border-white/10 dark:text-neutral-400 sm:px-5">
             {textPriceQuote?.key === textQuoteBody ? (
               <>
@@ -2953,7 +2953,7 @@ export function PlaygroundPage({
                   {`Output limit: ${outputTokenLimit.toLocaleString()} tokens, including reasoning.`}
                 </span>
               </>
-            ) : textPriceError || "Calculating full price…"}
+            ) : textPriceError}
           </div>
         )}
 
