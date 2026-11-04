@@ -204,6 +204,22 @@ export function PlaygroundPage({
   const [textPriceError, setTextPriceError] = useState<string | null>(null);
   const [pendingTextOperation, setPendingTextOperation] = useState<string | null>(() => pendingTextOperations().slice(-1)[0] || null);
   const [checkingTextOperation, setCheckingTextOperation] = useState(false);
+  const [showExtraInputExplanation, setShowExtraInputExplanation] = useState(false);
+  const extraInputDialogRef = useRef<HTMLDialogElement>(null);
+  const extraInputHelpRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!showExtraInputExplanation) return;
+    const dialog = extraInputDialogRef.current;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialog?.showModal();
+    return () => {
+      dialog?.close();
+      document.body.style.overflow = previousOverflow;
+      extraInputHelpRef.current?.focus({ preventScroll: true });
+    };
+  }, [showExtraInputExplanation]);
 
   // Speed / pricing mode for text models: "default" | "fast" | "ultrafast"
   const [speedMode, setSpeedMode] = useState<"default" | "fast" | "ultrafast">("default");
@@ -746,23 +762,6 @@ export function PlaygroundPage({
     }, 400);
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [textQuoteBody, activeModel.local, currentUserEmail]);
-
-  const liveTokenMetrics = useMemo(() => {
-    const rawTokens = countTokens(userInput.trim());
-    const isNano = activeModel.model_id.toLowerCase().includes("nano");
-    const billableInput = activeModel.local ? rawTokens : textPriceQuote?.key === textQuoteBody ? textPriceQuote.input_tokens : null;
-    const isLocal = activeModel.model_id.startsWith("LingoFusion Native-") || Boolean(activeModel.local);
-
-    const estimatedCost = isLocal ? 0 : textPriceQuote?.key === textQuoteBody ? textPriceQuote.maximum_cost_usd : null;
-
-    return {
-      rawTokens,
-      billableInput,
-      estimatedCost,
-      isLocal,
-      isNano,
-    };
-  }, [userInput, activeModel, speedMode, allowWebSearch, textPriceQuote, textQuoteBody]);
 
   const activeImageModel = useMemo(
     () => imageModels.find((model) => model.label === selectedImageModel) ?? imageModels[0],
@@ -2041,6 +2040,31 @@ export function PlaygroundPage({
         </div>
       )}
 
+      {showExtraInputExplanation && createPortal(
+        <dialog
+          ref={extraInputDialogRef}
+          aria-labelledby="extra-input-title"
+          aria-describedby="extra-input-description"
+          onCancel={() => setShowExtraInputExplanation(false)}
+          onClose={() => setShowExtraInputExplanation(false)}
+          className="fixed inset-0 m-auto w-[calc(100%_-_2rem)] max-w-lg max-h-[calc(100dvh_-_2rem)] overflow-y-auto rounded-2xl border border-neutral-200 bg-white p-6 text-neutral-900 shadow-2xl backdrop:bg-neutral-950/50 backdrop:backdrop-blur-md dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+          data-testid="extra-input-explanation"
+        >
+          <h2 id="extra-input-title" className="text-lg font-normal leading-7">Where did these extra input tokens come from?</h2>
+          <div id="extra-input-description" className="mt-4 space-y-3 text-sm leading-6 text-neutral-600 dark:text-neutral-300">
+            <p>Cloud translation requests include your text plus translation instructions and language settings. These help the model translate accurately and consistently, so the total input can be larger than the text you typed.</p>
+            <p>All of that input is billed at the listed input-token rate. Output tokens are billed separately, with no additional service fee.</p>
+            <p>Local models run on your device and do not use cloud credits.</p>
+          </div>
+          <button
+            type="button"
+            autoFocus
+            onClick={() => setShowExtraInputExplanation(false)}
+            className="mt-6 inline-flex h-10 w-full items-center justify-center rounded-lg bg-neutral-950 px-5 text-sm font-medium text-white transition hover:bg-neutral-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-500 dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+          >Got it</button>
+        </dialog>, document.body,
+      )}
+
       {/* Add Funds Modal Pop-up with Full-Screen Blurred Dark Backdrop (Portaled to document.body) */}
       {depositModalOpen &&
         typeof document !== "undefined" &&
@@ -2949,9 +2973,6 @@ export function PlaygroundPage({
 
               {userInput && (
                 <div className="flex items-center gap-3">
-                  <span className="font-mono text-[11px] text-neutral-400 dark:text-neutral-500">
-                    {userInput.length.toLocaleString()} chars · ~{liveTokenMetrics.rawTokens} tokens
-                  </span>
                   <button
                     type="button"
                     onClick={() => {
@@ -3021,50 +3042,6 @@ export function PlaygroundPage({
                 )}
               </div>
 
-              {/* Clean Live Token & Price Counter at Bottom of Translation */}
-              {(latestRun || isRunning) && (
-                <div
-                  data-testid="playground-telemetry-bar"
-                  className="mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-neutral-200/60 pt-3 text-[11px] font-mono text-neutral-500 dark:border-white/10 dark:text-neutral-400"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-neutral-700 dark:text-neutral-300">
-                      {isRunning ? "Final token usage pending" : latestRun
-                        ? `${latestRun.promptTokens + latestRun.completionTokens} tokens (${latestRun.promptTokens} in / ${latestRun.completionTokens} out)`
-                        : `~${liveTokenMetrics.rawTokens} tokens`}
-                    </span>
-                    <span className="text-neutral-300 dark:text-neutral-600">·</span>
-                    <span className="font-semibold text-neutral-900 dark:text-white">
-                      {liveTokenMetrics.isLocal
-                        ? "Free"
-                        : isRunning && textPriceQuote?.key === textQuoteBody
-                        ? `Up to $${textPriceQuote.maximum_cost_usd.toFixed(6)}`
-                        : latestRun
-                        ? `$${Number(latestRun.costUsd || 0).toFixed(6)}`
-                        : textPriceQuote?.key === textQuoteBody
-                        ? `Up to $${textPriceQuote.maximum_cost_usd.toFixed(6)}`
-                        : "Full price pending"}
-                    </span>
-                    {latestRun?.streaming && (
-                      <>
-                        <span className="text-neutral-300 dark:text-neutral-600">·</span>
-                        <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-                          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
-                          Streaming
-                        </span>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="text-[10px] text-neutral-400 dark:text-neutral-500">
-                    {latestRun?.model || activeModel.model_id}
-                    {!liveTokenMetrics.isLocal && latestRun && " · Input includes built-in instructions"}
-                    {!liveTokenMetrics.isLocal && !latestRun && (textPriceQuote?.key === textQuoteBody
-                      ? ` · Input includes built-in instructions. Output limit: ${outputTokenLimit.toLocaleString()} tokens, including reasoning.`
-                      : ` · ${textPriceError || "Calculating full price…"}`)}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
             </>
@@ -3834,6 +3811,25 @@ export function PlaygroundPage({
             </>
           )}
         </div>
+        {mode === "text" && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200/80 px-4 py-3 dark:border-white/10 sm:px-5">
+            <button
+              ref={extraInputHelpRef}
+              type="button"
+              aria-haspopup="dialog"
+              onClick={() => setShowExtraInputExplanation(true)}
+              className="inline-flex items-center gap-2 text-left text-xs text-neutral-600 underline-offset-4 hover:text-neutral-950 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-neutral-500 dark:text-neutral-400 dark:hover:text-white"
+            >
+              <HelpCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              Where did these extra input tokens come from?
+            </button>
+            {latestRun && !isRunning && (
+              <span className="text-xs tabular-nums text-neutral-600 dark:text-neutral-400" data-testid="playground-final-cost">
+                {latestRun.model.startsWith("LingoFusion Native-") ? "Free" : `Cost: $${Number(latestRun.costUsd || 0).toFixed(6)}`}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </section>
   );

@@ -57,7 +57,10 @@ The browser accepts authoritative settled counts and balances. It does not
 replace the full input count with a customer-text estimate or deduct again.
 Pricing tables, the calculator, model pages, docs and Playground explicitly
 state that input includes built-in instructions. Playground shows the maximum
-price before submission and the actual token total after settlement.
+price before submission and the final cost after settlement. Input/output token
+counts remain available in API receipts and usage records. The editor boxes
+do not show live character or token counters; a footer button opens a
+blurred-background explanation of extra billed input, with a Got it button.
 
 ## Processing limits and profitability scope
 
