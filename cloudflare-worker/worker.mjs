@@ -895,7 +895,7 @@ export default {
         const user = await authenticateUser();
         if (!user || user.error) return jsonResponse({ error: "sign_in_required" }, 401, requestOrigin);
         if (path !== '/api/pricing/text' && !user.isApiKey && requestOrigin === 'https://ikonikstation.github.io'
-            && request.headers.get('X-LingoFusion-Billing-Version') !== 'full-input-tokens-v1') {
+            && request.headers.get('X-LingoFusion-Billing-Version') !== 'full-input-tokens-v2') {
           return jsonResponse({ error: 'pricing_updated', message: 'Refresh this page to review the full price before translating.' }, 409, requestOrigin);
         }
         if (path !== "/api/pricing/text" && !request.headers.has("Idempotency-Key")) {

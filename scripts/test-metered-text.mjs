@@ -110,7 +110,7 @@ test('gateway quote makes no paid request; settlement/replay bills full input an
     assert.equal(first.status, 200, await first.clone().text());
     const data = await first.json();
     assert.equal(data.usage.prompt_tokens, 3200);
-    assert.equal(data.cost_usd, 0.000482);
+    assert.equal(data.cost_usd, 0.000322);
     assert.ok(data.instruction_and_overhead_tokens > 3000);
     assert.equal(data.service_fee_usd, 0);
     assert.equal(data.balance_usd, 1 - data.cost_usd);

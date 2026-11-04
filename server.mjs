@@ -68,7 +68,7 @@ sqlDb.exec("CREATE TABLE IF NOT EXISTS billing_orders (id TEXT PRIMARY KEY, body
 initTextReservationTable(sqlDb);
 
 const textModels = [
-  { model: "LingoFusion Nano", input: 0.15, output: 0.85 },
+  { model: "LingoFusion Nano", input: 0.10, output: 0.80 },
   { model: "LingoFusion Lite", input: 0.50, output: 2.00 },
   { model: "LingoFusion", input: 1.00, output: 5.00 },
   { model: "LingoFusion Pro", input: 3.50, output: 20.00 },
@@ -77,7 +77,7 @@ const textModels = [
 ];
 
 const defaultPricingCatalog = [
-  { model_id: "LingoFusion Nano", provider: "lingofusion", upstream_model_name: "gpt-5-nano", input_per_million: 0.1500, output_per_million: 0.8500, is_active: 1 },
+  { model_id: "LingoFusion Nano", provider: "lingofusion", upstream_model_name: "gpt-5-nano", input_per_million: 0.1000, output_per_million: 0.8000, is_active: 1 },
   { model_id: "LingoFusion Lite", provider: "lingofusion", upstream_model_name: "gpt-5.6-luna", input_per_million: 0.5000, output_per_million: 2.0000, is_active: 1 },
   { model_id: "LingoFusion", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 1.0000, output_per_million: 5.0000, is_active: 1 },
   { model_id: "LingoFusion Pro", provider: "lingofusion", upstream_model_name: "gpt-6-sol", input_per_million: 3.5000, output_per_million: 20.0000, is_active: 1 },
@@ -3954,7 +3954,7 @@ async function route(req, res) {
       }
 
       const idempotencyKey = req.headers["idempotency-key"];
-      const bodyHash = hashSecret(JSON.stringify({ pricingVersion: "full-input-tokens-v1", body }));
+      const bodyHash = hashSecret(JSON.stringify({ pricingVersion: "full-input-tokens-v2", body }));
       const existingIdempotency = idempotencyKey
         ? db.idempotency.find((item) => item.key === idempotencyKey && item.keyId === auth.key.id)
         : null;
@@ -4090,13 +4090,13 @@ async function route(req, res) {
             cost_usd: price.cost_usd,
             service_fee_usd: price.service_fee_usd,
             token_cost_usd: price.token_cost_usd,
-            pricing_version: "full-input-tokens-v1",
+            pricing_version: "full-input-tokens-v2",
             balance_usd: settlement.balanceUsd,
           },
           cost_usd: price.cost_usd,
           service_fee_usd: price.service_fee_usd,
           token_cost_usd: price.token_cost_usd,
-          pricing_version: "full-input-tokens-v1",
+          pricing_version: "full-input-tokens-v2",
           operation_id: operationId,
         };
 
@@ -4171,13 +4171,13 @@ async function route(req, res) {
           cost_usd: price.cost_usd,
           service_fee_usd: price.service_fee_usd,
           token_cost_usd: price.token_cost_usd,
-          pricing_version: "full-input-tokens-v1",
+          pricing_version: "full-input-tokens-v2",
           balance_usd: microCentsToDollars(db.account.paidBalanceMicroCents),
         },
         cost_usd: price.cost_usd,
         service_fee_usd: price.service_fee_usd,
         token_cost_usd: price.token_cost_usd,
-        pricing_version: "full-input-tokens-v1",
+        pricing_version: "full-input-tokens-v2",
       };
 
       db.requestLogs.unshift({

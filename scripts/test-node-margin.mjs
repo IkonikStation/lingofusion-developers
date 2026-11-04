@@ -36,7 +36,7 @@ test("nodeTextMetered: quote endpoint computes bounds without provider call", ()
     max_tokens: 256
   });
   assert.equal(quote.model, "LingoFusion");
-  assert.equal(quote.pricing_version, "full-input-tokens-v1");
+  assert.equal(quote.pricing_version, "full-input-tokens-v2");
   assert.equal(quote.customer_input_tokens, 3);
   assert.ok(quote.input_tokens > 3000);
   assert.equal(quote.max_completion_tokens, 256);
@@ -267,7 +267,7 @@ test("nodeTextMetered: priceTranslateUsage bills full input at existing Nano rat
   assert.equal(price.completion_tokens, 7);
   assert.equal(price.instruction_and_overhead_tokens, 3162);
   assert.equal(price.service_fee_usd, 0);
-  assert.equal(price.cost_usd, 0.000481);
+  assert.equal(price.cost_usd, 0.000323);
   assert.ok(price.token_cost_usd > 0, "Retail customer token charge applied");
   assert.ok(price.cost_usd >= price.token_cost_usd + price.service_fee_usd - 0.000001);
   assert.ok(price.gross_profit_lower_bound_usd >= 0, "Non-negative gross profit lower bound");

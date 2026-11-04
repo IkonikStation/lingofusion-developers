@@ -64,7 +64,7 @@ try {
     assert.equal(receipt.usage.total_tokens, 3202);
     assert.equal(receipt.usage.service_fee_usd, 0);
     assert.equal(receipt.cost_usd, 0.01686); // 3200 @ $5.25/M + 2 @ $30/M
-    assert.equal(receipt.pricing_version, 'full-input-tokens-v1');
+    assert.equal(receipt.pricing_version, 'full-input-tokens-v2');
     const count = calls;
     const replay = await api('/v1/chat/completions', { ...body, stream }, secret, operation);
     assert.equal(replay.status, 200); await replay.text(); assert.equal(calls, count);

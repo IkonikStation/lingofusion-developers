@@ -146,7 +146,7 @@ type BrowserState = {
 const storageKey = "lingofusion-browser-api-v3";
 
 export const defaultBrowserModelPricing: ModelPricingRecord[] = [
-  { id: "LingoFusion Nano", model_id: "LingoFusion Nano", object: "model", provider: "lingofusion", upstream_model_name: "gpt-5-nano", input_per_million: 0.15, output_per_million: 0.85, is_active: true },
+  { id: "LingoFusion Nano", model_id: "LingoFusion Nano", object: "model", provider: "lingofusion", upstream_model_name: "gpt-5-nano", input_per_million: 0.10, output_per_million: 0.80, is_active: true },
   { id: "LingoFusion Lite", model_id: "LingoFusion Lite", object: "model", provider: "lingofusion", upstream_model_name: "gpt-5.6-luna", input_per_million: 0.5, output_per_million: 2.0, is_active: true },
   { id: "LingoFusion", model_id: "LingoFusion", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 1.0, output_per_million: 5.0, is_active: true },
   { id: "LingoFusion Pro", model_id: "LingoFusion Pro", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-sol", input_per_million: 3.5, output_per_million: 20.0, is_active: true },
@@ -751,7 +751,7 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
       headers: {
         "Content-Type": "application/json",
         "X-LingoFusion-Client-Token": "lf_play_secure_649f7",
-        "X-LingoFusion-Billing-Version": "full-input-tokens-v1",
+        "X-LingoFusion-Billing-Version": "full-input-tokens-v2",
         "Idempotency-Key": await textOperationId(body),
         ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       },
@@ -1077,7 +1077,7 @@ export async function streamChatCompletionBrowser(
     headers: {
       "Content-Type": "application/json",
       "X-LingoFusion-Client-Token": "lf_play_secure_649f7",
-      "X-LingoFusion-Billing-Version": "full-input-tokens-v1",
+      "X-LingoFusion-Billing-Version": "full-input-tokens-v2",
       "Idempotency-Key": await textOperationId(body),
       ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
     },

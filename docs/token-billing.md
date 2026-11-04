@@ -13,7 +13,7 @@ USD per 1 million tokens, Standard processing:
 
 | Model | Full input | Output |
 |---|---:|---:|
-| Nano | $0.15 | $0.85 |
+| Nano | $0.10 | $0.80 |
 | Lite | $0.50 | $2.00 |
 | LingoFusion | $1.00 | $5.00 |
 | Pro / Pro Reasoning | $3.50 | $20.00 |
@@ -31,7 +31,7 @@ missing field as an unknown fee. The combined token charge rounds upward once
 to six decimal USD places, matching existing prepaid balance precision.
 
 For example: Nano with 3,200 full input tokens and 2 output tokens costs
-$0.0004817 before rounding, or $0.000482 settled. Ultra with 3,555 full input
+$0.0003216 before rounding, or $0.000322 settled. Ultra with 3,555 full input
 tokens and no output costs $0.071100. These are examples; actual charges use
 provider usage, not a hardcoded prompt token count.
 
@@ -39,7 +39,7 @@ provider usage, not a hardcoded prompt token count.
 
 The authenticated quote contains a conservative full-input bound, separate
 customer-input and instruction estimates, output limit, maximum charge and
-`pricing_version: full-input-tokens-v1`. The local tokenizer and framing bound
+`pricing_version: full-input-tokens-v2`. The local tokenizer and framing bound
 are estimates, not invoice evidence. Actual provider input/output must fit the
 reservation; otherwise the request requires reconciliation and is not blindly
 re-priced or dispatched again. This does not prove a provider can never report
