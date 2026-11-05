@@ -20,7 +20,7 @@ export type TextPricingMode = "instant" | "batch" | "fast" | "ultrafast";
 export type SimpleModel = {
   model: string;
   priceUsd: number | null;
-  pricingUnit?: "per_1k_characters" | "per_minute" | "per_song" | "per_generation" | "per_500_extractions";
+  pricingUnit?: "per_1k_characters" | "per_second" | "per_minute" | "per_song" | "per_generation" | "per_500_extractions";
 };
 
 export type ImageResolution = "standard" | "4k";
@@ -160,7 +160,7 @@ export const transcriptionModels: SimpleModel[] = [
 ];
 
 export const dubbingModels: SimpleModel[] = [
-  { model: "LingoFusion Dubbing", priceUsd: 3.50, pricingUnit: "per_minute" },
+  { model: "LingoFusion Dubbing", priceUsd: 0.06, pricingUnit: "per_second" },
 ];
 
 export const musicModels: SimpleModel[] = [

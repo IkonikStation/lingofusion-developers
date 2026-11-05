@@ -114,7 +114,7 @@ export function PricingPage({
   const [selectedTranscriptionModel, setSelectedTranscriptionModel] = useState(transcriptionModels[0].model);
   const [transcriptionMinutes, setTranscriptionMinutes] = useState(1);
   const [selectedDubbingModel, setSelectedDubbingModel] = useState(dubbingModels[0].model);
-  const [dubbingMinutes, setDubbingMinutes] = useState(1);
+  const [dubbingSeconds, setDubbingSeconds] = useState(1);
   const [selectedMusicModel, setSelectedMusicModel] = useState(musicModels[0].model);
   const [musicGenerations, setMusicGenerations] = useState(1);
   const [selectedImageSize, setSelectedImageSize] = useState(imageModels[0].size);
@@ -129,7 +129,7 @@ export function PricingPage({
   const displayCurrency = (usdAmount: number, precise = false) => formatCurrencyAmount(usdAmount, activeCurrency, activeRate, precise);
   const displayPrice = (usdAmount: number | null, unit?: string) => {
     if (usdAmount === null) return "TBD";
-    const suffix = unit === "per_1k_characters" ? "" : unit === "per_minute" ? "/min" : unit === "per_song" ? " / song" : unit === "per_generation" ? " / gen" : unit === "per_500_extractions" ? " / 500 ex." : "";
+    const suffix = unit === "per_1k_characters" ? "" : unit === "per_second" ? "/sec" : unit === "per_minute" ? "/min" : unit === "per_song" ? " / song" : unit === "per_generation" ? " / gen" : unit === "per_500_extractions" ? " / 500 ex." : "";
     return `${displayCurrency(usdAmount, true)}${suffix}`;
   };
 
@@ -192,8 +192,8 @@ export function PricingPage({
   }, [selectedTranscription, transcriptionMinutes]);
 
   const dubbingEstimate = useMemo(() => {
-    return selectedDubbing.priceUsd === null ? null : minuteNotationToMinutes(dubbingMinutes) * selectedDubbing.priceUsd;
-  }, [selectedDubbing, dubbingMinutes]);
+    return selectedDubbing.priceUsd === null ? null : dubbingSeconds * selectedDubbing.priceUsd;
+  }, [selectedDubbing, dubbingSeconds]);
 
   const musicEstimate = useMemo(() => {
     return selectedMusic.priceUsd === null ? null : musicGenerations * selectedMusic.priceUsd;
@@ -430,21 +430,19 @@ export function PricingPage({
               ))}
             </SelectField>
             <NumberField
-              label="Minutes"
+              label="Seconds"
               min={0}
               max={Infinity}
               step={0.01}
-              value={dubbingMinutes}
-              onChange={setDubbingMinutes}
-              minuteNotation
-              minuteHelp={t("minuteHelp")}
+              value={dubbingSeconds}
+              onChange={setDubbingSeconds}
             />
           </SectionCalculator>
 
           <PricingCard
             key={`dubbing-${currencyPresentationKey}`}
             title="Dubbing models"
-            unit={t("pricesPerMinute")}
+            unit="Prices per second"
             kind="simple"
             rows={displayedDubbingModels}
             labels={pricingLabels}

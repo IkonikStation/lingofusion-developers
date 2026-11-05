@@ -3246,7 +3246,7 @@ async function route(req, res) {
       const mediaType = String(body.media_type || "video/mp4");
       const fileName = String(body.file_name || (mediaType.startsWith("video") ? "dubbed_video.mp4" : "dubbed_audio.mp3"));
 
-      const costUsd = Number(((durationSeconds / 60) * 3.50).toFixed(4));
+      const costUsd = Number((durationSeconds * 0.06).toFixed(4));
       const balanceUsd = getUserBalance(user.id, db);
 
       if (balanceUsd < costUsd) {

@@ -563,7 +563,7 @@ function ComparisonPanel({ billingInterval, pro, ultra, proVariantKey, ultraVari
     { label: "File transcription / month", values: ["-", `${formatNumber(pro.fileTranscriptionMinutes)} min`, `${formatNumber(ultra.fileTranscriptionMinutes)} min`] },
     { label: "Voice generation characters / month", values: ["-", formatNumber(pro.voiceCharacters), formatNumber(ultra.voiceCharacters)] },
     { label: "Live web lookups / month", values: ["On-demand", typeof pro.liveWebLookups === "number" ? formatNumber(pro.liveWebLookups) : pro.liveWebLookups, typeof ultra.liveWebLookups === "number" ? formatNumber(ultra.liveWebLookups) : ultra.liveWebLookups] },
-    { label: "Studio dubbing rate", values: ["$3.50/min", "$3.50/min", "$3.50/min"] },
+    { label: "Studio dubbing rate", values: ["$0.06/sec", "$0.06/sec", "$0.06/sec"] },
   ];
   const modelRows: ComparisonRow[] = [
     { label: "Best for", values: ["Fast, accurate everyday translations", "More accurate and advanced translations", "Hardest translations and highest accuracy"] },

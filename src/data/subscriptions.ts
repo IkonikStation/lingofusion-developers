@@ -88,7 +88,7 @@ export const subscriptionPlans = {
       "5 Image Translations per month",
       "5 minutes Live Dictation per month",
       "Standard system voice playback",
-      "Dubbing Studio access via prepaid wallet ($3.50/min)",
+      "Dubbing Studio access via prepaid wallet ($0.06/sec)",
       "Live Web Lookups available on-demand ($0.025/search)",
       "Allowance resets automatically on the 1st of each month",
       "Unused monthly allowance does not roll over",
@@ -124,7 +124,7 @@ export const subscriptionPlans = {
         ],
         benefits: [
           "Nuanced phrasing and cultural idiom verification",
-          "Full Dubbing Studio access ($3.50/min PAYG)",
+          "Full Dubbing Studio access ($0.06/sec PAYG)",
           "Automatic overage fallback via prepaid wallet",
           "Allowance refreshes every billing cycle",
         ],
@@ -156,7 +156,7 @@ export const subscriptionPlans = {
         ],
         benefits: [
           "Extended reasoning for complex legal and technical prose",
-          "Studio Dubbing access ($3.50/min PAYG)",
+          "Studio Dubbing access ($0.06/sec PAYG)",
           "Priority processing queue for batch files",
           "Automatic overage fallback via prepaid wallet",
         ],
@@ -193,7 +193,7 @@ export const subscriptionPlans = {
         ],
         benefits: [
           "Deep terminology research and specialist-source verification",
-          "Studio Dubbing access ($3.50/min PAYG)",
+          "Studio Dubbing access ($0.06/sec PAYG)",
           "High-speed priority queue and developer API access",
           "Priority technical support",
         ],
@@ -225,7 +225,7 @@ export const subscriptionPlans = {
         ],
         benefits: [
           "Exhaustive multi-pass nuance and consistency verification",
-          "Studio Dubbing access ($3.50/min PAYG)",
+          "Studio Dubbing access ($0.06/sec PAYG)",
           "Dedicated enterprise concurrency and API integrations",
           "Direct engineering escalation",
         ],
