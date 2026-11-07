@@ -71,10 +71,13 @@ A mode/context combination that cannot cover those conservative component
 rates is rejected rather than silently adding a fee or raising the unit price.
 
 In particular, synchronous Batch is rejected because this route does not earn
-an asynchronous Batch discount. Pro Ultrafast is rejected because its possible
-cache-write input cost exceeds the preserved retail input rate. Some long-context
-combinations are also rejected. Ultra Ultrafast remains supported within the
-verified short-context route. Unpriced tools remain rejected.
+an asynchronous Batch discount. Pro Ultrafast uses GPT-6.1 Sol with explicit-only
+caching and no breakpoints,
+so it creates no cache reads or writes. Its $14/M input and $80/M output retail
+rates cover the $12/M uncached input and $60/M output provider rates. Ultra
+retains its $80/M input and $480/M output rates and explicit cache breakpoint.
+Some long-context combinations are still rejected. Pro and Ultra Ultrafast
+are supported within the verified short-context route. Unpriced tools remain rejected.
 
 For admitted requests within verified cost and usage bounds, all currently
 configured Standard text rates cover the conservative provider component rates.

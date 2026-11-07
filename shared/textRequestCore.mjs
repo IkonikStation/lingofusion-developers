@@ -25,7 +25,11 @@ export function prepareTextRequest(body, count = byteBound, exact = false) {
     toLanguage: String(body.to_language || body.toLanguage || body.target_lang || body.target_language || 'Spanish'),
     tone: String(body.tone || 'Natural (Default)') };
   if ([settings.fromLanguage, settings.toLanguage, settings.tone].some(x => x.length > 100 || /[\r\n]/.test(x))) throw new Error('Invalid language or tone');
-  const prompt = buildPromptMessages(settings, policy.upstream !== 'gpt-5-nano');
+  // Pro's 4x retail input rate covers Ultrafast input, but not cache writes.
+  // Explicit-only caching with no breakpoints creates no reads or writes.
+  const cacheWritesEnabled = !(mode === 'ultrafast' && policy.key === 'LingoFusion Pro Reasoning');
+  const prompt = buildPromptMessages(settings, policy.upstream !== 'gpt-5-nano' && cacheWritesEnabled);
+  if (!cacheWritesEnabled) prompt.cacheOptions = { mode: 'explicit', ttl: '30m' };
   const system = prompt.text + (webSearch ? "\n\n" + LOOKUP_POLICY : "");
   if (webSearch) prompt.messages.push({role: "system", content: LOOKUP_POLICY});
   const userTokenUpperBound = messages.reduce((n, m) => n + count(m.content), 0);
@@ -36,13 +40,13 @@ export function prepareTextRequest(body, count = byteBound, exact = false) {
   const maxOutput = body.max_completion_tokens ?? body.max_tokens ?? 512;
   if (!Number.isSafeInteger(maxOutput) || maxOutput < 1 || maxOutput > 128000) throw new Error('max_completion_tokens must be between 1 and 128000');
   const longContext = policy.upstream !== 'gpt-5-nano' && rawMaximum > 272000;
-  const maximum = priceTextUsage({ policy, userTokens, outputTokens: maxOutput, rawInputTokens: rawMaximum, mode, longContext });
+  const maximum = priceTextUsage({ policy, userTokens, outputTokens: maxOutput, rawInputTokens: rawMaximum, ...(cacheWritesEnabled ? {} : { cacheWriteTokens: 0 }), mode, longContext });
   if (webSearch) { maximum.chargeMicros += SEARCH_FEES[policy.model]; maximum.cost_usd = maximum.chargeMicros / 1e6; }
   // Do not silently add a fee or change a published price to cover a mode
   // whose input/output rates cannot cover the conservative provider rates.
   const retailMultiplier = mode === 'fast' ? 1.5 : mode === 'ultrafast' ? 4 : 1;
   const providerMultiplier = mode === 'fast' ? 2 : mode === 'ultrafast' ? 6 : 1;
-  if (Math.ceil(policy.ri * retailMultiplier) < Math.max(policy.wi, policy.write) * providerMultiplier * (longContext ? 2 : 1) ||
+  if (Math.ceil(policy.ri * retailMultiplier) < Math.max(policy.wi, cacheWritesEnabled ? policy.write : 0) * providerMultiplier * (longContext ? 2 : 1) ||
       Math.ceil(policy.ro * retailMultiplier) < policy.wo * providerMultiplier * (longContext ? 1.5 : 1)) {
     throw new Error('This processing mode or context length is unavailable at the published token rates');
   }
@@ -59,7 +63,7 @@ export function prepareTextRequest(body, count = byteBound, exact = false) {
     if (!Number.isFinite(body.temperature) || body.temperature < 0 || body.temperature > 2) throw new Error('Temperature must be between 0 and 2');
     payload.temperature = body.temperature;
   }
-  return { webSearch, searchFeeMicros: webSearch ? SEARCH_FEES[policy.model] : 0, exactInputCount: exact, userTokenUpperBound, policy, mode, pricingVersion: TEXT_PRICING_VERSION, userTokens, systemTokens, system, rawMaximum, maxOutput, longContext, maximum, payload, settings };
+  return { cacheWritesEnabled, webSearch, searchFeeMicros: webSearch ? SEARCH_FEES[policy.model] : 0, exactInputCount: exact, userTokenUpperBound, policy, mode, pricingVersion: TEXT_PRICING_VERSION, userTokens, systemTokens, system, rawMaximum, maxOutput, longContext, maximum, payload, settings };
 }
 
 export function verifyAndPrice(prepared, data) {
@@ -72,6 +76,7 @@ export function verifyAndPrice(prepared, data) {
   const actualTier = data.service_tier;
   const actualMode = actualTier === 'default' || actualTier === 'flex' ? 'default' : actualTier === 'priority' || actualTier === 'fast' ? 'fast' : actualTier === 'ultrafast' ? 'ultrafast' : actualTier == null && !['fast', 'ultrafast'].includes(mode) ? mode : null;
   if (!actualMode || ({ default: 1, instant: 1, batch: 1, fast: 2, ultrafast: 6 }[actualMode] > { default: 1, instant: 1, batch: 1, fast: 2, ultrafast: 6 }[mode])) throw new Error('Unverified provider service tier');
+  if (!prepared.cacheWritesEnabled && ((usage.prompt_tokens_details?.cached_tokens ?? 0) > 0 || (usage.prompt_tokens_details?.cache_write_tokens ?? 0) > 0)) throw new Error('Unexpected provider cache usage');
   if ((usage.prompt_tokens_details?.cache_write_tokens_12h ?? 0) > 0) throw new Error('Unexpected 12-hour cache write');
   const price = priceTextUsage({ policy, mode: actualTier === 'default' && mode === 'batch' ? mode : actualMode, userTokens, outputTokens: usage.completion_tokens,
     rawInputTokens: usage.prompt_tokens, cachedTokens: usage.prompt_tokens_details?.cached_tokens ?? 0,

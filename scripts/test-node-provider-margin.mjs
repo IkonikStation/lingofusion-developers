@@ -28,7 +28,7 @@ globalThis.fetch = async (url, options) => {
   if (String(url).endsWith('/responses')) {
     const response = { id: responseId, model: payload.model, service_tier: tier, status: 'completed',
       output: [{ type: 'message', content: [{ type: 'output_text', text: 'Bonjour' }] }],
-      usage: { input_tokens: 3600, output_tokens: 2, input_tokens_details: { cached_tokens: 3000 } } };
+      usage: { input_tokens: payload.model === 'gpt-6.1-sol' ? 3200 : 3600, output_tokens: 2, input_tokens_details: { cached_tokens: JSON.stringify(payload.input).includes('prompt_cache_breakpoint') ? 3000 : 0 } } };
     if (!payload.stream) return Response.json(response);
     return new Response([{ type: 'response.created', response }, { type: 'response.output_text.delta', delta: 'Bonjour' },
       { type: 'response.completed', response }].map(event => `data: ${JSON.stringify(event)}\n\n`).join(''));
@@ -69,10 +69,16 @@ try {
     const replay = await api('/v1/chat/completions', { ...body, stream }, secret, operation);
     assert.equal(replay.status, 200); await replay.text(); assert.equal(calls, count);
   }
-  for (const stream of [false, true]) {
-    const response = await api('/v1/chat/completions', { ...body, model: 'LingoFusion Ultra', pricing_mode: 'ultrafast', stream }, secret, `ultra-${stream}`);
+  for (const model of ['LingoFusion Pro', 'LingoFusion Ultra']) for (const stream of [false, true]) {
+    const operation = `${model}-ultra-${stream}`;
+    const response = await api('/v1/chat/completions', { ...body, model, pricing_mode: 'ultrafast', stream }, secret, operation);
     assert.equal(response.status, 200); assert.match(await response.text(), /service_fee_usd/);
-    assert.equal(sql.prepare('SELECT status FROM text_usage_reservations WHERE operation_id = ?').get(`ultra-${stream}`).status, 'settled');
+    const record = sql.prepare('SELECT status, result FROM text_usage_reservations WHERE operation_id = ?').get(operation);
+    assert.equal(record.status, 'settled');
+    assert.equal(JSON.parse(record.result).cost_usd, model === 'LingoFusion Pro' ? 0.04496 : 0.28896);
+    const count = calls;
+    const replay = await api('/v1/chat/completions', { ...body, model, pricing_mode: 'ultrafast', stream }, secret, operation);
+    assert.equal(replay.status, 200); await replay.text(); assert.equal(calls, count);
   }
   const translation = await api('/v1/translate', { model: 'LingoFusion Pro', input: 'Hello', from_language: 'English', to_language: 'French', stream: true }, secret, 'translate-one');
   assert.equal(translation.status, 200, await translation.clone().text());
@@ -83,7 +89,7 @@ try {
   assert.equal(translated.cost_usd, 0.01124);
   assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM usage_ledger WHERE prompt_tokens < 3000').get().n, 0);
   const count = calls;
-  for (const pricing_mode of ['batch', 'ultrafast']) {
+  for (const pricing_mode of ['batch']) {
     const unavailable = await api('/v1/chat/completions', { ...body, pricing_mode }, secret, `blocked-${pricing_mode}`);
     assert.equal(unavailable.status, 400);
     assert.equal(calls, count, 'unsupported/loss-making modes cannot dispatch provider work');

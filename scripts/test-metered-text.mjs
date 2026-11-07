@@ -18,7 +18,11 @@ test('speed tiers use explicit provider settings, verified actual tier and the R
   assert.ok(verifyAndPrice(fast, evidence).cost_usd < verifyAndPrice(fast, { ...evidence, service_tier: 'priority' }).cost_usd);
   assert.throws(() => verifyAndPrice(standard, { ...evidence, service_tier: 'ultrafast' }));
   assert.throws(() => verifyAndPrice(fast, { ...evidence, service_tier: undefined }));
-  assert.throws(() => prepareTextRequest({ ...body, pricing_mode: 'ultrafast' }), /published token rates/);
+  const pro = prepareTextRequest({ ...body, pricing_mode: 'ultrafast' });
+  assert.equal(pro.payload.model, 'gpt-6.1-sol');
+  assert.equal(pro.cacheWritesEnabled, false);
+  assert.equal(pro.maximum.cache_write_tokens, 0);
+  assert.ok(pro.maximum.gross_profit_lower_bound_usd >= 0);
   const ultra = prepareTextRequest({ ...body, model: 'LingoFusion Ultra', pricing_mode: 'ultrafast' });
   assert.equal(ultra.payload.model, 'gpt-6-astra');
   let calls = 0;
@@ -34,6 +38,33 @@ test('speed tiers use explicit provider settings, verified actual tier and the R
   const data = await response.json(); assert.equal(calls, 1); assert.equal(data.id, 'real-ultra-id');
   assert.equal(data.choices[0].message.content, 'Bonjour');
   assert.ok(verifyAndPrice(ultra, data).cost_usd <= ultra.maximum.cost_usd);
+});
+
+test('Pro Ultrafast preserves 4x retail and disables cache writes in the actual Responses payload', async () => {
+  const pro = prepareTextRequest({ model: 'LingoFusion Pro', pricing_mode: 'ultrafast', messages: [{ role: 'user', content: 'Hello' }] });
+  const evidence = { id: 'resp-pro-ultrafast', model: 'gpt-6.1-sol', service_tier: 'ultrafast',
+    usage: { prompt_tokens: 3600, completion_tokens: 2 } };
+  const response = await fetchTextProvider(pro, {}, async (url, options) => {
+    assert.equal(url, 'https://api.openai.com/v1/responses');
+    const payload = JSON.parse(options.body);
+    assert.equal(payload.model, 'gpt-6.1-sol');
+    assert.equal(payload.service_tier, 'ultrafast');
+    assert.equal(payload.prompt_cache_options.mode, 'explicit');
+    assert.ok(!JSON.stringify(payload.input).includes('prompt_cache_breakpoint'));
+    return Response.json({ id: evidence.id, model: evidence.model, service_tier: evidence.service_tier,
+      status: 'completed', output: [], usage: { input_tokens: 3600, output_tokens: 2 } });
+  });
+  const price = verifyAndPrice(pro, await response.json());
+  assert.equal(price.cost_usd, 0.05056); // 3600 @ $14/M + 2 @ $80/M
+  assert.equal(price.provider_cost_upper_bound_usd, 0.04332);
+  assert.ok(price.cost_usd <= pro.maximum.cost_usd);
+  assert.equal(verifyAndPrice(pro, { ...evidence, service_tier: 'default' }).cost_usd, 0.01264);
+  for (const details of [{ cached_tokens: 1 }, { cache_write_tokens: 1 }, { cache_write_tokens_12h: 1 }]) {
+    assert.throws(() => verifyAndPrice(pro, { ...evidence, usage: { ...evidence.usage, prompt_tokens_details: details } }), /Unexpected/);
+  }
+  for (const model of ['LingoFusion Nano', 'LingoFusion Lite', 'LingoFusion', 'ExplainFusion']) {
+    assert.throws(() => prepareTextRequest({ model, pricing_mode: 'ultrafast', messages: [{ role: 'user', content: 'Hello' }] }), /only available for Pro and Ultra/);
+  }
 });
 
 test('Ultrafast streaming keeps actual provider identity and final usage; truncated streams fail', async () => {
@@ -118,6 +149,42 @@ test('gateway quote makes no paid request; settlement/replay bills full input an
     assert.equal(replay.status, 200); assert.equal(calls, 1);
     assert.equal((await replay.json()).cost_usd, data.cost_usd);
   } finally { globalThis.fetch = original; }
+});
+
+test('edge Pro and Ultra Ultrafast quotes, streaming, settlement and replay keep 4x prices', async () => {
+  const original = globalThis.fetch;
+  for (const model of ['LingoFusion Pro', 'LingoFusion Ultra']) for (const stream of [false, true]) {
+    const h = harness(), email = 'ultrafast@example.com';
+    h.records.set(`user_balance:${email}`, '2'); h.env.OPENAI_API_KEY = 'synthetic-only';
+    const body = { model, stream, pricing_mode: 'ultrafast', messages: [{ role: 'user', content: 'Hello' }] };
+    const headers = { 'Idempotency-Key': 'ultrafast-one', 'X-LingoFusion-Client-Token': 'lf_play_secure_649f7' };
+    let calls = 0;
+    globalThis.fetch = async (url, options) => {
+      assert.equal(url, 'https://api.openai.com/v1/responses'); calls++;
+      const payload = JSON.parse(options.body);
+      assert.equal(payload.service_tier, 'ultrafast');
+      assert.equal(payload.model, model === 'LingoFusion Pro' ? 'gpt-6.1-sol' : 'gpt-6-astra');
+      const result = { id: 'resp-edge-ultrafast', model: payload.model, service_tier: 'ultrafast', status: 'completed',
+        output: [{ type: 'message', content: [{ type: 'output_text', text: 'Bonjour' }] }],
+        usage: { input_tokens: 3200, output_tokens: 2 } };
+      if (!stream) return Response.json(result);
+      return new Response([{ type: 'response.created', response: result }, { type: 'response.output_text.delta', delta: 'Bonjour' },
+        { type: 'response.completed', response: result }].map(event => `data: ${JSON.stringify(event)}\n\n`).join(''));
+    };
+    try {
+      assert.equal((await h.api('/api/pricing/text', body, email)).status, 200);
+      assert.equal(calls, 0);
+      const first = await h.api('/api/playground/chat', body, email, headers);
+      assert.equal(first.status, 200, await first.clone().text());
+      const text = await first.text(); assert.match(text, /Bonjour/);
+      const status = await billing(h.env, { action: 'usageStatus', email, operationId: 'ultrafast-one' });
+      assert.equal(status.status, 'settled');
+      const expected = model === 'LingoFusion Pro' ? 0.04496 : 0.25696;
+      assert.equal(status.cost_usd, expected); assert.equal(status.balance_usd, 2 - expected);
+      const replay = await h.api('/api/playground/chat', body, email, headers);
+      assert.equal(replay.status, 200); assert.match(await replay.text(), /Bonjour/); assert.equal(calls, 1);
+    } finally { globalThis.fetch = original; }
+  }
 });
 
 test('rejects unsupported routing, multimodal content and unpriced tools before provider dispatch', () => {
