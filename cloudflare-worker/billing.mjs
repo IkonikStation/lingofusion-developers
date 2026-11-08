@@ -1,3 +1,4 @@
+import { AUDIO_RATE, audioCharge } from '../shared/transcription.mjs';
 import { assertSession, assertCharge, depositQuote, BILLING_POLICY, netCreditCents } from '../shared/billing.mjs';
 
 export async function billing(env, body) {
@@ -62,7 +63,7 @@ export class BillingLedger {
     return this.state.blockConcurrencyWhile(async () => {
       try {
         await this.project();
-        const { action, email, order, session, delta, operationId, gifts, hold, gift, fingerprint, maximumMicros, actualMicros, result, evidence } = await request.json();
+        const { action, email, order, session, delta, operationId, gifts, hold, gift, fingerprint, maximumMicros, actualMicros, result, evidence, liveCheckpoint } = await request.json();
         const storage = this.state.storage;
         if (action === 'usageStatus') {
           if (!email || !/^[A-Za-z0-9_-]{1,100}$/.test(operationId || '')) throw new Error('Invalid usage identity.');
@@ -76,19 +77,49 @@ export class BillingLedger {
             result: record.status === 'settled' ? await this.usageResult(`meteredUsage:${email}:${operationId}`, record) : null,
             balance_usd: await this.initial(email) });
         }
-        if (action === 'usageCancelUnclaimedLive') {
+        if (['usageCancelUnclaimedLive', 'usageRecoverLive', 'usageReleaseUnsentLive'].includes(action)) {
           if (!email || !/^[A-Za-z0-9_-]{1,100}$/.test(operationId || '')) throw new Error('Invalid usage identity.');
           const key = `meteredUsage:${email}:${operationId}`;
           const prior = await storage.get(key);
           if (!prior || !prior.fingerprint?.startsWith('live-transcribe-v1:')) throw new Error('Unknown live session.');
           if (prior.status === 'settled') return Response.json({ result: await this.usageResult(key, prior), balance_usd: await this.initial(email) });
-          if (prior.liveClaimed) throw new Error('Provider session was claimed; reconciliation required.');
-          const result = { model: 'LingoFusion Live Transcribe', text: '', duration_seconds: 0, cost_usd: 0, operation_id: operationId };
-          const balance = (Math.round((await this.initial(email)) * 1e6) + (prior.unlimited ? 0 : prior.maximumMicros)) / 1e6;
-          await this.write({ [key]: { ...prior, status: 'settled', actualMicros: 0, result, evidence: { confirmedNoDispatch: true } } }, { [email]: balance });
+          const maxSeconds = Number(prior.fingerprint.slice('live-transcribe-v1:'.length));
+          if (!Number.isInteger(maxSeconds) || maxSeconds < 1 || maxSeconds > 180 || !Number.isFinite(prior.createdAt)) throw new Error('Invalid live session record.');
+          // Leave enough time for connection setup, the bounded session and final events.
+          const claimStart = prior.liveClaimedAt ?? prior.createdAt + 120000;
+          const recoverAt = claimStart + (maxSeconds + 120) * 1000;
+          if (prior.liveClaimed && action === 'usageCancelUnclaimedLive') throw new Error('Provider session was claimed; reconciliation required.');
+          if (prior.liveClaimed && action === 'usageRecoverLive' && Date.now() < recoverAt) {
+            return Response.json({ pending: true, operation_id: operationId,
+              retry_after_seconds: Math.max(1, Math.ceil((recoverAt - Date.now()) / 1000)),
+              held_usd: prior.unlimited ? 0 : prior.maximumMicros / 1e6,
+              message: 'This live session is still finishing. Check again shortly; its reserved credit will be returned if no final result arrives.' });
+          }
+          // Expired, unresolved live sessions receive a customer-favorable release.
+          // This is not evidence of zero provider cost: the merchant absorbs unknown usage.
+          // usageReleaseUnsentLive is internal-only and called before audio can be sent.
+          const expiredClaim = prior.liveClaimed && action === 'usageRecoverLive';
+          const checkpoint = prior.liveCheckpoint;
+          if (action === 'usageReleaseUnsentLive' && checkpoint?.samples > 0) throw new Error('Audio was already sent.');
+          const recoveredMicros = checkpoint ? audioCharge(checkpoint.samples, 30000) : 0;
+          const receiptEntries = {};
+          if (checkpoint) {
+            const receiptKey = `meteredProvider:${checkpoint.providerRequestId}`;
+            const receiptOwner = await storage.get(receiptKey);
+            if (receiptOwner && receiptOwner !== key) throw new Error('Provider receipt reused.');
+            receiptEntries[receiptKey] = key;
+          }
+          const result = { model: 'LingoFusion Live Transcribe', text: checkpoint?.text || '', duration_seconds: checkpoint ? checkpoint.samples / AUDIO_RATE : 0, cost_usd: recoveredMicros / 1e6, operation_id: operationId,
+            recovery_status: checkpoint ? 'partial' : 'released',
+            notice: checkpoint ? 'Recovered the available transcript. Billed only for recorded audio usage; unused reserved credit returned.' : expiredClaim ? 'The live session ended without a final result. Reserved credit returned. You can start a new transcription.' : 'No audio was transcribed. Reserved credit returned. You can start a new transcription.' };
+          const recoveryEvidence = expiredClaim
+            ? { expiredLiveRecovery: true, providerCostUnknown: true, merchantAbsorbsUnverifiedUsage: true, ...(checkpoint || {}), recoveredAt: Date.now() }
+            : action === 'usageReleaseUnsentLive' ? { confirmedNoAudio: true } : { confirmedNoDispatch: true };
+          const balance = (Math.round((await this.initial(email)) * 1e6) + (prior.unlimited ? 0 : prior.maximumMicros - recoveredMicros)) / 1e6;
+          await this.write({ ...receiptEntries, [key]: { ...prior, status: 'settled', actualMicros: recoveredMicros, billedMicros: prior.unlimited ? 0 : recoveredMicros, result, evidence: recoveryEvidence } }, { [email]: balance });
           return Response.json({ result, balance_usd: balance });
         }
-        if (['usageReserve', 'usageFinish', 'usageUncertain', 'usageClaimLive'].includes(action)) {
+        if (['usageReserve', 'usageFinish', 'usageUncertain', 'usageClaimLive', 'usageLiveCheckpoint'].includes(action)) {
           if (!email || !operationId || operationId.length > 100 || !fingerprint) throw new Error('Invalid usage identity.');
           const key = `meteredUsage:${email}:${operationId}`;
           const prior = await storage.get(key);
@@ -105,9 +136,20 @@ export class BillingLedger {
             return Response.json({ ...record, replay: false });
           }
           if (!prior) throw new Error('Unknown reservation.');
+          if (action === 'usageLiveCheckpoint') {
+            const maxSeconds = Number(prior.fingerprint.slice('live-transcribe-v1:'.length));
+            if (!prior.fingerprint.startsWith('live-transcribe-v1:') || !prior.liveClaimed || prior.status !== 'dispatched' ||
+                !Number.isSafeInteger(liveCheckpoint?.samples) || liveCheckpoint.samples < (prior.liveCheckpoint?.samples || 0) ||
+                liveCheckpoint.samples > maxSeconds * AUDIO_RATE || typeof liveCheckpoint.text !== 'string' ||
+                new TextEncoder().encode(liveCheckpoint.text).length > 60000 ||
+                typeof liveCheckpoint.providerRequestId !== 'string' || !liveCheckpoint.providerRequestId ||
+                (prior.liveCheckpoint && prior.liveCheckpoint.providerRequestId !== liveCheckpoint.providerRequestId)) throw new Error('Invalid live checkpoint.');
+            await storage.put(key, { ...prior, liveCheckpoint });
+            return Response.json({ saved: true });
+          }
           if (action === 'usageClaimLive') {
             if (prior.status !== 'dispatched' || prior.liveClaimed) throw new Error('Live session already claimed.');
-            await storage.put(key, { ...prior, liveClaimed: true });
+            await storage.put(key, { ...prior, liveClaimed: true, liveClaimedAt: Date.now() });
             return Response.json({ claimed: true });
           }
           if (action === 'usageUncertain') {

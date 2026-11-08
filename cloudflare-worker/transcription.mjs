@@ -69,21 +69,42 @@ export async function connectLiveTranscription(request,env,respond,context,provi
   const who=JSON.parse(raw);
   try { await billing(env,{action:'usageClaimLive',...who}); }
   catch { return respond({error:'Session already used'},409); }
-  await env.GIFTS.delete('transcriptionTicket:'+ticket);
   let upstream,providerReceiptId='realtime-'+crypto.randomUUID();
   try {
+    await env.GIFTS.delete('transcriptionTicket:'+ticket);
     const r=await providerFetch('https://api.openai.com/v1/realtime?intent=transcription',{headers:{Upgrade:'websocket',Authorization:`Bearer ${env.OPENAI_API_KEY}`},signal:AbortSignal.timeout(15000)});
     upstream=r.webSocket;
     if(!upstream) throw new Error('Realtime provider connection unavailable');
     providerReceiptId=r.headers?.get('x-request-id') || providerReceiptId;
     upstream.accept();
-  } catch { await uncertain(env,who); return respond({error:'live_session_requires_reconciliation',operation_id:who.operationId},502); }
+  } catch {
+    try { upstream?.close(); } catch {}
+    // The browser cannot send audio before this connection is returned.
+    try {
+      await billing(env,{action:'usageReleaseUnsentLive',email:who.email,operationId:who.operationId});
+      return respond({error:'live_connection_failed',message:'Live transcription could not connect. Reserved credit returned. Please try again.',operation_id:who.operationId},503);
+    } catch {
+      await uncertain(env,who);
+      return respond({error:'live_session_requires_reconciliation',message:'Live transcription could not connect. Recover the session to release its reserved credit.',operation_id:who.operationId},502);
+    }
+  }
   const pair=new WebSocketPair(),client=pair[0],server=pair[1]; server.accept();
   let sampleCount=0,bufferSamples=0,pending=0,finishing=false,closed=false,ready=false,queue=Promise.resolve();
   const turns=new Map(); let timer,grace;
   const send=x=>{try{server.send(JSON.stringify(x));}catch{}};
   const close=()=>{closed=true;clearTimeout(timer);clearTimeout(grace);try{upstream.close();}catch{} try{server.close(1000,'Finished');}catch{}};
-  const fail=async message=>{if(closed)return;await uncertain(env,who);send({type:'error',message,operation_id:who.operationId});close();};
+  const background=promise=>{context?.waitUntil?.(promise);return promise;};
+  const fail=async message=>{
+    if(closed)return;
+    closed=true; // Freeze audio forwarding before deciding whether any audio was sent.
+    if(sampleCount===0){
+      try{
+        const released=await billing(env,{action:'usageReleaseUnsentLive',email:who.email,operationId:who.operationId});
+        send({type:'settled',...released.result,balance_usd:released.balance_usd});close();return;
+      }catch{}
+    }
+    await uncertain(env,who);send({type:'error',message,operation_id:who.operationId});close();
+  };
   const finish=async()=>{
     if(closed||!finishing||pending)return;
     try{
@@ -94,26 +115,33 @@ export async function connectLiveTranscription(request,env,respond,context,provi
     }catch{await fail('Live usage requires reconciliation');}
   };
   const commit=()=>{if(bufferSamples>=2400){pending++;upstream.send(JSON.stringify({type:'input_audio_buffer.commit'}));bufferSamples=0;}};
-  const stop=()=>{if(finishing||closed)return;finishing=true;send({type:'finishing'});commit();grace=setTimeout(()=>fail('Final transcript is pending reconciliation'),20000);void finish();};
+  const stop=()=>{if(finishing||closed)return;finishing=true;send({type:'finishing'});try{commit();grace=setTimeout(()=>background(fail('Final transcript did not arrive. Recover this session to release reserved credit after it expires.')),20000);background(finish());}catch{background(fail('Provider disconnected while finishing. Recover this session before starting another.'));}};
   upstream.addEventListener('message',event=>{
     queue=queue.then(async()=>{
+      if(closed)return;
       const data=JSON.parse(event.data);
       if(data.type==='session.updated'){ready=true;send({type:'ready'});}
       else if(data.type==='input_audio_buffer.committed'){if(!turns.has(data.item_id))turns.set(data.item_id,'');send(data);}
-      else if(data.type==='conversation.item.input_audio_transcription.delta'){send(data);}
+      else if(data.type==='conversation.item.input_audio_transcription.delta'){
+        turns.set(data.item_id,(turns.get(data.item_id)||'')+data.delta);
+        await billing(env,{action:'usageLiveCheckpoint',...who,liveCheckpoint:{samples:sampleCount,text:[...turns.values()].join('\n'),providerRequestId:providerReceiptId}});
+        if(!closed)send(data);
+      }
       else if(data.type==='conversation.item.input_audio_transcription.completed'){
         if(!completed.has(data.item_id)){
           turns.set(data.item_id,data.transcript);pending=Math.max(0,pending-1);
           // Duplicate completion IDs are tracked separately without polluting transcript order.
           completed.add(data.item_id);
         }
-        send(data);await finish();
+        await billing(env,{action:'usageLiveCheckpoint',...who,liveCheckpoint:{samples:sampleCount,text:[...turns.values()].join('\n'),providerRequestId:providerReceiptId}});
+        if(!closed)send(data);await finish();
       }else if(data.type==='error'||data.type==='conversation.item.input_audio_transcription.failed')await fail('Live transcription failed; recover this session before retrying');
-    }).catch(()=>fail('Live transcription requires reconciliation'));
+    }).catch(()=>fail('Live transcription was interrupted. Recover this session before starting another.'));
+    background(queue);
   });
   const completed=new Set();
-  upstream.addEventListener('close',()=>{if(!closed)void fail('Provider disconnected; session requires reconciliation');});
-  upstream.addEventListener('error',()=>void fail('Provider connection failed'));
+  upstream.addEventListener('close',()=>{if(!closed)background(fail('Provider disconnected. Recover this session before starting another.'));});
+  upstream.addEventListener('error',()=>background(fail('Provider connection failed. Recover this session before starting another.')));
   server.addEventListener('message',event=>{
     if(closed)return;
     try{
@@ -131,11 +159,12 @@ export async function connectLiveTranscription(request,env,respond,context,provi
         if(bufferSamples>=5*AUDIO_RATE)commit();
         if(sampleCount>=who.maxSeconds*AUDIO_RATE)stop();
       }else throw new Error('Unsupported live event');
-    }catch{void fail('Invalid live audio request');}
+    }catch{background(fail('Invalid live audio request. Recover this session before starting another.'));}
   });
   server.addEventListener('close',()=>{if(!closed)stop();});
   server.addEventListener('error',()=>{if(!closed)stop();});
-  upstream.send(JSON.stringify({type:'session.update',session:{type:'transcription',audio:{input:{format:{type:'audio/pcm',rate:AUDIO_RATE},transcription:{model:'gpt-live-transcribe'},turn_detection:null}}}}));
   timer=setTimeout(stop,(who.maxSeconds+20)*1000);
+  try { upstream.send(JSON.stringify({type:'session.update',session:{type:'transcription',audio:{input:{format:{type:'audio/pcm',rate:AUDIO_RATE},transcription:{model:'gpt-live-transcribe'},turn_detection:null}}}})); }
+  catch { await fail('Provider session could not be configured.'); }
   return new Response(null,{status:101,webSocket:client,headers:{'Sec-WebSocket-Protocol':'lingofusion-transcription'}});
 }

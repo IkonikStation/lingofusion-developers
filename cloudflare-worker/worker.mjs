@@ -349,13 +349,13 @@ export default {
         if (requestOrigin && !ALLOWED_ORIGINS.includes(requestOrigin)) return jsonResponse({error:'origin_not_allowed'},403,requestOrigin);
         return await connectLiveTranscription(request,env,(data,status=200)=>jsonResponse(data,status,requestOrigin),context);
       }
-      if (request.method === 'POST' && ['/api/transcription/file','/v1/audio/transcriptions','/api/transcription/live','/api/transcription/cancel'].includes(path)) {
+      if (request.method === 'POST' && ['/api/transcription/file','/v1/audio/transcriptions','/api/transcription/live','/api/transcription/cancel','/api/transcription/recover'].includes(path)) {
         const user = await authenticateUser();
         if (!user || user.error) return jsonResponse({error:'sign_in_required'},401,requestOrigin);
         const respond=(data,status=200)=>jsonResponse(data,status,requestOrigin);
-        if (path === '/api/transcription/cancel') {
+        if (path === '/api/transcription/cancel' || path === '/api/transcription/recover') {
           const body = await request.json();
-          try { return respond(await billingLedger(env,{action:'usageCancelUnclaimedLive',email:user.email.toLowerCase(),operationId:body.operation_id})); }
+          try { return respond(await billingLedger(env,{action:path.endsWith('/recover')?'usageRecoverLive':'usageCancelUnclaimedLive',email:user.email.toLowerCase(),operationId:body.operation_id})); }
           catch(error) { return respond({error:'reconciliation_required',message:error.message},409); }
         }
 
