@@ -25,7 +25,7 @@ export function prepareTextRequest(body, count = byteBound, exact = false) {
     toLanguage: String(body.to_language || body.toLanguage || body.target_lang || body.target_language || 'Spanish'),
     tone: String(body.tone || 'Natural (Default)') };
   if ([settings.fromLanguage, settings.toLanguage, settings.tone].some(x => x.length > 100 || /[\r\n]/.test(x))) throw new Error('Invalid language or tone');
-  // Pro's 4x retail input rate covers Ultrafast input, but not cache writes.
+  // Pro's 6x retail input rate covers Ultrafast input, but not cache writes.
   // Explicit-only caching with no breakpoints creates no reads or writes.
   const cacheWritesEnabled = !(mode === 'ultrafast' && policy.key === 'LingoFusion Pro Reasoning');
   const prompt = buildPromptMessages(settings, policy.upstream !== 'gpt-5-nano' && cacheWritesEnabled);
@@ -44,7 +44,7 @@ export function prepareTextRequest(body, count = byteBound, exact = false) {
   if (webSearch) { maximum.chargeMicros += SEARCH_FEES[policy.model]; maximum.cost_usd = maximum.chargeMicros / 1e6; }
   // Do not silently add a fee or change a published price to cover a mode
   // whose input/output rates cannot cover the conservative provider rates.
-  const retailMultiplier = mode === 'fast' ? 1.5 : mode === 'ultrafast' ? 4 : 1;
+  const retailMultiplier = mode === 'fast' ? 1.5 : mode === 'ultrafast' ? 6 : 1;
   const providerMultiplier = mode === 'fast' ? 2 : mode === 'ultrafast' ? 6 : 1;
   if (Math.ceil(policy.ri * retailMultiplier) < Math.max(policy.wi, cacheWritesEnabled ? policy.write : 0) * providerMultiplier * (longContext ? 2 : 1) ||
       Math.ceil(policy.ro * retailMultiplier) < policy.wo * providerMultiplier * (longContext ? 1.5 : 1)) {

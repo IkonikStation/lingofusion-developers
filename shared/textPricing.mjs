@@ -28,7 +28,7 @@ export function priceTextUsage({ policy, userTokens, outputTokens, rawInputToken
     if (!Number.isSafeInteger(n) || n < 0) throw new Error('Invalid provider usage');
   }
   if (cachedTokens + cacheWriteTokens > rawInputTokens || userTokens > rawInputTokens) throw new Error('Inconsistent provider usage');
-  const retailMultiplier = { default: 1, instant: 1, batch: 0.5, fast: 1.5, ultrafast: 4 }[mode];
+  const retailMultiplier = { default: 1, instant: 1, batch: 0.5, fast: 1.5, ultrafast: 6 }[mode];
   if (!retailMultiplier) throw new Error('Unsupported pricing mode');
   // Current chat route uses standard synchronous processing. Discount labels
   // must never imply an unearned upstream Batch discount or faster execution.

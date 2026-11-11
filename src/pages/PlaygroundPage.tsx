@@ -999,7 +999,7 @@ export function PlaygroundPage({
               if (typeof deltaContent === "string" && deltaContent.length > 0) {
                 accumulatedText += deltaContent;
                 completionTokens = countTokens(accumulatedText);
-                const multiplier = effectiveSpeedMode === "ultrafast" ? 4 : effectiveSpeedMode === "fast" ? 1.5 : 1;
+                const multiplier = effectiveSpeedMode === "ultrafast" ? 6 : effectiveSpeedMode === "fast" ? 1.5 : 1;
                 const liveCost = Math.ceil((promptTokens * activeModel.input_per_million + completionTokens * activeModel.output_per_million) * multiplier) / 1e6 + liveSearchCalls * getWebSearchCallRateUsd(activeModel.model_id);
                 setTranslatedOutput(accumulatedText);
                 setLatestRun({
@@ -2604,15 +2604,15 @@ export function PlaygroundPage({
                           <option value="default">Standard speed</option>
                           <option value="fast">Fast (1.5× speed · 1.5× price)</option>
                           {["LingoFusion Pro", "LingoFusion Ultra"].includes(activeModel.model_id) && (
-                            <option value="ultrafast">Ultrafast (6× speed · 4× price)</option>
+                            <option value="ultrafast">Ultrafast (6× speed · 6× price)</option>
                           )}
                         </select>
                       </div>
                     )}
 
                     <span className="hidden font-sans tabular-nums text-[11px] text-neutral-500 md:inline dark:text-neutral-400">
-                      ${(activeModel.input_per_million * (speedMode === "ultrafast" ? 4 : speedMode === "fast" ? 1.5 : 1)).toFixed(2)}/M in · $
-                      {(activeModel.output_per_million * (speedMode === "ultrafast" ? 4 : speedMode === "fast" ? 1.5 : 1)).toFixed(2)}/M out
+                      ${(activeModel.input_per_million * (speedMode === "ultrafast" ? 6 : speedMode === "fast" ? 1.5 : 1)).toFixed(2)}/M in · $
+                      {(activeModel.output_per_million * (speedMode === "ultrafast" ? 6 : speedMode === "fast" ? 1.5 : 1)).toFixed(2)}/M out
                     </span>
                   </>
                 )}
