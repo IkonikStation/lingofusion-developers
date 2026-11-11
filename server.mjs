@@ -3306,10 +3306,10 @@ async function route(req, res) {
       if (body.isGift) return send(res, 503, { message: "Gift checkout requires the cloud gateway." });
 
       const depositAmount = Number(body.amount ?? body.depositAmount);
-      if (!Number.isFinite(depositAmount) || depositAmount < 1 || depositAmount > 50000) {
+      if (!Number.isFinite(depositAmount) || depositAmount < (body.isGift ? 1 : 5) || depositAmount > 50000) {
         return send(res, 400, {
           error: "deposit_amount_out_of_range",
-          message: "Top-up amount must be between $1.00 and $50,000.00 USD.",
+          message: `Top-up amount must be between $${body.isGift ? "1.00" : "5.00"} and $50,000.00 USD.`,
         });
       }
 

@@ -1675,8 +1675,8 @@ export function PlaygroundPage({
       return;
     }
 
-    if (!Number.isFinite(depositAmount) || depositAmount < 1 || depositAmount > 50000) {
-      setErrorBanner("Amount must be between $1.00 and $50,000.00 USD.");
+    if (!Number.isFinite(depositAmount) || depositAmount < (depositTab === "gift" ? 1 : 5) || depositAmount > 50000) {
+      setErrorBanner(`Amount must be between $${depositTab === "gift" ? "1.00" : "5.00"} and $50,000.00 USD.`);
       return;
     }
     if (depositTab === "gift") {

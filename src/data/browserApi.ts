@@ -1695,8 +1695,8 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
     }
     const body = requestBody(options);
     const depositAmount = Number(body.amount ?? body.depositAmount ?? body.topUpAmount);
-    if (!Number.isFinite(depositAmount) || depositAmount < 1 || depositAmount > 50000) {
-      fail("Top-up amount must be between $1.00 and $50,000.00 USD.");
+    if (!Number.isFinite(depositAmount) || depositAmount < (body.isGift ? 1 : 5) || depositAmount > 50000) {
+      fail(`Top-up amount must be between $${body.isGift ? "1.00" : "5.00"} and $50,000.00 USD.`);
     }
     const currency = "usd";
     const { netDepositedUsd, grossAmountCents, grossChargedUsd, estimatedStripeFeeUsd } = calculateGrossDeposit(depositAmount);
