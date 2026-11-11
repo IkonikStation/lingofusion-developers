@@ -155,7 +155,7 @@ test('edge Pro and Ultra Ultrafast quotes, streaming, settlement and replay keep
   const original = globalThis.fetch;
   for (const model of ['LingoFusion Pro', 'LingoFusion Ultra']) for (const stream of [false, true]) {
     const h = harness(), email = 'ultrafast@example.com';
-    h.records.set(`user_balance:${email}`, '2'); h.env.OPENAI_API_KEY = 'synthetic-only';
+    h.records.set(`user_balance:${email}`, '5'); h.env.OPENAI_API_KEY = 'synthetic-only';
     const body = { model, stream, pricing_mode: 'ultrafast', messages: [{ role: 'user', content: 'Hello' }] };
     const headers = { 'Idempotency-Key': 'ultrafast-one', 'X-LingoFusion-Client-Token': 'lf_play_secure_649f7' };
     let calls = 0;
@@ -180,7 +180,7 @@ test('edge Pro and Ultra Ultrafast quotes, streaming, settlement and replay keep
       const status = await billing(h.env, { action: 'usageStatus', email, operationId: 'ultrafast-one' });
       assert.equal(status.status, 'settled');
       const expected = model === 'LingoFusion Pro' ? 0.06744 : 0.38544;
-      assert.equal(status.cost_usd, expected); assert.equal(status.balance_usd, 2 - expected);
+      assert.equal(status.cost_usd, expected); assert.equal(status.balance_usd, 5 - expected);
       const replay = await h.api('/api/playground/chat', body, email, headers);
       assert.equal(replay.status, 200); assert.match(await replay.text(), /Bonjour/); assert.equal(calls, 1);
     } finally { globalThis.fetch = original; }
