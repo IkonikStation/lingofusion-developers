@@ -40,7 +40,7 @@ test('speed tiers use explicit provider settings, verified actual tier and the R
   assert.ok(verifyAndPrice(ultra, data).cost_usd <= ultra.maximum.cost_usd);
 });
 
-test('Pro Ultrafast preserves 4x retail and disables cache writes in the actual Responses payload', async () => {
+test('Pro Ultrafast preserves 6x retail and disables cache writes in the actual Responses payload', async () => {
   const pro = prepareTextRequest({ model: 'LingoFusion Pro', pricing_mode: 'ultrafast', messages: [{ role: 'user', content: 'Hello' }] });
   const evidence = { id: 'resp-pro-ultrafast', model: 'gpt-6.1-sol', service_tier: 'ultrafast',
     usage: { prompt_tokens: 3600, completion_tokens: 2 } };
@@ -55,7 +55,7 @@ test('Pro Ultrafast preserves 4x retail and disables cache writes in the actual 
       status: 'completed', output: [], usage: { input_tokens: 3600, output_tokens: 2 } });
   });
   const price = verifyAndPrice(pro, await response.json());
-  assert.equal(price.cost_usd, 0.05056); // 3600 @ $14/M + 2 @ $80/M
+  assert.equal(price.cost_usd, 0.07584); // 3600 @ $21/M + 2 @ $120/M
   assert.equal(price.provider_cost_upper_bound_usd, 0.04332);
   assert.ok(price.cost_usd <= pro.maximum.cost_usd);
   assert.equal(verifyAndPrice(pro, { ...evidence, service_tier: 'default' }).cost_usd, 0.01264);
@@ -95,7 +95,7 @@ test('reusable instruction prefix is identical across languages and tone, withou
 test('full input is billed at existing retail rates across modes and cache states; there is no service fee', () => {
   for (const policy of Object.values(TEXT_PRICE_POLICY)) {
     for (const mode of ['default', 'fast', 'ultrafast']) {
-      const multiplier = mode === 'fast' ? 1.5 : mode === 'ultrafast' ? 4 : 1;
+      const multiplier = mode === 'fast' ? 1.5 : mode === 'ultrafast' ? 6 : 1;
       for (const input of [0, 1, 250, 300000]) for (const output of [0, 1, 8192]) {
         const cold = priceTextUsage({ policy, userTokens: input, outputTokens: output,
           rawInputTokens: input + 4000, cachedTokens: 0, mode });
@@ -151,7 +151,7 @@ test('gateway quote makes no paid request; settlement/replay bills full input an
   } finally { globalThis.fetch = original; }
 });
 
-test('edge Pro and Ultra Ultrafast quotes, streaming, settlement and replay keep 4x prices', async () => {
+test('edge Pro and Ultra Ultrafast quotes, streaming, settlement and replay keep 6x prices', async () => {
   const original = globalThis.fetch;
   for (const model of ['LingoFusion Pro', 'LingoFusion Ultra']) for (const stream of [false, true]) {
     const h = harness(), email = 'ultrafast@example.com';
@@ -179,7 +179,7 @@ test('edge Pro and Ultra Ultrafast quotes, streaming, settlement and replay keep
       const text = await first.text(); assert.match(text, /Bonjour/);
       const status = await billing(h.env, { action: 'usageStatus', email, operationId: 'ultrafast-one' });
       assert.equal(status.status, 'settled');
-      const expected = model === 'LingoFusion Pro' ? 0.04496 : 0.25696;
+      const expected = model === 'LingoFusion Pro' ? 0.06744 : 0.38544;
       assert.equal(status.cost_usd, expected); assert.equal(status.balance_usd, 2 - expected);
       const replay = await h.api('/api/playground/chat', body, email, headers);
       assert.equal(replay.status, 200); assert.match(await replay.text(), /Bonjour/); assert.equal(calls, 1);
