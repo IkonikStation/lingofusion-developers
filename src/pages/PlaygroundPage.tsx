@@ -2059,7 +2059,7 @@ export function PlaygroundPage({
                 onConnectGmail={() => void connectSenderGmail()}
                 onPreview={() => setReceiverPreviewOpen(true)}
                 tab={depositTab}
-                onTabChange={setDepositTab}
+                onTabChange={(tab) => { setDepositTab(tab); if (tab !== "gift") setDepositAmount((amount) => Math.max(5, amount)); }}
                 amount={depositAmount}
                 onAmountChange={setDepositAmount}
                 balance={liveBalance}

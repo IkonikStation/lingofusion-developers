@@ -95,7 +95,7 @@ export function WalletFundingPanel(props: WalletFundingPanelProps) {
             <label htmlFor="deposit-amount-input" className="mt-5 block text-xs font-medium text-neutral-600 dark:text-neutral-300">Or enter a custom amount</label>
             <div className="funding-amount-input mt-2">
               <span aria-hidden="true">$</span>
-              <input id="deposit-amount-input" type="number" inputMode="decimal" min={gift ? 1 : 5} max={50000} step={1} aria-label="Custom amount in USD" aria-describedby="funding-amount-hint" data-testid="deposit-amount-input" value={props.amount || ""} onChange={(event) => props.onAmountChange(Math.min(50000, Number(event.target.value)))} />
+              <input id="deposit-amount-input" type="number" inputMode="decimal" min={gift ? 1 : 5} max={50000} step={1} aria-label="Custom amount in USD" aria-describedby="funding-amount-hint" data-testid="deposit-amount-input" value={props.amount || ""} onChange={(event) => props.onAmountChange(Math.min(50000, Number(event.target.value)))} onBlur={() => { if (!Number.isFinite(props.amount) || props.amount < (gift ? 1 : 5)) props.onAmountChange(gift ? 1 : 5); }} />
               <span>USD</span>
             </div>
             <p id="funding-amount-hint" className="mt-2 text-xs text-neutral-400">Choose any amount from ${gift ? 1 : 5} to $50,000 USD.</p>
