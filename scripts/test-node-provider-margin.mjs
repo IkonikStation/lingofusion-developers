@@ -50,7 +50,7 @@ try {
   const keyData = await keyResponse.json();
   const secret = keyData.secret || keyData.apiKey || keyData.key;
   assert.equal(typeof secret, 'string', JSON.stringify(keyData));
-  sql.prepare('UPDATE users SET balance_usd = 2').run();
+  sql.prepare('UPDATE users SET balance_usd = 5').run();
   const body = { model: 'LingoFusion Pro', messages: [{ role: 'user', content: 'Hello' }], pricing_mode: 'fast', max_completion_tokens: 32 };
   for (const stream of [false, true]) {
     const operation = `route-${stream}`;
@@ -75,7 +75,7 @@ try {
     assert.equal(response.status, 200); assert.match(await response.text(), /service_fee_usd/);
     const record = sql.prepare('SELECT status, result FROM text_usage_reservations WHERE operation_id = ?').get(operation);
     assert.equal(record.status, 'settled');
-    assert.equal(JSON.parse(record.result).cost_usd, model === 'LingoFusion Pro' ? 0.04496 : 0.28896);
+    assert.equal(JSON.parse(record.result).cost_usd, model === 'LingoFusion Pro' ? 0.06744 : 0.43344);
     const count = calls;
     const replay = await api('/v1/chat/completions', { ...body, model, pricing_mode: 'ultrafast', stream }, secret, operation);
     assert.equal(replay.status, 200); await replay.text(); assert.equal(calls, count);
