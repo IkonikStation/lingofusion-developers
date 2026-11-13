@@ -114,7 +114,7 @@ export function PricingPage({
   const [selectedTranscriptionModel, setSelectedTranscriptionModel] = useState(transcriptionModels[0].model);
   const [transcriptionMinutes, setTranscriptionMinutes] = useState(1);
   const [selectedDubbingModel, setSelectedDubbingModel] = useState(dubbingModels[0].model);
-  const [dubbingSeconds, setDubbingSeconds] = useState(1);
+  const [dubbingMinutes, setDubbingMinutes] = useState(1);
   const [selectedMusicModel, setSelectedMusicModel] = useState(musicModels[0].model);
   const [musicGenerations, setMusicGenerations] = useState(1);
   const [selectedImageSize, setSelectedImageSize] = useState(imageModels[0].size);
@@ -192,8 +192,8 @@ export function PricingPage({
   }, [selectedTranscription, transcriptionMinutes]);
 
   const dubbingEstimate = useMemo(() => {
-    return selectedDubbing.priceUsd === null ? null : dubbingSeconds * selectedDubbing.priceUsd;
-  }, [selectedDubbing, dubbingSeconds]);
+    return selectedDubbing.priceUsd === null ? null : minuteNotationToMinutes(dubbingMinutes) * selectedDubbing.priceUsd;
+  }, [selectedDubbing, dubbingMinutes]);
 
   const musicEstimate = useMemo(() => {
     return selectedMusic.priceUsd === null ? null : musicGenerations * selectedMusic.priceUsd;
@@ -430,19 +430,19 @@ export function PricingPage({
               ))}
             </SelectField>
             <NumberField
-              label="Seconds"
+              label="Minutes (mm.ss)"
               min={0}
               max={Infinity}
               step={0.01}
-              value={dubbingSeconds}
-              onChange={setDubbingSeconds}
+              value={dubbingMinutes}
+              onChange={setDubbingMinutes}
             />
           </SectionCalculator>
 
           <PricingCard
             key={`dubbing-${currencyPresentationKey}`}
             title="Dubbing models"
-            unit="Prices per second"
+            unit="Prices per minute"
             kind="simple"
             rows={displayedDubbingModels}
             labels={pricingLabels}

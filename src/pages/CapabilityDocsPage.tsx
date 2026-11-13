@@ -66,7 +66,7 @@ const guides: Record<string, Guide> = {
     uses: ["Localize videos for another language", "Create translated versions of recorded audio", "Prepare multilingual media for review"],
     tips: ["Start with a clear recording and review the translated audio.", "In the Playground, use a file smaller than 25 MB and between 15 seconds and 180 minutes.", "Choose the target language and speaker similarity before starting the job."],
     mode: "dubbing", endpoint: "/v1/dubbing",
-    prices: dubbingModels.map((m) => ({ name: m.model, amount: m.priceUsd, unit: "/ second" })),
+    prices: dubbingModels.map((m) => ({ name: m.model, amount: m.priceUsd, unit: "/ minute" })),
   },
   "Image translation": {
     title: "Images", eyebrow: "Vision", intro: "Translate text inside images with LingoFusion Image Translate.",

@@ -21,6 +21,8 @@ export type SimpleModel = {
   model: string;
   priceUsd: number | null;
   pricingUnit?: "per_1k_characters" | "per_second" | "per_minute" | "per_song" | "per_generation" | "per_500_extractions";
+  description?: string;
+  languageCount?: number;
 };
 
 export type ImageResolution = "standard" | "4k";
@@ -160,7 +162,20 @@ export const transcriptionModels: SimpleModel[] = [
 ];
 
 export const dubbingModels: SimpleModel[] = [
-  { model: "LingoFusion Dubbing", priceUsd: 0.06, pricingUnit: "per_second" },
+  {
+    model: "LingoFusion Dubbing Mini",
+    priceUsd: 1.00,
+    pricingUnit: "per_minute",
+    languageCount: 29,
+    description: "Translate and dub your videos into 29 languages with a straightforward, accessible dubbing experience. Ideal for everyday content, casual projects, and anyone looking for a simple way to reach a wider audience.",
+  },
+  {
+    model: "LingoFusion Dubbing",
+    priceUsd: 4.00,
+    pricingUnit: "per_minute",
+    languageCount: 92,
+    description: "Transform your videos into 92 languages with advanced dubbing that captures the original speaker's emotion, tone, and delivery. Natural-sounding translations and precise synchronization help every conversation feel authentic, expressive, and true to the original.",
+  },
 ];
 
 export const musicModels: SimpleModel[] = [
