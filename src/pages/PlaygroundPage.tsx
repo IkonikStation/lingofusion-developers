@@ -799,7 +799,7 @@ export function PlaygroundPage({
           id: model.model,
           label: model.model,
           icon: <Clapperboard className="h-3.5 w-3.5 shrink-0 text-neutral-400" />,
-          hint: `$${(model.priceUsd ?? 0.06).toFixed(2)}/sec`,
+          hint: `$${(model.priceUsd ?? 0).toFixed(2)}/min · ${model.languageCount} languages`,
         })),
     [],
   );
@@ -1555,7 +1555,7 @@ export function PlaygroundPage({
     const runId = `dub-${Date.now()}`;
     const selectedModelRecord = dubbingModels.find((m) => m.model === selectedDubbingModel) ?? dubbingModels[0];
     const durationToUse = Math.max(15, dubbingDurationSeconds || 30);
-    const estimatedCostUsd = Number((durationToUse * (selectedModelRecord.priceUsd ?? 0.06)).toFixed(4));
+    const estimatedCostUsd = Number(((durationToUse / 60) * (selectedModelRecord.priceUsd ?? 0)).toFixed(4));
 
     try {
       if (dubbingFile.size >= 25 * 1024 * 1024) {
@@ -2581,7 +2581,10 @@ export function PlaygroundPage({
                     </div>
 
                     <span className="hidden font-sans tabular-nums text-[11px] text-neutral-500 md:inline dark:text-neutral-400">
-                      $0.06 / sec
+                      ${((dubbingModels.find((model) => model.model === selectedDubbingModel)?.priceUsd) ?? 0).toFixed(2)} / min
+                    </span>
+                    <span className="basis-full text-xs leading-relaxed text-neutral-500 dark:text-neutral-400">
+                      {dubbingModels.find((model) => model.model === selectedDubbingModel)?.description}
                     </span>
                   </>
                 )}

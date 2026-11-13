@@ -1577,7 +1577,7 @@ async function runDubbingBrowser(state: BrowserState, options?: RequestInit) {
   const fileBase64 = String(body.file_base64 || "");
 
   const durationMinutes = durationSeconds / 60;
-  const cost = Number(((model.priceUsd ?? 0.06) * durationSeconds).toFixed(6));
+  const cost = Number((((model.priceUsd ?? 0) * durationMinutes)).toFixed(6));
 
   if (!state.dashboard.account.unlimitedBalance && (state.dashboard.user?.balance_usd ?? state.dashboard.account.paidBalance) < cost) {
     fail("Insufficient balance. Please deposit credits.");

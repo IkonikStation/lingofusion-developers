@@ -3240,13 +3240,15 @@ async function route(req, res) {
       }
 
       const body = await parseBody(req);
+      const dubbingModel = String(body.model || "LingoFusion Dubbing");
+      const dubbingRatePerMinute = dubbingModel === "LingoFusion Dubbing Mini" ? 1.00 : 4.00;
       const targetLang = String(body.target_lang || body.target_language || "es").toLowerCase();
       const sourceLang = String(body.source_lang || body.source_language || "auto").toLowerCase();
       const durationSeconds = Math.max(15, Math.min(10800, Number(body.duration_seconds || 30)));
       const mediaType = String(body.media_type || "video/mp4");
       const fileName = String(body.file_name || (mediaType.startsWith("video") ? "dubbed_video.mp4" : "dubbed_audio.mp3"));
 
-      const costUsd = Number((durationSeconds * 0.06).toFixed(4));
+      const costUsd = Number(((durationSeconds / 60) * dubbingRatePerMinute).toFixed(4));
       const balanceUsd = getUserBalance(user.id, db);
 
       if (balanceUsd < costUsd) {
@@ -3273,7 +3275,7 @@ async function route(req, res) {
         apiKeyId,
         endpoint: isPlayground ? "/api/playground/dubbing" : "/v1/dubbing",
         source: isPlayground ? "playground" : "api",
-        model: "LingoFusion Dubbing",
+        model: dubbingModel,
         upstreamModel: "dubbing_v2",
         status: 200,
         inputTokens: 0,
@@ -3284,7 +3286,7 @@ async function route(req, res) {
 
       return send(res, 200, {
         ...job,
-        model: "LingoFusion Dubbing",
+        model: dubbingModel,
         upstream_model: "dubbing_v2",
         file_name: `dubbed-${targetLang}-${fileName.replace(/\.[^.]+$/, "")}.flac`,
         target_lang: targetLang,
