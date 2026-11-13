@@ -11,8 +11,6 @@ type DisplayTextModel = {
 type DisplaySimpleModel = {
   model: string;
   price: string;
-  description?: string;
-  languageCount?: number;
 };
 
 type DisplayImageModel = {
@@ -139,11 +137,7 @@ function SimpleTable({ rows, labels }: { rows: DisplaySimpleModel[]; labels: Pri
       <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
         {rows.map((row) => (
           <tr key={row.model} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/30">
-            <td data-label={labels.model} className="px-5 py-3.5 text-neutral-900 dark:text-neutral-100">
-              <div className="font-semibold">{row.model}</div>
-              {row.languageCount && <div className="mt-1 text-[11px] font-medium text-neutral-500">{row.languageCount} languages</div>}
-              {row.description && <p className="mt-1 max-w-2xl text-[11px] font-normal leading-relaxed text-neutral-500 dark:text-neutral-400">{row.description}</p>}
-            </td>
+            <td data-label={labels.model} className="px-5 py-3.5 font-semibold text-neutral-900 dark:text-neutral-100">{row.model}</td>
             <td data-label={labels.price} className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.price}</td>
           </tr>
         ))}

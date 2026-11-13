@@ -169,7 +169,7 @@ export function PricingPage({
   const displayedCloudTextModels = displayedTextModels.filter((model) => !model.local);
   const displayedTtsModels = ttsModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
   const displayedTranscriptionModels = transcriptionModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
-  const displayedDubbingModels = dubbingModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
+  const displayedDubbingModels = dubbingModels.map((model) => ({ model: model.model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
   const displayedMusicModels = musicModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
   const displayedImageModels = imageModels.map((model) => ({
     ...model,
