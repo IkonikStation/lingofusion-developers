@@ -2766,7 +2766,7 @@ export function PlaygroundPage({
                 </Popover>
               )}
 
-              {mode === "dubbing" && (
+              {mode === "dubbing" && selectedDubbingModel !== "LingoFusion Dubbing Mini" && (
                 <Popover
                   trigger={<><SlidersHorizontal className="h-3.5 w-3.5 text-neutral-400" />Options</>}
                   badge={dubbingCloningStrength !== 7 ? 1 : 0}

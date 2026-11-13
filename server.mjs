@@ -3276,7 +3276,7 @@ async function route(req, res) {
         endpoint: isPlayground ? "/api/playground/dubbing" : "/v1/dubbing",
         source: isPlayground ? "playground" : "api",
         model: dubbingModel,
-        upstreamModel: "dubbing_v2",
+        upstreamModel: job.upstream_model,
         status: 200,
         inputTokens: 0,
         outputTokens: 0,
@@ -3287,7 +3287,7 @@ async function route(req, res) {
       return send(res, 200, {
         ...job,
         model: dubbingModel,
-        upstream_model: "dubbing_v2",
+        upstream_model: job.upstream_model,
         file_name: `dubbed-${targetLang}-${fileName.replace(/\.[^.]+$/, "")}.flac`,
         target_lang: targetLang,
         source_lang: sourceLang,

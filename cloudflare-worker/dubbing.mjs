@@ -1,4 +1,4 @@
-// Shared Dubbing v2 transport for the edge gateway and local API.
+// Shared ElevenLabs dubbing transport for the edge gateway and local API.
 const base = "https://api.elevenlabs.io/v1/dubbing/project";
 
 export async function dubbingRequest(method, body, voiceKey, fetcher = fetch) {
@@ -23,8 +23,10 @@ export async function dubbingRequest(method, body, voiceKey, fetcher = fetch) {
       media_type: "audio/flac",
     };
   }
+  const mini = body.model === "LingoFusion Dubbing Mini";
+  const upstreamModel = mini ? "dubbing_v1" : "dubbing_v2";
   const strength = body.voice_settings?.cloning_strength ?? 7;
-  if (typeof strength !== "number" || !Number.isFinite(strength) || strength < 0 || strength > 10) {
+  if (!mini && (typeof strength !== "number" || !Number.isFinite(strength) || strength < 0 || strength > 10)) {
     throw new Error("Speaker similarity must be between 0 and 10.");
   }
   const form = new FormData();
@@ -38,13 +40,16 @@ export async function dubbingRequest(method, body, voiceKey, fetcher = fetch) {
   } else {
     throw new Error("Upload a supported media file before starting a dub.");
   }
+  // Dubbing v1 accepts base language tags only.
+  const languageCode = (code) => mini && typeof code === "string" ? code.split("-")[0].toLowerCase() : code;
   const sourceLanguage = body.source_lang || body.source_language;
-  if (sourceLanguage && !["auto", "Auto-detect"].includes(sourceLanguage)) form.append("source_language", sourceLanguage);
-  form.append("model_id", "dubbing_v2");
+  if (sourceLanguage && !["auto", "Auto-detect"].includes(sourceLanguage)) form.append("source_language", languageCode(sourceLanguage));
+  form.append("model_id", upstreamModel);
   const project = await call(base, { method: "POST", body: form });
   const language = await call(`${base}/${project.project_id}/language`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ target_language: body.target_lang || body.target_language, voice_settings: { cloning_strength: strength } }),
+    body: JSON.stringify({ target_language: languageCode(body.target_lang || body.target_language),
+      ...(!mini && { voice_settings: { cloning_strength: strength } }) }),
   });
-  return { id: project.project_id, project_id: project.project_id, language_id: language.language_id, status: language.status || "queued", media_type: "audio/flac" };
+  return { id: project.project_id, project_id: project.project_id, language_id: language.language_id, status: language.status || "queued", upstream_model: upstreamModel, media_type: "audio/flac" };
 }
