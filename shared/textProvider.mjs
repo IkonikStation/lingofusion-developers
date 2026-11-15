@@ -25,6 +25,19 @@ function chatResult(response) {
 export async function fetchTextProvider(prepared, options, providerFetch = fetch,
   endpoint = 'https://api.openai.com/v1/chat/completions') {
   const payload = prepared.payload;
+  if (prepared.policy.provider === 'openrouter') {
+    return providerFetch('https://openrouter.ai/api/v1/chat/completions', {
+      ...options,
+      body: JSON.stringify({
+        model: payload.model,
+        messages: payload.messages,
+        stream: payload.stream,
+        max_tokens: payload.max_completion_tokens,
+        reasoning: { enabled: false },
+        ...(payload.stream ? { stream_options: { include_usage: true } } : {}),
+      }),
+    });
+  }
   if (prepared.mode !== 'ultrafast' && !prepared.webSearch) {
     return providerFetch(endpoint, { ...options, body: JSON.stringify(payload) });
   }

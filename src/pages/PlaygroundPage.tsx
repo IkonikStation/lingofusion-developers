@@ -825,7 +825,7 @@ export function PlaygroundPage({
     const effectiveSpeedMode =
       speedMode === "ultrafast" && ["LingoFusion Pro", "LingoFusion Ultra"].includes(activeModel.model_id)
         ? "ultrafast"
-        : speedMode === "fast" && ["LingoFusion Spark", "LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(activeModel.model_id)
+        : speedMode === "fast" && ["LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(activeModel.model_id)
         ? "fast"
         : "default";
 
@@ -969,7 +969,7 @@ export function PlaygroundPage({
       const decoder = new TextDecoder();
       let buffer = "";
       let accumulatedText = "";
-      const prompt = buildPromptMessages({ modelName: activeModel.model_id, fromLanguage, toLanguage, tone: "Natural (Default)" }, activeModel.upstream_model_name !== "gpt-5-nano");
+      const prompt = buildPromptMessages({ modelName: activeModel.model_id, fromLanguage, toLanguage, tone: "Natural (Default)" }, activeModel.upstream_model_name !== "qwen/qwen3.7-flash");
       let promptTokens = countTokens(prompt.text + (allowWebSearch ? "\n\n" + LOOKUP_POLICY : "")) + countTokens(currentInput) + (prompt.messages.length + 1) * 3 + 3;
       let receivedInputUsage = false;
       let completionTokens = 0;
@@ -2605,7 +2605,7 @@ export function PlaygroundPage({
                           className="h-8 rounded-xl border border-neutral-200 bg-white px-2.5 text-xs font-semibold text-neutral-900 outline-none transition focus:border-neutral-400 dark:border-white/15 dark:bg-neutral-950 dark:text-white"
                         >
                           <option value="default">Standard speed</option>
-                          <option value="fast">Fast (1.5× speed · 1.5× price)</option>
+                          {activeModel.model_id !== "LingoFusion Spark" && <option value="fast">Fast (1.5× speed · 1.5× price)</option>}
                           {["LingoFusion Pro", "LingoFusion Ultra"].includes(activeModel.model_id) && (
                             <option value="ultrafast">Ultrafast (6× speed · 6× price)</option>
                           )}

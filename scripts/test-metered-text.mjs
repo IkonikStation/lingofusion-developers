@@ -115,8 +115,7 @@ test('full input is billed at existing retail rates across modes and cache state
 test('existing Standard rates cover cold prompt writes for every configured text model', () => {
   for (const model of Object.keys(TEXT_PRICE_POLICY)) {
     const prepared = prepareTextRequest({ model, messages: [{ role: 'user', content: 'Hello' }] });
-    if (model === 'LingoFusion Spark') assert.ok(prepared.maximum.gross_profit_lower_bound_usd < 0, model);
-    else assert.ok(prepared.maximum.gross_profit_lower_bound_usd >= 0, model);
+    assert.ok(prepared.maximum.gross_profit_lower_bound_usd >= 0, model);
   }
   assert.throws(() => prepareTextRequest({ model: 'LingoFusion Pro', pricing_mode: 'batch', messages: [{ role: 'user', content: 'Hello' }] }), /asynchronous Batch/);
   assert.throws(() => prepareTextRequest({ model: 'LingoFusion Pro', messages: [{ role: 'user', content: 'a '.repeat(280000) }] }), /unavailable at the published token rates/);
@@ -124,14 +123,14 @@ test('existing Standard rates cover cold prompt writes for every configured text
 
 test('gateway quote makes no paid request; settlement/replay bills full input and does not add fees', async () => {
   const h = harness(), email = 'text@example.com';
-  h.records.set(`user_balance:${email}`, '1'); h.env.OPENAI_API_KEY = 'synthetic-only';
+  h.records.set(`user_balance:${email}`, '1'); h.env.OPENROUTER_API_KEY = h.env.OPENAI_API_KEY = 'synthetic-only';
   const body = { model: 'LingoFusion Nano', messages: [{ role: 'user', content: 'Hello' }], max_completion_tokens: 100 };
   const original = globalThis.fetch; let calls = 0;
   globalThis.fetch = async (url, options) => {
-    assert.equal(String(url), 'https://api.openai.com/v1/chat/completions'); calls++;
+    assert.equal(String(url), 'https://openrouter.ai/api/v1/chat/completions'); calls++;
     const payload = JSON.parse(options.body);
-    assert.equal(payload.model, 'gpt-5-nano');
-    return Response.json({ id: 'provider-test', model: 'gpt-5-nano', choices: [{ message: { content: 'Bonjour' } }],
+    assert.equal(payload.model, 'qwen/qwen3.7-flash');
+    return Response.json({ id: 'provider-test', model: 'qwen/qwen3.7-flash', choices: [{ message: { content: 'Bonjour' } }],
       usage: { prompt_tokens: 3200, completion_tokens: 2, prompt_tokens_details: { cached_tokens: 3000 } } });
   };
   try {
@@ -156,7 +155,7 @@ test('edge Pro and Ultra Ultrafast quotes, streaming, settlement and replay keep
   const original = globalThis.fetch;
   for (const model of ['LingoFusion Pro', 'LingoFusion Ultra']) for (const stream of [false, true]) {
     const h = harness(), email = 'ultrafast@example.com';
-    h.records.set(`user_balance:${email}`, '5'); h.env.OPENAI_API_KEY = 'synthetic-only';
+    h.records.set(`user_balance:${email}`, '5'); h.env.OPENROUTER_API_KEY = h.env.OPENAI_API_KEY = 'synthetic-only';
     const body = { model, stream, pricing_mode: 'ultrafast', messages: [{ role: 'user', content: 'Hello' }] };
     const headers = { 'Idempotency-Key': 'ultrafast-one', 'X-LingoFusion-Client-Token': 'lf_play_secure_649f7' };
     let calls = 0;
@@ -198,14 +197,14 @@ test('rejects unsupported routing, multimodal content and unpriced tools before 
 
 test('stream final usage settles once and replay preserves SSE without redispatch', async () => {
   const h = harness(), email = 'stream@example.com';
-  h.records.set(`user_balance:${email}`, '1'); h.env.OPENAI_API_KEY = 'synthetic-only';
+  h.records.set(`user_balance:${email}`, '1'); h.env.OPENROUTER_API_KEY = h.env.OPENAI_API_KEY = 'synthetic-only';
   const body = { model: 'LingoFusion Nano', messages: [{ role: 'user', content: 'Hello' }], stream: true };
   const headers = { 'Idempotency-Key': 'stream-one', 'X-LingoFusion-Client-Token': 'lf_play_secure_649f7' };
   const original = globalThis.fetch; let calls = 0;
   globalThis.fetch = async () => {
     calls++;
-    const frames = [ { id: 'stream-provider', model: 'gpt-5-nano', choices: [{ delta: { content: 'Bonjour' } }] },
-      { id: 'stream-provider', model: 'gpt-5-nano', choices: [], usage: { prompt_tokens: 3200, completion_tokens: 2 } } ];
+    const frames = [ { id: 'stream-provider', model: 'qwen/qwen3.7-flash', choices: [{ delta: { content: 'Bonjour' } }] },
+      { id: 'stream-provider', model: 'qwen/qwen3.7-flash', choices: [], usage: { prompt_tokens: 3200, completion_tokens: 2 } } ];
     return new Response(frames.map(f => `data: ${JSON.stringify(f)}\n\n`).join('') + 'data: [DONE]\n\n');
   };
   try {
@@ -220,7 +219,7 @@ test('stream final usage settles once and replay preserves SSE without redispatc
 
 test('unknown provider outcome retains funds and cannot be retried into another provider call', async () => {
   const h = harness(), email = 'timeout@example.com';
-  h.records.set(`user_balance:${email}`, '1'); h.env.OPENAI_API_KEY = 'synthetic-only';
+  h.records.set(`user_balance:${email}`, '1'); h.env.OPENROUTER_API_KEY = h.env.OPENAI_API_KEY = 'synthetic-only';
   const body = { model: 'LingoFusion Nano', messages: [{ role: 'user', content: 'Hello' }] };
   const headers = { 'Idempotency-Key': 'timeout', 'X-LingoFusion-Client-Token': 'lf_play_secure_649f7' };
   const original = globalThis.fetch; let calls = 0;
@@ -234,13 +233,13 @@ test('unknown provider outcome retains funds and cannot be retried into another 
 
 test('client cancellation drains final provider usage and settles without a second charge', async () => {
   const h = harness(), email = 'cancel@example.com';
-  h.records.set(`user_balance:${email}`, '1'); h.env.OPENAI_API_KEY = 'synthetic-only';
+  h.records.set(`user_balance:${email}`, '1'); h.env.OPENROUTER_API_KEY = h.env.OPENAI_API_KEY = 'synthetic-only';
   const body = { model: 'LingoFusion Nano', messages: [{ role: 'user', content: 'Hello' }], stream: true };
   const original = globalThis.fetch, waits = []; let providerController;
   const encode = data => new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`);
   globalThis.fetch = async () => new Response(new ReadableStream({ start(controller) {
     providerController = controller;
-    controller.enqueue(encode({ id: 'cancel-provider', model: 'gpt-5-nano', choices: [{ delta: { content: 'Bonjour' } }] }));
+    controller.enqueue(encode({ id: 'cancel-provider', model: 'qwen/qwen3.7-flash', choices: [{ delta: { content: 'Bonjour' } }] }));
   } }));
   try {
     const response = await meteredText(new Request('https://gateway.test/api/playground/chat', {
@@ -249,7 +248,7 @@ test('client cancellation drains final provider usage and settles without a seco
     const reader = response.body.getReader();
     assert.match(new TextDecoder().decode((await reader.read()).value), /Bonjour/);
     await reader.cancel();
-    providerController.enqueue(encode({ id: 'cancel-provider', model: 'gpt-5-nano', choices: [], usage: { prompt_tokens: 3200, completion_tokens: 2 } }));
+    providerController.enqueue(encode({ id: 'cancel-provider', model: 'qwen/qwen3.7-flash', choices: [], usage: { prompt_tokens: 3200, completion_tokens: 2 } }));
     providerController.close();
     await Promise.all(waits);
     const status = await billing(h.env, { action: 'usageStatus', email, operationId: 'cancel-one' });

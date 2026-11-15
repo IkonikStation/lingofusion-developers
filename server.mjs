@@ -77,7 +77,7 @@ const textModels = [
 ];
 
 const defaultPricingCatalog = [
-  { model_id: "LingoFusion Spark", provider: "lingofusion", upstream_model_name: "gpt-5-nano", input_per_million: 0.0500, output_per_million: 0.2500, is_active: 1 },
+  { model_id: "LingoFusion Spark", provider: "openrouter", upstream_model_name: "qwen/qwen3.7-flash", input_per_million: 0.0500, output_per_million: 0.2500, is_active: 1 },
   { model_id: "LingoFusion Lite", provider: "lingofusion", upstream_model_name: "gpt-5.6-luna", input_per_million: 0.5000, output_per_million: 2.0000, is_active: 1 },
   { model_id: "LingoFusion", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 1.0000, output_per_million: 5.0000, is_active: 1 },
   { model_id: "LingoFusion Pro", provider: "lingofusion", upstream_model_name: "gpt-6-sol", input_per_million: 3.5000, output_per_million: 20.0000, is_active: 1 },
@@ -476,7 +476,7 @@ const lmStudio = {
 };
 
 const realModelRouting = {
-  "LingoFusion Spark": { provider: "lingofusion", model: "gpt-5-nano", displayModel: "GPT-5 nano" },
+  "LingoFusion Spark": { provider: "openrouter", model: "qwen/qwen3.7-flash", displayModel: "Qwen3.7 Flash" },
   "LingoFusion Lite": { provider: "lingofusion", model: "gpt-5.6-luna", displayModel: "GPT-5.6 Luna" },
   "LingoFusion": { provider: "lingofusion", model: "gpt-6-luna", displayModel: "GPT-6 Luna" },
   "ExplainFusion": { provider: "lingofusion", model: "gpt-6-luna", displayModel: "GPT-6 Luna" },
@@ -513,8 +513,8 @@ export function resolveBackendModelRouting(modelName, options = {}) {
 
   if (name === "LingoFusion Spark") {
     return {
-      upstreamModel: "gpt-5-nano",
-      displayModel: "GPT-5 nano",
+      upstreamModel: "qwen/qwen3.7-flash",
+      displayModel: "Qwen3.7 Flash",
       reasoning: "none",
       reasoningEffort: "minimal",
       webSearch: false,
@@ -672,7 +672,7 @@ function normalizePricingMode(value) {
 function normalizeModelName(value, pricingMode = "default") {
   const normalized = String(value || "").trim().toLowerCase();
   const models = pricingMode === "batch" ? batchTextModels : textModels;
-  if (pricingMode === "fast" && !["lingofusion spark", "lingofusion lite", "lingofusion", "lingofusion pro", "lingofusion ultra"].includes(normalized)) return undefined;
+  if (pricingMode === "fast" && !["lingofusion lite", "lingofusion", "lingofusion pro", "lingofusion ultra"].includes(normalized)) return undefined;
   if (pricingMode === "ultrafast" && !["lingofusion pro", "lingofusion ultra"].includes(normalized)) return undefined;
   return models.find((model) => model.model.toLowerCase() === normalized);
 }
@@ -3970,7 +3970,7 @@ async function route(req, res) {
 
       const pricingMode = normalizePricingMode(body.pricing_mode);
       const model = normalizeModelName(body.model, pricingMode);
-      if (!model) return send(res, 400, { error: "unsupported_model", supported_models: (pricingMode === "batch" ? batchTextModels : pricingMode === "fast" ? textModels.filter((item) => ["LingoFusion Spark", "LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(item.model)) : pricingMode === "ultrafast" ? textModels.filter((item) => ["LingoFusion Pro", "LingoFusion Ultra"].includes(item.model)) : textModels).map((item) => item.model), request_id: requestId });
+      if (!model) return send(res, 400, { error: "unsupported_model", supported_models: (pricingMode === "batch" ? batchTextModels : pricingMode === "fast" ? textModels.filter((item) => ["LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(item.model)) : pricingMode === "ultrafast" ? textModels.filter((item) => ["LingoFusion Pro", "LingoFusion Ultra"].includes(item.model)) : textModels).map((item) => item.model), request_id: requestId });
       if (!body.input || !body.from_language || !body.to_language) {
         return send(res, 400, { error: "invalid_request", message: "model, input, from_language, and to_language are required", request_id: requestId });
       }

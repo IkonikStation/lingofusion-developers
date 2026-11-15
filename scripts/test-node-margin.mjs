@@ -73,7 +73,7 @@ test("nodeTextMetered: reservation, provider evidence settlement and exact refun
   // Settle with provider evidence demonstrating prompt cache hit
   const providerData = {
     id: "chatcmpl-mock-provider",
-    model: "gpt-5-nano",
+    model: "qwen/qwen3.7-flash",
     usage: {
       prompt_tokens: 3164,
       completion_tokens: 10,
@@ -315,7 +315,7 @@ test("nodeTextMetered: reservation and settlement strictly enforce owner and rec
       prepared,
       providerData: {
         id: "chatcmpl-alice-1",
-        model: "gpt-5-nano",
+        model: "qwen/qwen3.7-flash",
         usage: { prompt_tokens: 3164, completion_tokens: 10 },
         choices: [{ message: { role: "assistant", content: "Hi" } }]
       }
@@ -350,7 +350,7 @@ test("nodeTextMetered: reservation and settlement strictly enforce owner and rec
     prepared,
     providerData: {
       id: "chatcmpl-receipt-shared",
-      model: "gpt-5-nano",
+      model: "qwen/qwen3.7-flash",
       usage: { prompt_tokens: 3164, completion_tokens: 10 },
       choices: [{ message: { role: "assistant", content: "Hi" } }]
     }
@@ -375,7 +375,7 @@ test("nodeTextMetered: reservation and settlement strictly enforce owner and rec
       prepared,
       providerData: {
         id: "chatcmpl-receipt-shared",
-        model: "gpt-5-nano",
+        model: "qwen/qwen3.7-flash",
         usage: { prompt_tokens: 3164, completion_tokens: 10 },
         choices: [{ message: { role: "assistant", content: "Hi" } }]
       }
@@ -403,7 +403,7 @@ test("nodeTextMetered: reservation and settlement strictly enforce owner and rec
       prepared: smallPrepared,
       providerData: {
         id: "chatcmpl-too-big",
-        model: "gpt-5-nano",
+        model: "qwen/qwen3.7-flash",
         usage: { prompt_tokens: 3164, completion_tokens: 10 },
         choices: [{ message: { role: "assistant", content: "Hi" } }]
       }
@@ -474,7 +474,7 @@ test("reservation: allows idempotent replay when balance is zero", () => {
     prepared,
     providerData: {
       id: "chatcmpl-zero-prov",
-      model: "gpt-5-nano",
+      model: "qwen/qwen3.7-flash",
       usage: { prompt_tokens: 3164, completion_tokens: 5 },
       choices: [{ message: { role: "assistant", content: "Done" } }]
     }

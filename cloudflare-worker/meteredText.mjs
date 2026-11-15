@@ -17,7 +17,8 @@ export async function meteredText(request, env, auth, respond, quoteOnly = false
     maximum_cost_usd: maximum.cost_usd, maximum_service_fee_usd: 0,
     input_tokens: prepared.rawMaximum, customer_input_tokens: prepared.exactInputCount ? userTokens : null, input_count_is_upper_bound: !prepared.exactInputCount, instruction_tokens_estimate: prepared.systemTokens, max_completion_tokens: prepared.maxOutput,
     notice: 'Total input is billed at the published input rate. Output includes reasoning. No additional service fee. Final token charges round up once to six decimal USD places.' });
-  if (!env.BILLING || !env.GIFTS || !env.OPENAI_API_KEY) return respond({ error: 'metered_text_not_configured' }, 503);
+  const apiKey = policy.provider === 'openrouter' ? env.OPENROUTER_API_KEY : env.OPENAI_API_KEY;
+  if (!env.BILLING || !env.GIFTS || !apiKey) return respond({ error: 'metered_text_not_configured' }, 503);
   const operationId = request.headers.get('Idempotency-Key') || crypto.randomUUID();
   if (!/^[A-Za-z0-9_-]{1,100}$/.test(operationId)) return respond({ error: 'invalid_idempotency_key' }, 400);
   const fingerprint = await hash(JSON.stringify({ pricingVersion: TEXT_PRICING_VERSION, payload, mode: prepared.mode,
@@ -55,7 +56,7 @@ export async function meteredText(request, env, auth, respond, quoteOnly = false
   let upstream;
   try {
     upstream = await fetchTextProvider(prepared, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.OPENAI_API_KEY}` },
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       signal: AbortSignal.timeout(120000) }, providerFetch);
   } catch { await uncertain(); return respond({ error: 'provider_outcome_unknown', operation_id: operationId,
     message: `Funds remain reserved while request ${operationId} is reconciled. Retry with the same request ID; do not submit it as new work.` }, 502); }

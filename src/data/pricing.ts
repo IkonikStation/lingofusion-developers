@@ -64,7 +64,7 @@ export const textModelsByPricingMode: Record<TextPricingMode, TextModel[]> = {
       outputUsd: model.outputUsd / 2,
     })),
   fast: textModels
-    .filter((model) => ["LingoFusion Spark", "LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(model.model))
+    .filter((model) => ["LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(model.model))
     .map((model) => ({
       ...model,
       inputUsd: model.inputUsd * 1.5,

@@ -755,7 +755,7 @@ export function DashboardModal({
                               <SelectInput label="Model" value={tryModel} onChange={(model) => {
                                 setTryModel(model);
                               }}>
-                                {playgroundModels.filter((model) => playgroundPricingMode === "fast" ? ["LingoFusion Spark", "LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(model.model) : playgroundPricingMode !== "ultrafast" || ["LingoFusion Pro", "LingoFusion Ultra"].includes(model.model)).map((model) => <option key={model.model}>{model.model}</option>)}
+                                {playgroundModels.filter((model) => playgroundPricingMode === "fast" ? ["LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(model.model) : playgroundPricingMode !== "ultrafast" || ["LingoFusion Pro", "LingoFusion Ultra"].includes(model.model)).map((model) => <option key={model.model}>{model.model}</option>)}
                               </SelectInput>
                             </div>
                           ) : (

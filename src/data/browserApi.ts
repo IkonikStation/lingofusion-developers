@@ -147,7 +147,7 @@ type BrowserState = {
 const storageKey = "lingofusion-browser-api-v3";
 
 export const defaultBrowserModelPricing: ModelPricingRecord[] = [
-  { id: "LingoFusion Spark", model_id: "LingoFusion Spark", object: "model", provider: "lingofusion", upstream_model_name: "gpt-5-nano", input_per_million: 0.05, output_per_million: 0.25, is_active: true },
+  { id: "LingoFusion Spark", model_id: "LingoFusion Spark", object: "model", provider: "openrouter", upstream_model_name: "qwen/qwen3.7-flash", input_per_million: 0.05, output_per_million: 0.25, is_active: true },
   { id: "LingoFusion Lite", model_id: "LingoFusion Lite", object: "model", provider: "lingofusion", upstream_model_name: "gpt-5.6-luna", input_per_million: 0.5, output_per_million: 2.0, is_active: true },
   { id: "LingoFusion", model_id: "LingoFusion", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 1.0, output_per_million: 5.0, is_active: true },
   { id: "LingoFusion Pro", model_id: "LingoFusion Pro", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-sol", input_per_million: 3.5, output_per_million: 20.0, is_active: true },
@@ -196,8 +196,8 @@ export function resolveBackendModelRouting(
 
   if (name === "LingoFusion Spark") {
     return {
-      upstreamModel: "gpt-5-nano",
-      displayModel: "GPT-5 nano",
+      upstreamModel: "qwen/qwen3.7-flash",
+      displayModel: "Qwen3.7 Flash",
       reasoning: "none" as const,
       reasoningEffort: "minimal" as const,
       webSearch: false,
@@ -743,7 +743,7 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
     const effort = routing.reasoningEffort === "max" ? "xhigh" : routing.reasoningEffort;
     const pricingMode = String(body.pricing_mode || "default").toLowerCase();
     const isUltrafast = pricingMode === "ultrafast" && ["LingoFusion Pro", "LingoFusion Ultra"].includes(modelPricing.model_id);
-    const isFast = pricingMode === "fast" && ["LingoFusion Spark", "LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(modelPricing.model_id);
+    const isFast = pricingMode === "fast" && ["LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(modelPricing.model_id);
     const serviceTier = isUltrafast ? "ultrafast" : isFast ? "fast" : undefined;
     const authToken = getAuthBearer(options, state);
 
@@ -1095,7 +1095,7 @@ export async function streamChatCompletionBrowser(
   const effort = routing.reasoningEffort === "max" ? "xhigh" : routing.reasoningEffort;
   const pricingMode = String(body.pricing_mode || "default").toLowerCase();
   const isUltrafast = pricingMode === "ultrafast" && ["LingoFusion Pro", "LingoFusion Ultra"].includes(modelPricing.model_id);
-  const isFast = pricingMode === "fast" && ["LingoFusion Spark", "LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(modelPricing.model_id);
+  const isFast = pricingMode === "fast" && ["LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(modelPricing.model_id);
   const serviceTier = isUltrafast ? "ultrafast" : isFast ? "fast" : undefined;
   const authToken = getAuthBearer(undefined, state, typeof body.apiKey === "string" ? body.apiKey : typeof body.api_key === "string" ? body.api_key : undefined);
 
