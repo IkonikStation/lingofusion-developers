@@ -338,7 +338,7 @@ export function DashboardModal({
   const [tryMusicDurationSeconds, setTryMusicDurationSeconds] = useState(30);
   const [tryResult, setTryResult] = useState("");
   const [tryOutput, setTryOutput] = useState("");
-  const [tokenizerModel, setTokenizerModel] = useState("LingoFusion Nano");
+  const [tokenizerModel, setTokenizerModel] = useState("LingoFusion Spark");
   const [tokenizerInput, setTokenizerInput] = useState("Hello, world!");
   const [tokenizerResult, setTokenizerResult] = useState<TokenizerResult | null>(null);
   const [tokenizerLoading, setTokenizerLoading] = useState(false);
@@ -755,7 +755,7 @@ export function DashboardModal({
                               <SelectInput label="Model" value={tryModel} onChange={(model) => {
                                 setTryModel(model);
                               }}>
-                                {playgroundModels.filter((model) => playgroundPricingMode === "fast" ? ["LingoFusion Nano", "LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(model.model) : playgroundPricingMode !== "ultrafast" || ["LingoFusion Pro", "LingoFusion Ultra"].includes(model.model)).map((model) => <option key={model.model}>{model.model}</option>)}
+                                {playgroundModels.filter((model) => playgroundPricingMode === "fast" ? ["LingoFusion Spark", "LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(model.model) : playgroundPricingMode !== "ultrafast" || ["LingoFusion Pro", "LingoFusion Ultra"].includes(model.model)).map((model) => <option key={model.model}>{model.model}</option>)}
                               </SelectInput>
                             </div>
                           ) : (

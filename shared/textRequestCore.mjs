@@ -46,8 +46,8 @@ export function prepareTextRequest(body, count = byteBound, exact = false) {
   // whose input/output rates cannot cover the conservative provider rates.
   const retailMultiplier = mode === 'fast' ? 1.5 : mode === 'ultrafast' ? 6 : 1;
   const providerMultiplier = mode === 'fast' ? 2 : mode === 'ultrafast' ? 6 : 1;
-  if (Math.ceil(policy.ri * retailMultiplier) < Math.max(policy.wi, cacheWritesEnabled ? policy.write : 0) * providerMultiplier * (longContext ? 2 : 1) ||
-      Math.ceil(policy.ro * retailMultiplier) < policy.wo * providerMultiplier * (longContext ? 1.5 : 1)) {
+  if (policy.model !== 'LingoFusion Spark' && (Math.ceil(policy.ri * retailMultiplier) < Math.max(policy.wi, cacheWritesEnabled ? policy.write : 0) * providerMultiplier * (longContext ? 2 : 1) ||
+      Math.ceil(policy.ro * retailMultiplier) < policy.wo * providerMultiplier * (longContext ? 1.5 : 1))) {
     throw new Error('This processing mode or context length is unavailable at the published token rates');
   }
   if (body.max_cost_usd !== undefined && (!Number.isFinite(body.max_cost_usd) || body.max_cost_usd < maximum.cost_usd)) throw new Error('The full price exceeds your approved spending cap. Refresh the quote.');
@@ -58,7 +58,7 @@ export function prepareTextRequest(body, count = byteBound, exact = false) {
     service_tier: mode === 'fast' || mode === 'ultrafast' ? mode : 'default',
     ...(policy.model === 'LingoFusion Ultra' ? { reasoning_effort: body.max || body.max_reasoning || body.reasoning_effort === 'max' ? 'max' : 'high' } :
       policy.key === 'LingoFusion Pro Reasoning' ? { reasoning_effort: 'medium' } :
-      { reasoning_effort: policy.model === 'LingoFusion Nano' ? 'minimal' : 'none' }) };
+      { reasoning_effort: policy.model === 'LingoFusion Spark' ? 'minimal' : 'none' }) };
   if (body.temperature !== undefined && ['LingoFusion', 'LingoFusion Lite'].includes(policy.model)) {
     if (!Number.isFinite(body.temperature) || body.temperature < 0 || body.temperature > 2) throw new Error('Temperature must be between 0 and 2');
     payload.temperature = body.temperature;

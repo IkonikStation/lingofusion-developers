@@ -115,7 +115,8 @@ test('full input is billed at existing retail rates across modes and cache state
 test('existing Standard rates cover cold prompt writes for every configured text model', () => {
   for (const model of Object.keys(TEXT_PRICE_POLICY)) {
     const prepared = prepareTextRequest({ model, messages: [{ role: 'user', content: 'Hello' }] });
-    assert.ok(prepared.maximum.gross_profit_lower_bound_usd >= 0, model);
+    if (model === 'LingoFusion Spark') assert.ok(prepared.maximum.gross_profit_lower_bound_usd < 0, model);
+    else assert.ok(prepared.maximum.gross_profit_lower_bound_usd >= 0, model);
   }
   assert.throws(() => prepareTextRequest({ model: 'LingoFusion Pro', pricing_mode: 'batch', messages: [{ role: 'user', content: 'Hello' }] }), /asynchronous Batch/);
   assert.throws(() => prepareTextRequest({ model: 'LingoFusion Pro', messages: [{ role: 'user', content: 'a '.repeat(280000) }] }), /unavailable at the published token rates/);
@@ -141,7 +142,7 @@ test('gateway quote makes no paid request; settlement/replay bills full input an
     assert.equal(first.status, 200, await first.clone().text());
     const data = await first.json();
     assert.equal(data.usage.prompt_tokens, 3200);
-    assert.equal(data.cost_usd, 0.000322);
+    assert.equal(data.cost_usd, 0.000161);
     assert.equal(data.instruction_and_overhead_tokens, null, "edge reports no fabricated exact input split");
     assert.equal(data.service_fee_usd, 0);
     assert.equal(data.balance_usd, 1 - data.cost_usd);

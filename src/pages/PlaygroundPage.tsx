@@ -112,7 +112,7 @@ const ALLOWED_LINGOFUSION_MODELS = [
   "LingoFusion Native-1.7B",
   "LingoFusion Native-9B",
   "LingoFusion Native-35B",
-  "LingoFusion Nano",
+  "LingoFusion Spark",
   "LingoFusion Lite",
   "LingoFusion",
   "LingoFusion Pro",
@@ -484,7 +484,7 @@ export function PlaygroundPage({
         }
       }
     } catch {
-      // Keep default LingoFusion Nano to Ultra models
+      // Keep default LingoFusion Spark to Ultra models
     }
 
     try {
@@ -825,7 +825,7 @@ export function PlaygroundPage({
     const effectiveSpeedMode =
       speedMode === "ultrafast" && ["LingoFusion Pro", "LingoFusion Ultra"].includes(activeModel.model_id)
         ? "ultrafast"
-        : speedMode === "fast" && ["LingoFusion Nano", "LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(activeModel.model_id)
+        : speedMode === "fast" && ["LingoFusion Spark", "LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(activeModel.model_id)
         ? "fast"
         : "default";
 

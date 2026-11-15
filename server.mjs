@@ -68,7 +68,7 @@ sqlDb.exec("CREATE TABLE IF NOT EXISTS billing_orders (id TEXT PRIMARY KEY, body
 initTextReservationTable(sqlDb);
 
 const textModels = [
-  { model: "LingoFusion Nano", input: 0.10, output: 0.80 },
+  { model: "LingoFusion Spark", input: 0.05, output: 0.25 },
   { model: "LingoFusion Lite", input: 0.50, output: 2.00 },
   { model: "LingoFusion", input: 1.00, output: 5.00 },
   { model: "LingoFusion Pro", input: 3.50, output: 20.00 },
@@ -77,7 +77,7 @@ const textModels = [
 ];
 
 const defaultPricingCatalog = [
-  { model_id: "LingoFusion Nano", provider: "lingofusion", upstream_model_name: "gpt-5-nano", input_per_million: 0.1000, output_per_million: 0.8000, is_active: 1 },
+  { model_id: "LingoFusion Spark", provider: "lingofusion", upstream_model_name: "gpt-5-nano", input_per_million: 0.0500, output_per_million: 0.2500, is_active: 1 },
   { model_id: "LingoFusion Lite", provider: "lingofusion", upstream_model_name: "gpt-5.6-luna", input_per_million: 0.5000, output_per_million: 2.0000, is_active: 1 },
   { model_id: "LingoFusion", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 1.0000, output_per_million: 5.0000, is_active: 1 },
   { model_id: "LingoFusion Pro", provider: "lingofusion", upstream_model_name: "gpt-6-sol", input_per_million: 3.5000, output_per_million: 20.0000, is_active: 1 },
@@ -141,7 +141,7 @@ function seedDatabase() {
 
   // Remove any non-LingoFusion models so only supported models exist
   sqlDb.exec(
-    "DELETE FROM model_pricing WHERE model_id NOT IN ('LingoFusion Nano', 'LingoFusion Lite', 'LingoFusion', 'LingoFusion Pro', 'ExplainFusion', 'LingoFusion Ultra', 'LingoFusion Voice', 'LingoFusion Voice Flash')"
+    "DELETE FROM model_pricing WHERE model_id NOT IN ('LingoFusion Spark', 'LingoFusion Lite', 'LingoFusion', 'LingoFusion Pro', 'ExplainFusion', 'LingoFusion Ultra', 'LingoFusion Voice', 'LingoFusion Voice Flash')"
   );
 
   const upsertModel = sqlDb.prepare(`
@@ -172,8 +172,8 @@ export const calculateGrossDepositCents = depositQuote;
 export function calculateTokenCostUsd(promptTokens, completionTokens, inputPerMillion, outputPerMillion, modelId) {
   let pTokens = Math.max(0, Math.trunc(Number(promptTokens) || 0));
   let cTokens = Math.max(0, Math.trunc(Number(completionTokens) || 0));
-  // 50-token minimum billable floor for LingoFusion Nano micro-requests (~$0.00004)
-  if (modelId && String(modelId).toLowerCase().includes("nano") && (pTokens + cTokens) < 50) {
+  // 50-token minimum billable floor for LingoFusion Spark micro-requests (~$0.00004)
+  if (modelId && String(modelId).toLowerCase().includes("spark") && (pTokens + cTokens) < 50) {
     pTokens = Math.max(pTokens, 50 - cTokens);
   }
   const inRate = Number(inputPerMillion) || 0;
@@ -476,7 +476,7 @@ const lmStudio = {
 };
 
 const realModelRouting = {
-  "LingoFusion Nano": { provider: "lingofusion", model: "gpt-5-nano", displayModel: "GPT-5 nano" },
+  "LingoFusion Spark": { provider: "lingofusion", model: "gpt-5-nano", displayModel: "GPT-5 nano" },
   "LingoFusion Lite": { provider: "lingofusion", model: "gpt-5.6-luna", displayModel: "GPT-5.6 Luna" },
   "LingoFusion": { provider: "lingofusion", model: "gpt-6-luna", displayModel: "GPT-6 Luna" },
   "ExplainFusion": { provider: "lingofusion", model: "gpt-6-luna", displayModel: "GPT-6 Luna" },
@@ -511,7 +511,7 @@ export function resolveBackendModelRouting(modelName, options = {}) {
     };
   }
 
-  if (name === "LingoFusion Nano") {
+  if (name === "LingoFusion Spark") {
     return {
       upstreamModel: "gpt-5-nano",
       displayModel: "GPT-5 nano",
@@ -672,7 +672,7 @@ function normalizePricingMode(value) {
 function normalizeModelName(value, pricingMode = "default") {
   const normalized = String(value || "").trim().toLowerCase();
   const models = pricingMode === "batch" ? batchTextModels : textModels;
-  if (pricingMode === "fast" && !["lingofusion nano", "lingofusion lite", "lingofusion", "lingofusion pro", "lingofusion ultra"].includes(normalized)) return undefined;
+  if (pricingMode === "fast" && !["lingofusion spark", "lingofusion lite", "lingofusion", "lingofusion pro", "lingofusion ultra"].includes(normalized)) return undefined;
   if (pricingMode === "ultrafast" && !["lingofusion pro", "lingofusion ultra"].includes(normalized)) return undefined;
   return models.find((model) => model.model.toLowerCase() === normalized);
 }
@@ -3970,7 +3970,7 @@ async function route(req, res) {
 
       const pricingMode = normalizePricingMode(body.pricing_mode);
       const model = normalizeModelName(body.model, pricingMode);
-      if (!model) return send(res, 400, { error: "unsupported_model", supported_models: (pricingMode === "batch" ? batchTextModels : pricingMode === "fast" ? textModels.filter((item) => ["LingoFusion Nano", "LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(item.model)) : pricingMode === "ultrafast" ? textModels.filter((item) => ["LingoFusion Pro", "LingoFusion Ultra"].includes(item.model)) : textModels).map((item) => item.model), request_id: requestId });
+      if (!model) return send(res, 400, { error: "unsupported_model", supported_models: (pricingMode === "batch" ? batchTextModels : pricingMode === "fast" ? textModels.filter((item) => ["LingoFusion Spark", "LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(item.model)) : pricingMode === "ultrafast" ? textModels.filter((item) => ["LingoFusion Pro", "LingoFusion Ultra"].includes(item.model)) : textModels).map((item) => item.model), request_id: requestId });
       if (!body.input || !body.from_language || !body.to_language) {
         return send(res, 400, { error: "invalid_request", message: "model, input, from_language, and to_language are required", request_id: requestId });
       }

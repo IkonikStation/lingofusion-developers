@@ -369,7 +369,7 @@ export default {
             object: "list",
             data: [
               { id: "LingoFusion", object: "model", created: 1730000000, owned_by: "lingofusion" },
-              { id: "LingoFusion Nano", object: "model", created: 1730000000, owned_by: "lingofusion" },
+              { id: "LingoFusion Spark", object: "model", created: 1730000000, owned_by: "lingofusion" },
               { id: "LingoFusion Lite", object: "model", created: 1730000000, owned_by: "lingofusion" },
               { id: "LingoFusion Pro", object: "model", created: 1730000000, owned_by: "lingofusion" },
               { id: "LingoFusion Ultra", object: "model", created: 1730000000, owned_by: "lingofusion" },

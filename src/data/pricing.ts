@@ -43,7 +43,7 @@ export const textModels: TextModel[] = [
   { model: "LingoFusion Native-1.7B", inputUsd: 0, outputUsd: 0, local: true },
   { model: "LingoFusion Native-9B", inputUsd: 0, outputUsd: 0, local: true, recommended: true },
   { model: "LingoFusion Native-35B", inputUsd: 0, outputUsd: 0, local: true },
-  { model: "LingoFusion Nano", inputUsd: 0.10, outputUsd: 0.80 },
+  { model: "LingoFusion Spark", inputUsd: 0.05, outputUsd: 0.25 },
   { model: "LingoFusion Lite", inputUsd: 0.50, outputUsd: 2.00 },
   {
     model: "LingoFusion",
@@ -64,7 +64,7 @@ export const textModelsByPricingMode: Record<TextPricingMode, TextModel[]> = {
       outputUsd: model.outputUsd / 2,
     })),
   fast: textModels
-    .filter((model) => ["LingoFusion Nano", "LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(model.model))
+    .filter((model) => ["LingoFusion Spark", "LingoFusion Lite", "LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"].includes(model.model))
     .map((model) => ({
       ...model,
       inputUsd: model.inputUsd * 1.5,
@@ -107,7 +107,7 @@ export const textModelPresentations: Record<string, TextModelPresentation> = {
     bestFor: "Difficult translations and powerful local computers.",
     features: ["35B total · ~3B active parameters", "MoE architecture", "128K context · 32K max output", "24 GB memory minimum", "~15 GB download", "Free · Runs locally"],
   },
-  "LingoFusion Nano": {
+  "LingoFusion Spark": {
     image: "/assets/models/lingofusion-nano.png",
     imageScale: 1.73,
     capability: "Fast, efficient translation for high-volume utility tasks and latency-sensitive workflows.",
@@ -241,7 +241,7 @@ export const latestModels = [
   "LingoFusion Native-1.7B",
   "LingoFusion Native-9B",
   "LingoFusion Native-35B",
-  "LingoFusion Nano",
+  "LingoFusion Spark",
   "LingoFusion Voice",
   "LingoFusion Voice Flash",
   "LingoFusion Transcribe",
@@ -293,7 +293,7 @@ export const navMenus = {
     "LingoFusion Native-1.7B",
     "LingoFusion Native-9B",
     "LingoFusion Native-35B",
-    "LingoFusion Nano",
+    "LingoFusion Spark",
     "LingoFusion Transcribe",
     "LingoFusion Live Transcribe",
     "PDF text extraction",
@@ -345,7 +345,7 @@ export const modelDetails: Record<string, string> = {
     "Recommended default model for most text generation and translation workloads.",
   "LingoFusion Lite":
     "Low-cost, fast model for simple translation, extraction, and classification.",
-  "LingoFusion Nano":
+  "LingoFusion Spark":
     "Ultra-efficient model for high-volume utility tasks and latency-sensitive flows.",
   "LingoFusion Native-1.7B":
     "Lightweight free local translation for everyday tasks on ordinary computers.",

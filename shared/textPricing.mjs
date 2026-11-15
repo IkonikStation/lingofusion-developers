@@ -3,7 +3,7 @@ export const TEXT_PRICING_VERSION = 'full-input-tokens-v2';
 // Reviewed 2026-11-02 against https://developers.openai.com/api/docs/models/<id>.
 // Nanodollars/token. No cache-hit assumptions; usage comes from the provider.
 export const TEXT_PRICE_POLICY = Object.freeze({
-  'LingoFusion Nano': { upstream: 'gpt-5-nano', ri: 100, ro: 800, wi: 50, wo: 400, cached: 5, write: 50 },
+  'LingoFusion Spark': { upstream: 'gpt-5-nano', ri: 50, ro: 250, wi: 50, wo: 400, cached: 5, write: 50 },
   'LingoFusion Lite': { upstream: 'gpt-5.6-luna', ri: 500, ro: 2000, wi: 200, wo: 1200, cached: 20, write: 250 },
   LingoFusion: { upstream: 'gpt-6-luna', ri: 1000, ro: 5000, wi: 100, wo: 500, cached: 10, write: 125 },
   'LingoFusion Pro': { upstream: 'gpt-6-sol', ri: 3500, ro: 20000, wi: 2000, wo: 10000, cached: 200, write: 2500 },
@@ -14,7 +14,7 @@ export const TEXT_PRICE_POLICY = Object.freeze({
 
 export function textPricePolicy(model, reasoning = false) {
   const raw = String(model).trim().toLowerCase();
-  const requested = raw === 'lingofusion explain' ? 'explainfusion' : raw;
+  const requested = raw === 'lingofusion explain' ? 'explainfusion' : ['lingofusion nano', 'lingofusion-nano'].includes(raw) ? 'lingofusion spark' : raw;
   const name = Object.keys(TEXT_PRICE_POLICY).find(k => k.toLowerCase() === requested || k.toLowerCase().replaceAll(' ', '-') === requested)
     || Object.keys(TEXT_PRICE_POLICY).find(k => TEXT_PRICE_POLICY[k].upstream === requested);
   const key = name === 'LingoFusion Pro' && reasoning ? 'LingoFusion Pro Reasoning' : name;

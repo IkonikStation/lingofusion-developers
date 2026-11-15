@@ -71,7 +71,7 @@ export const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     description: "LingoFusion Native-35B runs directly on your computer and is designed to provide the highest local translation quality in the Native family, without consuming cloud API credits or monthly character allowances.",
     limitations: ["Requires powerful local hardware and substantial storage", "Performance depends on CPU, GPU, memory, and local runtime settings", "Not available through the LingoFusion cloud API or Playground"],
   },
-  "LingoFusion Nano": {
+  "LingoFusion Spark": {
     reasoning: "Light",
     reasoningLevel: 1,
     speed: "Fast",
@@ -80,7 +80,7 @@ export const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     contextWindow: "400,000",
     maxOutput: "128,000",
     quality: "Fluent",
-    description: "LingoFusion Nano is the smallest and fastest model in the LingoFusion family. It is engineered for high-volume, latency-sensitive work where speed and cost matter more than deep linguistic analysis. Nano handles short, clearly structured text with ease — ideal for classification, extraction, quick translations, and real-time interfaces. It is the lightest way to add LingoFusion to your workflow.",
+    description: "LingoFusion Spark is the smallest and fastest model in the LingoFusion family. It is engineered for high-volume, latency-sensitive work where speed and cost matter more than deep linguistic analysis. Spark handles short, clearly structured text with ease — ideal for classification, extraction, quick translations, and real-time interfaces. It is the lightest way to add LingoFusion to your workflow.",
     limitations: ["Best with short or clearly structured source text", "Limited terminology research", "Not intended for document-scale review"],
   },
   "LingoFusion Lite": {
@@ -92,7 +92,7 @@ export const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     contextWindow: "400,000",
     maxOutput: "128,000",
     quality: "Native-Level",
-    description: "LingoFusion Lite is the second-smallest model in the family, offering a meaningful step up in multilingual comprehension while staying fast and affordable. It balances low cost with stronger understanding for production translation, extraction, classification, and summarization. Lite is the sweet spot for teams that want better quality than Nano without paying for the full LingoFusion tier.",
+    description: "LingoFusion Lite is the second-smallest model in the family, offering a meaningful step up in multilingual comprehension while staying fast and affordable. It balances low cost with stronger understanding for production translation, extraction, classification, and summarization. Lite is the sweet spot for teams that want better quality than Spark without paying for the full LingoFusion tier.",
     limitations: ["May simplify highly specialized language", "Limited cross-document consistency", "Complex tone may require review"],
   },
   LingoFusion: {
