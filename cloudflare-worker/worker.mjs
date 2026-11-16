@@ -518,14 +518,7 @@ export default {
       }
 
       if (path === "/api/account/special-offer/2026-11" && ["GET", "POST"].includes(request.method)) {
-        const user = await signedInUser();
-        if (!user || user.isApiKey) return jsonResponse({ error: "sign_in_required" }, 401, requestOrigin);
-        try {
-          const action = request.method === "GET" ? "playgroundOfferStatus" : "claimPlaygroundOffer";
-          return jsonResponse(await billingLedger(env, { action, email: user.email }), 200, requestOrigin);
-        } catch {
-          return jsonResponse({ error: "offer_unavailable", message: "The offer is temporarily unavailable." }, 503, requestOrigin);
-        }
+        return jsonResponse({ error: "offer_ended", message: "This offer is no longer available." }, 410, requestOrigin);
       }
 
       // Retired credit-grant routes cannot create new promotional balances.
