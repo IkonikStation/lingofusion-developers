@@ -373,6 +373,7 @@ export default {
               { id: "LingoFusion Lite", object: "model", created: 1730000000, owned_by: "lingofusion" },
               { id: "LingoFusion Pro", object: "model", created: 1730000000, owned_by: "lingofusion" },
               { id: "LingoFusion Ultra", object: "model", created: 1730000000, owned_by: "lingofusion" },
+              { id: "Ask LingoFusion", object: "model", owned_by: "lingofusion" },
               { id: "ExplainFusion", object: "model", created: 1730000000, owned_by: "lingofusion" },
               { id: "LingoFusion Voice", object: "model", created: 1730000000, owned_by: "lingofusion" },
               { id: "LingoFusion Voice Flash", object: "model", created: 1730000000, owned_by: "lingofusion" },
@@ -894,6 +895,9 @@ export default {
         let textRequest = request;
         if (path === '/v1/translate') {
           const body = await request.json();
+          if (/^ask[ -]lingofusion$/i.test(String(body.model || '').trim())) {
+            return jsonResponse({ error: 'invalid_text_request', message: 'Use /v1/chat/completions for Ask LingoFusion.' }, 400, requestOrigin);
+          }
           textRequest = new Request(request.url, { method: 'POST', headers: request.headers,
             body: JSON.stringify({ ...body, messages: [{ role: 'user', content: body.input }] }) });
         }

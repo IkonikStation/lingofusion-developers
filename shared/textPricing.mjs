@@ -9,6 +9,7 @@ export const TEXT_PRICE_POLICY = Object.freeze({
   'LingoFusion Pro': { upstream: 'gpt-6-sol', ri: 3500, ro: 20000, wi: 2000, wo: 10000, cached: 200, write: 2500 },
   'LingoFusion Pro Reasoning': { upstream: 'gpt-6.1-sol', ri: 3500, ro: 20000, wi: 2000, wo: 10000, cached: 100, write: 2500 },
   'LingoFusion Ultra': { upstream: 'gpt-6-astra', ri: 20000, ro: 120000, wi: 10000, wo: 50000, cached: 1000, write: 12500 },
+  'Ask LingoFusion': { upstream: 'gpt-6-sol', ri: 5000, ro: 20000, wi: 2000, wo: 10000, cached: 200, write: 2500 },
   ExplainFusion: { upstream: 'gpt-6-luna', ri: 2000, ro: 500, wi: 100, wo: 500, cached: 10, write: 125 },
 });
 

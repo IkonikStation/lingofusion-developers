@@ -1,3 +1,4 @@
+import { ASK_LINGOFUSION_PROMPT } from './askLingoFusionPrompt.mjs';
 import { SEARCH_FEES, SEARCH_CONTEXT_BOUND, LOOKUP_POLICY } from './webTranslation.mjs';
 import { buildPromptMessages } from './promptMessages.mjs';
 import { TEXT_PRICING_VERSION, textPricePolicy, priceTextUsage } from './textPricing.mjs';
@@ -11,6 +12,7 @@ export function prepareTextRequest(body, count = byteBound, exact = false) {
   const mode = String(body.pricing_mode || 'default');
   const policy = textPricePolicy(body.model || 'LingoFusion', reasoning || mode === 'ultrafast');
   if (!['default', 'instant', 'batch', 'fast', 'ultrafast'].includes(mode)) throw new Error('Unsupported pricing mode');
+  if (policy.model === 'Ask LingoFusion' && mode === 'fast') throw new Error('Ask LingoFusion supports Standard speed');
   if (policy.provider === 'openrouter' && mode === 'fast') throw new Error('Spark supports Standard speed');
   if (mode === 'batch') throw new Error('Batch pricing requires asynchronous Batch processing; it is unavailable on this synchronous route');
   if (mode === 'ultrafast' && !['LingoFusion Pro', 'LingoFusion Ultra'].includes(policy.model)) throw new Error('Ultrafast is only available for Pro and Ultra');
@@ -29,7 +31,9 @@ export function prepareTextRequest(body, count = byteBound, exact = false) {
   // Pro's 6x retail input rate covers Ultrafast input, but not cache writes.
   // Explicit-only caching with no breakpoints creates no reads or writes.
   const cacheWritesEnabled = !(mode === 'ultrafast' && policy.key === 'LingoFusion Pro Reasoning');
-  const prompt = buildPromptMessages(settings, policy.provider !== 'openrouter' && cacheWritesEnabled);
+  const prompt = policy.model === 'Ask LingoFusion'
+    ? { text: ASK_LINGOFUSION_PROMPT, messages: [{ role: 'system', content: ASK_LINGOFUSION_PROMPT }] }
+    : buildPromptMessages(settings, policy.provider !== 'openrouter' && cacheWritesEnabled);
   if (!cacheWritesEnabled) prompt.cacheOptions = { mode: 'explicit', ttl: '30m' };
   const system = prompt.text + (webSearch ? "\n\n" + LOOKUP_POLICY : "");
   if (webSearch) prompt.messages.push({role: "system", content: LOOKUP_POLICY});

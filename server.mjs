@@ -81,6 +81,7 @@ const defaultPricingCatalog = [
   { model_id: "LingoFusion Lite", provider: "lingofusion", upstream_model_name: "gpt-5.6-luna", input_per_million: 0.5000, output_per_million: 2.0000, is_active: 1 },
   { model_id: "LingoFusion", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 1.0000, output_per_million: 5.0000, is_active: 1 },
   { model_id: "LingoFusion Pro", provider: "lingofusion", upstream_model_name: "gpt-6-sol", input_per_million: 3.5000, output_per_million: 20.0000, is_active: 1 },
+  { model_id: "Ask LingoFusion", provider: "lingofusion", upstream_model_name: "gpt-6-sol", input_per_million: 5.00, output_per_million: 20.00, is_active: 1 },
   { model_id: "ExplainFusion", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 2.0000, output_per_million: 0.5000, is_active: 1 },
   { model_id: "LingoFusion Ultra", provider: "lingofusion", upstream_model_name: "gpt-6-astra", input_per_million: 20.0000, output_per_million: 120.0000, is_active: 1 },
   { model_id: "LingoFusion Voice", provider: "lingofusion", upstream_model_name: "lf_voice_v4", input_per_million: 150.0000, output_per_million: 150.0000, is_active: 1 },
@@ -141,7 +142,7 @@ function seedDatabase() {
 
   // Remove any non-LingoFusion models so only supported models exist
   sqlDb.exec(
-    "DELETE FROM model_pricing WHERE model_id NOT IN ('LingoFusion Spark', 'LingoFusion Lite', 'LingoFusion', 'LingoFusion Pro', 'ExplainFusion', 'LingoFusion Ultra', 'LingoFusion Voice', 'LingoFusion Voice Flash')"
+    "DELETE FROM model_pricing WHERE model_id NOT IN ('LingoFusion Spark', 'LingoFusion Lite', 'LingoFusion', 'LingoFusion Pro', 'Ask LingoFusion', 'ExplainFusion', 'LingoFusion Ultra', 'LingoFusion Voice', 'LingoFusion Voice Flash')"
   );
 
   const upsertModel = sqlDb.prepare(`
@@ -479,6 +480,7 @@ const realModelRouting = {
   "LingoFusion Spark": { provider: "openrouter", model: "qwen/qwen3.7-flash", displayModel: "Qwen3.7 Flash" },
   "LingoFusion Lite": { provider: "lingofusion", model: "gpt-5.6-luna", displayModel: "GPT-5.6 Luna" },
   "LingoFusion": { provider: "lingofusion", model: "gpt-6-luna", displayModel: "GPT-6 Luna" },
+  "Ask LingoFusion": { provider: "lingofusion", model: "gpt-6-sol", displayModel: "GPT-6 Sol" },
   "ExplainFusion": { provider: "lingofusion", model: "gpt-6-luna", displayModel: "GPT-6 Luna" },
   "LingoFusion Explain": { provider: "lingofusion", model: "gpt-6-luna", displayModel: "GPT-6 Luna" },
   "LingoFusion Pro": { provider: "lingofusion", model: "gpt-6-sol", displayModel: "GPT-6 Sol", reasoningModel: "gpt-6.1-sol", reasoningDisplayModel: "GPT-6.1 Sol", reasoningEffort: "medium" },
