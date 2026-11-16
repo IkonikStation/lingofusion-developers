@@ -195,6 +195,18 @@ export class BillingLedger {
           if (subscription?.periodEnd && subscription.periodEnd * 1000 <= Date.now()) subscription.status = 'expired';
           return Response.json({ balance_usd: await this.initial(email), unlimited_balance: await this.unlimited(email), subscription });
         }
+        if (action === 'playgroundOfferStatus' || action === 'claimPlaygroundOffer') {
+          if (typeof email !== 'string' || !email || email !== email.trim().toLowerCase()) throw new Error('Invalid offer account.');
+          const key = `playgroundOffer:2026-11:${email}`;
+          const claimed = Boolean(await storage.get(key));
+          const balance = await this.initial(email);
+          if (claimed || action === 'playgroundOfferStatus') {
+            return Response.json({ claimed, credited_usd: 0, balance_usd: balance });
+          }
+          const updated = (Math.round(balance * 1e6) + 1000000) / 1e6;
+          await this.write({ [key]: { amountUsd: 1, claimedAt: Date.now() } }, { [email]: updated });
+          return Response.json({ claimed: true, credited_usd: 1, balance_usd: updated });
+        }
         if (action === 'grantTestCredit' || action === 'grantSpecialOffer') {
           throw new Error('Promotional credit grants are disabled.');
         }

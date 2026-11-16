@@ -264,7 +264,7 @@ export function PricingPage({
               ))}
             </SelectField>
             <NumberField
-              label="Total input tokens"
+              label={selectedTextModel.model === "Ask LingoFusion" ? "Conversation input tokens" : "Total input tokens"}
               min={0}
               max={Infinity}
               step={1000}

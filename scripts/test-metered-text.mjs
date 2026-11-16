@@ -151,6 +151,34 @@ test('gateway quote makes no paid request; settlement/replay bills full input an
   } finally { globalThis.fetch = original; }
 });
 
+test('Ask quote, usage receipt and wallet exclude hosted system tokens', async () => {
+  const h = harness(), email = 'ask@example.com';
+  h.records.set(`user_balance:${email}`, '1');
+  h.env.OPENAI_API_KEY = 'synthetic-only';
+  const body = { model: 'Ask LingoFusion', messages: [{ role: 'user', content: 'Hello' }], max_completion_tokens: 10 };
+  const original = globalThis.fetch;
+  globalThis.fetch = async (_url, options) => {
+    const payload = JSON.parse(options.body);
+    assert.equal(payload.messages[0].role, 'system');
+    return Response.json({ id: 'ask-provider-test', model: 'gpt-6-sol', choices: [{ message: { content: 'Hello!' } }],
+      usage: { prompt_tokens: 900, completion_tokens: 2 } });
+  };
+  try {
+    const quote = await (await h.api('/api/pricing/text', body, email)).json();
+    assert.equal(quote.input_tokens, 1);
+    assert.equal(quote.maximum_cost_usd, 0.000205);
+    const headers = { 'Idempotency-Key': 'ask-one', 'X-LingoFusion-Client-Token': 'lf_play_secure_649f7' };
+    const response = await h.api('/api/playground/chat', { ...body, max_cost_usd: quote.maximum_cost_usd }, email, headers);
+    assert.equal(response.status, 200, await response.clone().text());
+    const receipt = await response.json();
+    assert.equal(receipt.usage.prompt_tokens, 1);
+    assert.equal(receipt.usage.total_tokens, 3);
+    assert.equal(receipt.billed_usd, 0.000045);
+    assert.equal(receipt.balance_usd, 0.999955);
+    assert.equal(h.records.get(`user_balance:${email}`), '0.999955');
+  } finally { globalThis.fetch = original; }
+});
+
 test('edge Pro and Ultra Ultrafast quotes, streaming, settlement and replay keep 6x prices', async () => {
   const original = globalThis.fetch;
   for (const model of ['LingoFusion Pro', 'LingoFusion Ultra']) for (const stream of [false, true]) {

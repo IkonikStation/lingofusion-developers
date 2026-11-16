@@ -14,6 +14,7 @@ export function AskLingoFusionPanel({ onBalance, onSignIn }: {
   const [quote, setQuote] = useState<{ body: string; maximum: number }>();
   const [quoteError, setQuoteError] = useState("");
   const [error, setError] = useState("");
+  const [receipt, setReceipt] = useState<{ billed: number; input: number; output: number }>();
   const [busy, setBusy] = useState(false);
   const retry = useRef<{ body: string; id: string } | undefined>(undefined);
   const token = getCurrentUser().sessionToken;
@@ -71,6 +72,10 @@ export function AskLingoFusionPanel({ onBalance, onSignIn }: {
       if (typeof answer !== "string") throw new Error("The response did not contain an answer.");
       setMessages([...nextMessages, { role: "assistant", content: answer }]);
       setInput("");
+      const billed = data.billed_usd ?? data.cost_usd;
+      if (Number.isFinite(billed) && Number.isFinite(data.usage?.billed_input_tokens) && Number.isFinite(data.usage?.completion_tokens)) {
+        setReceipt({ billed, input: data.usage.billed_input_tokens, output: data.usage.completion_tokens });
+      }
       retry.current = undefined;
       if (Number.isFinite(data.balance_usd)) onBalance(data.balance_usd);
     } catch (cause) {
@@ -87,7 +92,7 @@ export function AskLingoFusionPanel({ onBalance, onSignIn }: {
           <h2 className="font-semibold">{model}</h2>
           <p className="mt-1 text-xs text-neutral-500">$5.00 input / $20.00 output per million tokens · System prompt excluded</p>
         </div>
-        {messages.length > 0 && <button type="button" disabled={busy} className="text-sm text-neutral-500 hover:underline" onClick={() => { setMessages([]); setError(""); }}>New chat</button>}
+        {messages.length > 0 && <button type="button" disabled={busy} className="text-sm text-neutral-500 hover:underline" onClick={() => { setMessages([]); setError(""); setReceipt(undefined); }}>New chat</button>}
       </div>
       {messages.length > 0 && (
         <div role="log" aria-label="Conversation" className="max-h-[32rem] space-y-4 overflow-auto p-5">
@@ -102,6 +107,7 @@ export function AskLingoFusionPanel({ onBalance, onSignIn }: {
       <form className="space-y-3 p-5" onSubmit={event => { event.preventDefault(); void send(); }}>
         <label className="block text-sm font-medium" htmlFor="ask-lingofusion-message">Your message</label>
         <textarea id="ask-lingofusion-message" rows={4} disabled={busy} value={input} onChange={event => setInput(event.target.value)} placeholder="Ask a question…" className="w-full rounded-xl border border-neutral-200 bg-transparent p-3 text-sm dark:border-white/15" />
+        {receipt && <p className="text-xs text-neutral-500" role="status">Last charge: ${receipt.billed.toFixed(6)} USD · {receipt.input} input tokens · {receipt.output} output tokens</p>}
         {(error || quoteError) && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error || quoteError}</p>}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span aria-live="polite" className="text-xs text-neutral-500">{maximum !== undefined ? `Maximum cost: $${maximum.toFixed(6)}` : draft && token && !quoteError ? "Estimating cost…" : ""}</span>

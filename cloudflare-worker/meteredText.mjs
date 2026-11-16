@@ -15,7 +15,7 @@ export async function meteredText(request, env, auth, respond, quoteOnly = false
   const { maximum, policy, payload, userTokens } = prepared;
   if (quoteOnly) return respond({ model: policy.model, pricing_version: TEXT_PRICING_VERSION,
     maximum_cost_usd: maximum.cost_usd, maximum_service_fee_usd: 0,
-    input_tokens: prepared.rawMaximum, customer_input_tokens: prepared.exactInputCount ? userTokens : null, input_count_is_upper_bound: !prepared.exactInputCount, instruction_tokens_estimate: prepared.systemTokens, max_completion_tokens: prepared.maxOutput,
+    input_tokens: maximum.billed_input_tokens, customer_input_tokens: prepared.exactInputCount ? userTokens : null, input_count_is_upper_bound: !prepared.exactInputCount, instruction_tokens_estimate: prepared.systemTokens, max_completion_tokens: prepared.maxOutput,
     billed_input_tokens: maximum.billed_input_tokens,
     notice: policy.conversationInputOnly
       ? 'Conversation input and generated output are billed. The system prompt and message framing are excluded.'
@@ -32,8 +32,13 @@ export async function meteredText(request, env, auth, respond, quoteOnly = false
   catch (e) { return respond({ error: 'reservation_failed', message: e.message }, /Insufficient/.test(e.message) ? 402 : 409); }
   if (held.replay) {
     if (held.status !== 'settled') return respond({ error: 'request_pending_reconciliation', operation_id: operationId }, 409);
-    const result = { ...held.result, balance_usd: held.balance_usd,
-      usage: { ...held.result.usage, balance_usd: held.balance_usd }, replay: true };
+    const usage = { ...held.result.usage, balance_usd: held.balance_usd };
+    if (policy.conversationInputOnly && Number.isSafeInteger(usage.billed_input_tokens)) {
+      usage.prompt_tokens = usage.billed_input_tokens;
+      usage.total_tokens = usage.prompt_tokens + usage.completion_tokens;
+    }
+    const result = { ...held.result, balance_usd: held.balance_usd, usage,
+      billed_usd: held.billedMicros / 1e6, replay: true };
     if (!payload.stream) return respond(result);
     const first = { ...result, usage: undefined, choices: [{ index: 0, delta: { content: result.choices?.[0]?.message?.content || '' } }] };
     return new Response(`data: ${JSON.stringify(first)}\n\ndata: ${JSON.stringify({ ...result, choices: [] })}\n\ndata: [DONE]\n\n`, {
@@ -46,7 +51,7 @@ export async function meteredText(request, env, auth, respond, quoteOnly = false
     const result = { ...data, model: policy.model,
       from_language: prepared.settings.fromLanguage, to_language: prepared.settings.toLanguage,
       ...(new URL(request.url).pathname === '/v1/translate' ? { output_text: data.choices?.[0]?.message?.content || '' } : {}),
-      usage: { ...data.usage, prompt_tokens: price.prompt_tokens, total_tokens: price.prompt_tokens + data.usage.completion_tokens,
+      usage: { ...data.usage, prompt_tokens: price.billed_input_tokens, total_tokens: price.billed_input_tokens + price.completion_tokens,
         customer_input_tokens: prepared.exactInputCount ? userTokens : null, instruction_and_overhead_tokens: prepared.exactInputCount ? price.instruction_and_overhead_tokens : null,
         billed_input_tokens: price.billed_input_tokens, prompt_tokens_details: undefined, cost_usd: price.cost_usd, service_fee_usd: price.service_fee_usd,
         token_cost_usd: price.token_cost_usd, web_search_cost_usd: price.web_search_cost_usd ?? 0 },
@@ -54,7 +59,7 @@ export async function meteredText(request, env, auth, respond, quoteOnly = false
       pricing_version: TEXT_PRICING_VERSION, instruction_and_overhead_tokens: prepared.exactInputCount ? price.instruction_and_overhead_tokens : null, operation_id: operationId };
     const settled = await billing(env, { action: 'usageFinish', ...identity, actualMicros: price.chargeMicros, result,
       evidence: { providerRequestId: data.id, upstreamModel: data.model, rawUsage, ...price } });
-    return { ...result, usage: { ...result.usage, balance_usd: settled.balance_usd }, balance_usd: settled.balance_usd };
+    return { ...result, billed_usd: settled.billedMicros / 1e6, usage: { ...result.usage, balance_usd: settled.balance_usd }, balance_usd: settled.balance_usd };
   };
   let upstream;
   try {

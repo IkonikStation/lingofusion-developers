@@ -54,7 +54,7 @@ export function quoteNodeTextRequest(body, defaultModelName = "LingoFusion") {
     pricing_version: TEXT_PRICING_VERSION,
     maximum_cost_usd: prepared.maximum.cost_usd,
     maximum_service_fee_usd: 0,
-    input_tokens: prepared.rawMaximum,
+    input_tokens: prepared.maximum.billed_input_tokens,
     customer_input_tokens: prepared.userTokens,
     instruction_tokens_estimate: prepared.systemTokens,
     max_completion_tokens: prepared.maxOutput,
@@ -218,11 +218,12 @@ export function settleNodeTextUsage(sqlDb, { userId, apiKeyId, operationId, fing
     `).run(ledgerId, userId, apiKeyId, policy.model, promptTokens, completionTokens, actualCostUsd, source, createdAt);
 
     const clientUsage = {
-      prompt_tokens: promptTokens,
+      prompt_tokens: price.billed_input_tokens,
+      billed_input_tokens: price.billed_input_tokens,
       customer_input_tokens: userTokens,
       instruction_and_overhead_tokens: price.instruction_and_overhead_tokens,
       completion_tokens: completionTokens,
-      total_tokens: promptTokens + completionTokens,
+      total_tokens: price.billed_input_tokens + completionTokens,
       cost_usd: actualCostUsd,
       service_fee_usd: price.service_fee_usd,
       token_cost_usd: price.token_cost_usd,

@@ -1,3 +1,4 @@
+import { PlaygroundCreditOffer } from "../components/PlaygroundCreditOffer";
 import { AskLingoFusionPanel } from "../components/AskLingoFusionPanel";
 import { LOOKUP_POLICY } from "../../shared/webTranslation.mjs";
 import { buildPromptMessages } from "../../shared/promptMessages.mjs";
@@ -2427,6 +2428,8 @@ export function PlaygroundPage({
           </div>,
           document.body,
         )}
+
+      <PlaygroundCreditOffer key={activeUserId} onBalance={updateBalance} onSignIn={onOpenAuth} />
 
       <nav className="playground-modes mt-7 flex overflow-x-auto gap-1 border-b border-neutral-200 pb-3 dark:border-white/10" aria-label="Playground mode">
         {PLAYGROUND_MODES.map(({ id, label, icon: Icon }) => (
