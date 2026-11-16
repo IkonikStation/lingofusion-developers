@@ -85,7 +85,7 @@ export function AskLingoFusionPanel({ onBalance, onSignIn }: {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 p-5 dark:border-white/10">
         <div>
           <h2 className="font-semibold">{model}</h2>
-          <p className="mt-1 text-xs text-neutral-500">$5.00 input / $20.00 output per million tokens</p>
+          <p className="mt-1 text-xs text-neutral-500">$5.00 input / $20.00 output per million tokens · System prompt excluded</p>
         </div>
         {messages.length > 0 && <button type="button" disabled={busy} className="text-sm text-neutral-500 hover:underline" onClick={() => { setMessages([]); setError(""); }}>New chat</button>}
       </div>

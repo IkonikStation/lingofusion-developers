@@ -1,3 +1,5 @@
+import { Tiktoken } from 'js-tiktoken/lite';
+import ranks from 'js-tiktoken/ranks/o200k_base';
 import { ASK_LINGOFUSION_PROMPT } from './askLingoFusionPrompt.mjs';
 import { SEARCH_FEES, SEARCH_CONTEXT_BOUND, LOOKUP_POLICY } from './webTranslation.mjs';
 import { buildPromptMessages } from './promptMessages.mjs';
@@ -6,6 +8,8 @@ import { TEXT_PRICING_VERSION, textPricePolicy, priceTextUsage } from './textPri
 // UTF-8 bytes bound byte-level token counts without constructing a tokenizer.
 const bytes = new TextEncoder();
 const byteBound = text => bytes.encode(text).length;
+let conversationEncoder;
+const countConversationTokens = text => (conversationEncoder ??= new Tiktoken(ranks)).encode(text, [], []).length;
 
 export function prepareTextRequest(body, count = byteBound, exact = false) {
   const reasoning = Boolean(body.reasoning || body.reasoning_enabled || ['medium', 'high', 'max', 'xhigh'].includes(body.reasoning_effort));
@@ -37,6 +41,10 @@ export function prepareTextRequest(body, count = byteBound, exact = false) {
   if (!cacheWritesEnabled) prompt.cacheOptions = { mode: 'explicit', ttl: '30m' };
   const system = prompt.text + (webSearch ? "\n\n" + LOOKUP_POLICY : "");
   if (webSearch) prompt.messages.push({role: "system", content: LOOKUP_POLICY});
+  if (policy.conversationInputOnly && !exact) {
+    count = countConversationTokens;
+    exact = true;
+  }
   const userTokenUpperBound = messages.reduce((n, m) => n + count(m.content), 0);
   const userTokens = exact ? userTokenUpperBound : 0;
   const systemTokens = count(system);

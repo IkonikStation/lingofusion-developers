@@ -9,7 +9,7 @@ export const TEXT_PRICE_POLICY = Object.freeze({
   'LingoFusion Pro': { upstream: 'gpt-6-sol', ri: 3500, ro: 20000, wi: 2000, wo: 10000, cached: 200, write: 2500 },
   'LingoFusion Pro Reasoning': { upstream: 'gpt-6.1-sol', ri: 3500, ro: 20000, wi: 2000, wo: 10000, cached: 100, write: 2500 },
   'LingoFusion Ultra': { upstream: 'gpt-6-astra', ri: 20000, ro: 120000, wi: 10000, wo: 50000, cached: 1000, write: 12500 },
-  'Ask LingoFusion': { upstream: 'gpt-6-sol', ri: 5000, ro: 20000, wi: 2000, wo: 10000, cached: 200, write: 2500 },
+  'Ask LingoFusion': { conversationInputOnly: true, upstream: 'gpt-6-sol', ri: 5000, ro: 20000, wi: 2000, wo: 10000, cached: 200, write: 2500 },
   ExplainFusion: { upstream: 'gpt-6-luna', ri: 2000, ro: 500, wi: 100, wo: 500, cached: 10, write: 125 },
 });
 
@@ -42,10 +42,10 @@ export function priceTextUsage({ policy, userTokens, outputTokens, rawInputToken
     BigInt(cacheWriteTokens) * BigInt(policy.write * inputMultiplier) +
     BigInt(cachedTokens) * BigInt(policy.cached * inputMultiplier) +
     BigInt(outputTokens) * BigInt(policy.wo * outputMultiplier);
-  // Customer input includes the complete provider input, including built-in
-  // instructions and framing. Cache evidence changes our cost, not the
-  // published retail input rate. There is no additional service fee.
-  const tokenCost = BigInt(rawInputTokens) * BigInt(Math.ceil(policy.ri * retailMultiplier)) +
+  // Ask LingoFusion absorbs the built-in prompt and framing. Other models
+  // bill the full provider input. Cache evidence only affects provider cost.
+  const billedInputTokens = policy.conversationInputOnly ? userTokens : rawInputTokens;
+  const tokenCost = BigInt(billedInputTokens) * BigInt(Math.ceil(policy.ri * retailMultiplier)) +
     BigInt(outputTokens) * BigInt(Math.ceil(policy.ro * retailMultiplier));
   // Existing prepaid balances settle to six decimal USD places. Only the
   // combined token total is rounded, once, upward to the next microdollar.
@@ -55,6 +55,7 @@ export function priceTextUsage({ policy, userTokens, outputTokens, rawInputToken
     service_fee_usd: 0, token_cost_usd: Number(tokenCost) / 1e9,
     provider_cost_upper_bound_usd: Number(provider) / 1e9,
     gross_profit_lower_bound_usd: chargeMicros / 1e6 - Number(provider) / 1e9,
+    billed_input_tokens: billedInputTokens,
     prompt_tokens: rawInputTokens, completion_tokens: outputTokens,
     customer_input_tokens: userTokens,
     instruction_and_overhead_tokens: rawInputTokens - userTokens,

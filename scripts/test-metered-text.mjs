@@ -92,7 +92,7 @@ test('reusable instruction prefix is identical across languages and tone, withou
   }
 });
 
-test('full input is billed at existing retail rates across modes and cache states; there is no service fee', () => {
+test('published input policies apply across modes and cache states without a service fee', () => {
   for (const policy of Object.values(TEXT_PRICE_POLICY)) {
     for (const mode of ['default', 'fast', 'ultrafast']) {
       const multiplier = mode === 'fast' ? 1.5 : mode === 'ultrafast' ? 6 : 1;
@@ -105,17 +105,17 @@ test('full input is billed at existing retail rates across modes and cache state
         assert.equal(cold.customer_input_tokens, input);
         assert.equal(cold.service_fee_usd, 0);
         assert.equal(warm.cost_usd, cold.cost_usd, 'cached tokens use the published input rate');
-        const nanos = BigInt(input + 4000) * BigInt(Math.ceil(policy.ri * multiplier)) + BigInt(output) * BigInt(Math.ceil(policy.ro * multiplier));
+        const nanos = BigInt(policy.conversationInputOnly ? input : input + 4000) * BigInt(Math.ceil(policy.ri * multiplier)) + BigInt(output) * BigInt(Math.ceil(policy.ro * multiplier));
         assert.equal(cold.chargeMicros, Number((nanos + 999n) / 1000n));
       }
     }
   }
 });
 
-test('existing Standard rates cover cold prompt writes for every configured text model', () => {
+test('Standard rates cover cold prompt writes for models that bill the full prompt', () => {
   for (const model of Object.keys(TEXT_PRICE_POLICY)) {
     const prepared = prepareTextRequest({ model, messages: [{ role: 'user', content: 'Hello' }] });
-    assert.ok(prepared.maximum.gross_profit_lower_bound_usd >= 0, model);
+    if (model !== 'Ask LingoFusion') assert.ok(prepared.maximum.gross_profit_lower_bound_usd >= 0, model);
   }
   assert.throws(() => prepareTextRequest({ model: 'LingoFusion Pro', pricing_mode: 'batch', messages: [{ role: 'user', content: 'Hello' }] }), /asynchronous Batch/);
   assert.throws(() => prepareTextRequest({ model: 'LingoFusion Pro', messages: [{ role: 'user', content: 'a '.repeat(280000) }] }), /unavailable at the published token rates/);

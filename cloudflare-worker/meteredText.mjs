@@ -16,7 +16,10 @@ export async function meteredText(request, env, auth, respond, quoteOnly = false
   if (quoteOnly) return respond({ model: policy.model, pricing_version: TEXT_PRICING_VERSION,
     maximum_cost_usd: maximum.cost_usd, maximum_service_fee_usd: 0,
     input_tokens: prepared.rawMaximum, customer_input_tokens: prepared.exactInputCount ? userTokens : null, input_count_is_upper_bound: !prepared.exactInputCount, instruction_tokens_estimate: prepared.systemTokens, max_completion_tokens: prepared.maxOutput,
-    notice: 'Total input is billed at the published input rate. Output includes reasoning. No additional service fee. Final token charges round up once to six decimal USD places.' });
+    billed_input_tokens: maximum.billed_input_tokens,
+    notice: policy.conversationInputOnly
+      ? 'Conversation input and generated output are billed. The system prompt and message framing are excluded.'
+      : 'Total input is billed at the published input rate. Output includes reasoning. No additional service fee. Final token charges round up once to six decimal USD places.' });
   const apiKey = policy.provider === 'openrouter' ? env.OPENROUTER_API_KEY : env.OPENAI_API_KEY;
   if (!env.BILLING || !env.GIFTS || !apiKey) return respond({ error: 'metered_text_not_configured' }, 503);
   const operationId = request.headers.get('Idempotency-Key') || crypto.randomUUID();
@@ -45,7 +48,7 @@ export async function meteredText(request, env, auth, respond, quoteOnly = false
       ...(new URL(request.url).pathname === '/v1/translate' ? { output_text: data.choices?.[0]?.message?.content || '' } : {}),
       usage: { ...data.usage, prompt_tokens: price.prompt_tokens, total_tokens: price.prompt_tokens + data.usage.completion_tokens,
         customer_input_tokens: prepared.exactInputCount ? userTokens : null, instruction_and_overhead_tokens: prepared.exactInputCount ? price.instruction_and_overhead_tokens : null,
-        prompt_tokens_details: undefined, cost_usd: price.cost_usd, service_fee_usd: price.service_fee_usd,
+        billed_input_tokens: price.billed_input_tokens, prompt_tokens_details: undefined, cost_usd: price.cost_usd, service_fee_usd: price.service_fee_usd,
         token_cost_usd: price.token_cost_usd, web_search_cost_usd: price.web_search_cost_usd ?? 0 },
       cost_usd: price.cost_usd, service_fee_usd: price.service_fee_usd, token_cost_usd: price.token_cost_usd,
       pricing_version: TEXT_PRICING_VERSION, instruction_and_overhead_tokens: prepared.exactInputCount ? price.instruction_and_overhead_tokens : null, operation_id: operationId };
