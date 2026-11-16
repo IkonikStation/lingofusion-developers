@@ -1,3 +1,4 @@
+import { AskLingoFusionPanel } from "../components/AskLingoFusionPanel";
 import { LOOKUP_POLICY } from "../../shared/webTranslation.mjs";
 import { buildPromptMessages } from "../../shared/promptMessages.mjs";
 import { TranscriptionPanel } from '../components/TranscriptionPanel';
@@ -348,8 +349,9 @@ export function PlaygroundPage({
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Playground modality: text translation vs in-image translation vs voice synthesis vs music generation vs dubbing
-  const [mode, setMode] = useState<"text" | "image" | "voice" | "music" | "dubbing" | "transcription">(() => {
+  const [mode, setMode] = useState<"text" | "image" | "voice" | "music" | "dubbing" | "transcription" | "ask">(() => {
     const q = pageQuery().get("mode");
+    if (q === "ask" || requestedModel === "Ask LingoFusion") return "ask";
     if (q === "transcription" || requestedModel?.includes("Transcribe")) return "transcription";
     if (q === "dubbing" || q === "dub") return "dubbing";
     if (q === "music") return "music";
@@ -357,6 +359,7 @@ export function PlaygroundPage({
     return q === "image" ? "image" : "text";
   });
   const PLAYGROUND_MODES = [
+    { id: "ask" as const, label: "Ask LingoFusion", icon: FileText },
     { id: "text" as const, label: "Text", icon: FileText },
     { id: "image" as const, label: "Image", icon: ImageIcon },
     { id: "voice" as const, label: "Voice", icon: Volume2 },
@@ -1865,7 +1868,7 @@ export function PlaygroundPage({
               Playground
             </h1>
             <p className="mt-2 max-w-xl text-sm leading-6 text-neutral-500 dark:text-neutral-400">
-              {mode === "transcription" ? "Upload a recording or transcribe live audio into text." : mode === "image"
+              {mode === "ask" ? "Ask questions, get explanations, and continue the conversation." : mode === "transcription" ? "Upload a recording or transcribe live audio into text." : mode === "image"
                 ? "Upload an image or paste a URL, then translate the text inside it."
                 : mode === "voice"
                   ? "Select a voice model, enter text, and generate speech."
@@ -2442,7 +2445,7 @@ export function PlaygroundPage({
       </nav>
 
       {/* Workspace: configuration above the input and output. */}
-      {mode === "transcription" ? <TranscriptionPanel key={activeUserId} initialModel={requestedModel ?? undefined} onBalance={updateBalance} onSignIn={onOpenAuth} /> : (
+      {mode === "ask" ? <AskLingoFusionPanel key={activeUserId} onBalance={updateBalance} onSignIn={onOpenAuth} /> : mode === "transcription" ? <TranscriptionPanel key={activeUserId} initialModel={requestedModel ?? undefined} onBalance={updateBalance} onSignIn={onOpenAuth} /> : (
       <div className="playground-workspace mt-5 rounded-2xl border border-neutral-200/90 bg-white shadow-sm dark:border-white/10 dark:bg-neutral-900/70">
         {/* Control Bar: Language Pair → Modality & Model → Options & Run */}
         <div className="playground-toolbar rounded-t-2xl border-b border-neutral-200/80 bg-neutral-50/60 p-4 dark:border-white/10 dark:bg-white/[0.02] sm:p-5">

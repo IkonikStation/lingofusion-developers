@@ -52,13 +52,14 @@ export const textModels: TextModel[] = [
     recommended: true,
   },
   { model: "LingoFusion Pro", inputUsd: 3.50, outputUsd: 20.00 },
+  { model: "Ask LingoFusion", inputUsd: 5.00, outputUsd: 20.00 },
   { model: "ExplainFusion", inputUsd: 2.00, outputUsd: 0.50 },
   { model: "LingoFusion Ultra", inputUsd: 20.00, outputUsd: 120.00 },
 ];
 
 export const textModelsByPricingMode: Record<TextPricingMode, TextModel[]> = {
   instant: textModels,
-  batch: textModels.map((model) => ({
+  batch: textModels.filter((model) => model.model !== "Ask LingoFusion").map((model) => ({
       ...model,
       inputUsd: model.inputUsd / 2,
       outputUsd: model.outputUsd / 2,
@@ -134,6 +135,12 @@ export const textModelPresentations: Record<string, TextModelPresentation> = {
     capability: "Advanced translation with stronger context, tone, and terminology handling.",
     bestFor: "Professional localization and complex content requiring stronger reasoning.",
     features: ["Advanced context handling", "Terminology consistency", "Tone preservation", "Long-form translation"],
+  },
+  "Ask LingoFusion": {
+    image: "/assets/models/lingofusion-v4.png",
+    capability: "Conversational assistance for language learning, writing, coding, and general questions.",
+    bestFor: "Questions that benefit from explanation and follow-up.",
+    features: ["Multilingual chat", "Conversation history within a chat", "Standard processing"],
   },
   ExplainFusion: {
     image: "/assets/models/explainfusion.png",
