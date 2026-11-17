@@ -141,7 +141,7 @@ export const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     contextWindow: "1,050,000",
     maxOutput: "384,000",
     quality: "Master Linguist",
-    description: "LingoFusion Ultra is built for the hardest multilingual work, with maximum reasoning, specialist terminology handling, and document-scale consistency review. Standard pricing applies up to 272K input tokens. Long pricing applies above 272K input tokens. Fast processing has separate Fast and Fast + Long rates. All rates below are per 1M input and output tokens.",
+    description: "LingoFusion Ultra is our most advanced translation model, designed for the most demanding multilingual work. It applies maximum reasoning to complex and ambiguous passages, handles specialist terminology with expert precision, and reviews entire documents at scale so that terms, names, and tone remain consistent from the first page to the last. For legal, medical, technical, and financial content, Ultra delivers the highest level of translation quality available on the platform. Standard pricing applies up to 272K input tokens, with Long pricing above that. Fast processing has separate Fast and Fast + Long rates. All rates below are per 1M input and output tokens.",
     limitations: ["Highest price in the LingoFusion text family", "Longer response time for deep analysis", "Batch is recommended for large non-urgent jobs"],
   },
 };
