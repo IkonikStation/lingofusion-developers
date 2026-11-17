@@ -24,14 +24,21 @@ test('speed tiers use explicit provider settings, verified actual tier and the R
   assert.equal(pro.maximum.cache_write_tokens, 0);
   assert.ok(pro.maximum.gross_profit_lower_bound_usd >= 0);
   const ultra = prepareTextRequest({ ...body, model: 'LingoFusion Ultra', pricing_mode: 'ultrafast' });
-  assert.equal(ultra.payload.model, 'gpt-6-astra');
+  assert.equal(ultra.payload.model, 'gpt-6.2-astra');
+  const ultraDefault = prepareTextRequest({ ...body, model: 'LingoFusion Ultra' });
+  assert.equal(ultraDefault.payload.model, 'gpt-6.2-astra');
+  assert.equal(ultraDefault.payload.reasoning_effort, 'high');
+  const ultraFastMax = prepareTextRequest({ ...body, model: 'gpt-6-astra', pricing_mode: 'fast', max: true });
+  assert.equal(ultraFastMax.payload.model, 'gpt-6.2-astra');
+  assert.equal(ultraFastMax.payload.reasoning_effort, 'max');
   let calls = 0;
   const response = await fetchTextProvider(ultra, { method: 'POST' }, async (url, options) => {
     calls++; assert.equal(url, 'https://api.openai.com/v1/responses');
     const payload = JSON.parse(options.body);
+    assert.equal(payload.model, 'gpt-6.2-astra');
     assert.equal(payload.service_tier, 'ultrafast'); assert.equal(payload.input[0].content[0].type, 'input_text');
     assert.equal(payload.prompt_cache_options.ttl, '30m'); assert.equal(payload.max_output_tokens, 512);
-    return Response.json({ id: 'real-ultra-id', model: 'gpt-6-astra', status: 'completed', service_tier: 'ultrafast',
+    return Response.json({ id: 'real-ultra-id', model: 'gpt-6.2-astra', status: 'completed', service_tier: 'ultrafast',
       output: [{ type: 'message', content: [{ type: 'output_text', text: 'Bonjour' }] }],
       usage: { input_tokens: 3600, output_tokens: 2, total_tokens: 3602, input_tokens_details: { cached_tokens: 3000 } } });
   });
@@ -69,7 +76,7 @@ test('Pro Ultrafast preserves 6x retail and disables cache writes in the actual 
 
 test('Ultrafast streaming keeps actual provider identity and final usage; truncated streams fail', async () => {
   const prepared = prepareTextRequest({ model: 'LingoFusion Ultra', stream: true, pricing_mode: 'ultrafast', messages: [{ role: 'user', content: 'Hello' }] });
-  const final = { id: 'resp-stream-real', model: 'gpt-6-astra', status: 'completed', service_tier: 'ultrafast',
+  const final = { id: 'resp-stream-real', model: 'gpt-6.2-astra', status: 'completed', service_tier: 'ultrafast',
     output: [], usage: { input_tokens: 3600, output_tokens: 2 } };
   const events = [{ type: 'response.created', response: final }, { type: 'response.output_text.delta', delta: 'Bonjour' },
     { type: 'response.completed', response: final }];
@@ -191,7 +198,7 @@ test('edge Pro and Ultra Ultrafast quotes, streaming, settlement and replay keep
       assert.equal(url, 'https://api.openai.com/v1/responses'); calls++;
       const payload = JSON.parse(options.body);
       assert.equal(payload.service_tier, 'ultrafast');
-      assert.equal(payload.model, model === 'LingoFusion Pro' ? 'gpt-6.1-sol' : 'gpt-6-astra');
+      assert.equal(payload.model, model === 'LingoFusion Pro' ? 'gpt-6.1-sol' : 'gpt-6.2-astra');
       const result = { id: 'resp-edge-ultrafast', model: payload.model, service_tier: 'ultrafast', status: 'completed',
         output: [{ type: 'message', content: [{ type: 'output_text', text: 'Bonjour' }] }],
         usage: { input_tokens: 3200, output_tokens: 2 } };

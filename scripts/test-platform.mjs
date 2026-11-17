@@ -119,14 +119,14 @@ async function runTests() {
   assert.equal(proReasoningRoute.reasoningEffort, "medium");
 
   const ultraDefaultRoute = resolveBackendModelRouting("LingoFusion Ultra", { max: false });
-  assert.equal(ultraDefaultRoute.displayModel, "GPT-6 Astra");
-  assert.equal(ultraDefaultRoute.upstreamModel, "gpt-6-astra");
+  assert.equal(ultraDefaultRoute.displayModel, "GPT-6.2 Astra");
+  assert.equal(ultraDefaultRoute.upstreamModel, "gpt-6.2-astra");
   assert.equal(ultraDefaultRoute.reasoning, "pro");
   assert.equal(ultraDefaultRoute.reasoningEffort, "high");
 
   const ultraMaxRoute = resolveBackendModelRouting("LingoFusion Ultra", { max: true });
-  assert.equal(ultraMaxRoute.displayModel, "GPT-6 Astra");
-  assert.equal(ultraMaxRoute.upstreamModel, "gpt-6-astra");
+  assert.equal(ultraMaxRoute.displayModel, "GPT-6.2 Astra");
+  assert.equal(ultraMaxRoute.upstreamModel, "gpt-6.2-astra");
   assert.equal(ultraMaxRoute.reasoning, "pro");
   assert.equal(ultraMaxRoute.reasoningEffort, "max");
 
@@ -140,7 +140,7 @@ async function runTests() {
   assert.equal(webSearchRoute.upstreamModel, "gpt-5-search-api");
   assert.equal(webSearchRoute.webSearch, true);
   assert.equal(webSearchRoute.webSearchCallFeeUsd, 0.04);
-  console.log("✓ Behind-the-scenes model routing verified (GPT-5 nano, GPT-5.6 Luna, GPT-6 Luna, GPT-6 Sol / GPT-6.1 Sol, GPT-6 Astra, ExplainFusion, Web Search)");
+  console.log("✓ Behind-the-scenes model routing verified (GPT-5 nano, GPT-5.6 Luna, GPT-6 Luna, GPT-6 Sol / GPT-6.1 Sol, GPT-6.2 Astra, ExplainFusion, Web Search)");
 
   console.log("\n=== 2. Starting API Server for End-to-End Integration Tests ===");
   const serverProc = spawn("node", ["server.mjs"], {

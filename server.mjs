@@ -83,7 +83,7 @@ const defaultPricingCatalog = [
   { model_id: "LingoFusion Pro", provider: "lingofusion", upstream_model_name: "gpt-6-sol", input_per_million: 3.5000, output_per_million: 20.0000, is_active: 1 },
   { model_id: "Ask LingoFusion", provider: "lingofusion", upstream_model_name: "gpt-6-sol", input_per_million: 5.00, output_per_million: 20.00, is_active: 1 },
   { model_id: "ExplainFusion", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 2.0000, output_per_million: 0.5000, is_active: 1 },
-  { model_id: "LingoFusion Ultra", provider: "lingofusion", upstream_model_name: "gpt-6-astra", input_per_million: 20.0000, output_per_million: 120.0000, is_active: 1 },
+  { model_id: "LingoFusion Ultra", provider: "lingofusion", upstream_model_name: "gpt-6.2-astra", input_per_million: 20.0000, output_per_million: 120.0000, is_active: 1 },
   { model_id: "LingoFusion Voice", provider: "lingofusion", upstream_model_name: "lf_voice_v4", input_per_million: 150.0000, output_per_million: 150.0000, is_active: 1 },
   { model_id: "LingoFusion Voice Flash", provider: "lingofusion", upstream_model_name: "lf_voice_v4_turbo", input_per_million: 80.0000, output_per_million: 80.0000, is_active: 1 },
 ];
@@ -484,7 +484,7 @@ const realModelRouting = {
   "ExplainFusion": { provider: "lingofusion", model: "gpt-6-luna", displayModel: "GPT-6 Luna" },
   "LingoFusion Explain": { provider: "lingofusion", model: "gpt-6-luna", displayModel: "GPT-6 Luna" },
   "LingoFusion Pro": { provider: "lingofusion", model: "gpt-6-sol", displayModel: "GPT-6 Sol", reasoningModel: "gpt-6.1-sol", reasoningDisplayModel: "GPT-6.1 Sol", reasoningEffort: "medium" },
-  "LingoFusion Ultra": { provider: "lingofusion", model: "gpt-6-astra", displayModel: "GPT-6 Astra", reasoning: "pro", reasoningEffort: "high", maxReasoningEffort: "max" },
+  "LingoFusion Ultra": { provider: "lingofusion", model: "gpt-6.2-astra", displayModel: "GPT-6.2 Astra", reasoning: "pro", reasoningEffort: "high", maxReasoningEffort: "max" },
 };
 
 export function resolveBackendModelRouting(modelName, options = {}) {
@@ -575,8 +575,8 @@ export function resolveBackendModelRouting(modelName, options = {}) {
   }
   if (name === "LingoFusion Ultra") {
     return {
-      upstreamModel: "gpt-6-astra",
-      displayModel: "GPT-6 Astra",
+      upstreamModel: "gpt-6.2-astra",
+      displayModel: "GPT-6.2 Astra",
       reasoning: "pro",
       reasoningEffort: maxEnabled ? "max" : "high",
       webSearch: false,

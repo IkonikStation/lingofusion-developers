@@ -8,14 +8,17 @@ export const TEXT_PRICE_POLICY = Object.freeze({
   LingoFusion: { upstream: 'gpt-6-luna', ri: 1000, ro: 5000, wi: 100, wo: 500, cached: 10, write: 125 },
   'LingoFusion Pro': { upstream: 'gpt-6-sol', ri: 3500, ro: 20000, wi: 2000, wo: 10000, cached: 200, write: 2500 },
   'LingoFusion Pro Reasoning': { upstream: 'gpt-6.1-sol', ri: 3500, ro: 20000, wi: 2000, wo: 10000, cached: 100, write: 2500 },
-  'LingoFusion Ultra': { upstream: 'gpt-6-astra', ri: 20000, ro: 120000, wi: 10000, wo: 50000, cached: 1000, write: 12500 },
+  'LingoFusion Ultra': { upstream: 'gpt-6.2-astra', ri: 20000, ro: 120000, wi: 8000, wo: 40000, cached: 400, write: 10000 },
   'Ask LingoFusion': { conversationInputOnly: true, upstream: 'gpt-6-sol', ri: 5000, ro: 20000, wi: 2000, wo: 10000, cached: 200, write: 2500 },
   ExplainFusion: { upstream: 'gpt-6-luna', ri: 2000, ro: 500, wi: 100, wo: 500, cached: 10, write: 125 },
 });
 
 export function textPricePolicy(model, reasoning = false) {
   const raw = String(model).trim().toLowerCase();
-  const requested = raw === 'lingofusion explain' ? 'explainfusion' : ['lingofusion nano', 'lingofusion-nano'].includes(raw) ? 'lingofusion spark' : raw;
+  let requested = raw;
+  if (raw === 'lingofusion explain') requested = 'explainfusion';
+  if (raw === 'lingofusion nano' || raw === 'lingofusion-nano') requested = 'lingofusion spark';
+  if (raw === 'gpt-6-astra') requested = 'lingofusion ultra';
   const name = Object.keys(TEXT_PRICE_POLICY).find(k => k.toLowerCase() === requested || k.toLowerCase().replaceAll(' ', '-') === requested)
     || Object.keys(TEXT_PRICE_POLICY).find(k => TEXT_PRICE_POLICY[k].upstream === requested);
   const key = name === 'LingoFusion Pro' && reasoning ? 'LingoFusion Pro Reasoning' : name;

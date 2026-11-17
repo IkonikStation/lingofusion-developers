@@ -152,7 +152,7 @@ export const defaultBrowserModelPricing: ModelPricingRecord[] = [
   { id: "LingoFusion", model_id: "LingoFusion", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 1.0, output_per_million: 5.0, is_active: true },
   { id: "LingoFusion Pro", model_id: "LingoFusion Pro", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-sol", input_per_million: 3.5, output_per_million: 20.0, is_active: true },
   { id: "ExplainFusion", model_id: "ExplainFusion", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-luna", input_per_million: 2.0, output_per_million: 0.5, is_active: true },
-  { id: "LingoFusion Ultra", model_id: "LingoFusion Ultra", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6-astra", input_per_million: 20.0, output_per_million: 120.0, is_active: true },
+  { id: "LingoFusion Ultra", model_id: "LingoFusion Ultra", object: "model", provider: "lingofusion", upstream_model_name: "gpt-6.2-astra", input_per_million: 20.0, output_per_million: 120.0, is_active: true },
 ];
 
 export function getWebSearchCallRateUsd(modelName: string): number {
@@ -256,8 +256,8 @@ export function resolveBackendModelRouting(
   }
   if (name === "LingoFusion Ultra") {
     return {
-      upstreamModel: "gpt-6-astra",
-      displayModel: "GPT-6 Astra",
+      upstreamModel: "gpt-6.2-astra",
+      displayModel: "GPT-6.2 Astra",
       reasoning: "pro" as const,
       reasoningEffort: (maxEnabled ? "max" : "high") as "high" | "max",
       webSearch: false,
