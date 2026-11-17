@@ -146,7 +146,7 @@ export function PricingPage({
   const textPricingDescription = textPricingMode === "fast"
     ? "Fast mode is priced at 1.5× Default for supported models."
     : textPricingMode === "ultrafast"
-    ? "Ultrafast is 4× the Default price. Available only for Pro and Ultra."
+    ? "Ultrafast is 6× the Default price. Available only for Pro and Ultra."
     : textPricingMode === "instant"
     ? "Real-time streaming processing with immediate results."
     : "Reference Batch rates are 50% of Default. Asynchronous Batch processing is not currently available on these translation routes.";

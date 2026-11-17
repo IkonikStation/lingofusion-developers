@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.DS_Store
+*.tsbuildinfo
+unreal/**/Binaries/
+unreal/**/Intermediate/
+unreal/**/Saved/
+unreal/**/DerivedDataCache/
+unreal/**/Plugins/CesiumForUnreal/
+unreal/**/SourceAssets/Alps/tiles/
+__pycache__/

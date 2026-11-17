@@ -1,0 +1,89 @@
+{
+  "engine": "Unreal Engine 5.8.4",
+  "platform": "macOS arm64 / Metal SM6",
+  "editorTarget": "TerraSimEditor Mac Development",
+  "buildSucceeded": true,
+  "tests": [
+    {
+      "path": "TerraSim.Assets.RealTerrain",
+      "result": "Success"
+    },
+    {
+      "path": "TerraSim.Controls.TerrainSafety",
+      "result": "Success"
+    },
+    {
+      "path": "TerraSim.Controls.ZoomLimits",
+      "result": "Success"
+    },
+    {
+      "path": "TerraSim.Science.Geodesy",
+      "result": "Success"
+    },
+    {
+      "path": "TerraSim.Science.Sun",
+      "result": "Success"
+    }
+  ],
+  "terrainSceneFullExtentKm": [
+    27.24009961,
+    27.19409863,
+    4.24184015
+  ],
+  "terrainVerticalExaggeration": 1,
+  "materialBaseColorAudited": [
+    "M_Earth",
+    "M_MontBlanc"
+  ],
+  "assetGenerationCompleted": true,
+  "nativeMapLoaded": "/Game/TerraSim/Maps/Alps",
+  "visualRuntimeInspection": "Passed: Earth orientation and lighting, cloud opacity, real terrain satellite detail, readable labels",
+  "cesiumWorldwideStreamingConfigured": false,
+  "interactiveChecks": [
+    "Enter dismisses the first-use guide",
+    "Arrow keys rotate the guided terrain camera",
+    "Native zoom button invokes its UI action",
+    "Mouse wheel changes zoom",
+    "Tab/Enter activates Glaciers and Valley preset buttons",
+    "Home/R restores the safe guided camera",
+    "Earth scene and place selection remain available in the simplified layout"
+  ],
+  "renderWorkaround": {
+    "r.RDG.ParallelExecute": 0,
+    "r.RDG.ParallelDestruction": 0,
+    "r.EyeAdaptation.CachedLightingPreExposure": 10
+  },
+  "screenshots": [
+    "../../docs/terrasim-unreal-earth.jpg",
+    "../../docs/terrasim-unreal-earth-immersive.jpg",
+    "../../docs/terrasim-unreal-flat.jpg",
+    "../../docs/terrasim-unreal-terrain.jpg",
+    "../../docs/terrasim-easy-controls.jpg"
+  ],
+  "finalNativeMapLoaded": "/Game/TerraSim/Maps/Earth",
+  "usabilityUpdate": {
+    "defaultTerrainNavigation": "Guided orbit; bounded zoom, pitch and altitude",
+    "basicControls": [
+      "Drag rotate",
+      "Scroll zoom",
+      "Visible direction and zoom buttons",
+      "Home/R reset",
+      "Tab/Enter buttons",
+      "Esc close/recover"
+    ],
+    "presets": [
+      "Summit",
+      "Glaciers",
+      "Valley",
+      "Whole area"
+    ],
+    "windowSize": [
+      1280,
+      760
+    ],
+    "defaultGraphics": "Smooth",
+    "inspectedTerrainFPS": "approximately 60; scene-specific observation",
+    "planetaryTexturesLoadedInTerrain": false,
+    "cesiumEnabled": false
+  }
+}

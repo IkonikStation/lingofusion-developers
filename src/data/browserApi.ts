@@ -830,7 +830,7 @@ async function runChatCompletionBrowser(state: BrowserState, options?: RequestIn
   }
 
   const pricingMode = String(body.pricing_mode || "default").toLowerCase();
-  const priceMultiplier = pricingMode === "ultrafast" ? 4 : pricingMode === "fast" ? 1.5 : 1;
+  const priceMultiplier = pricingMode === "ultrafast" ? 6 : pricingMode === "fast" ? 1.5 : 1;
   const tokenCostUsd = calculateTokenCost(
     promptTokens,
     completionTokens,

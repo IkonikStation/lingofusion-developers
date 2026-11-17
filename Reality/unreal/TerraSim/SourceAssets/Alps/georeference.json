@@ -1,0 +1,13 @@
+{
+  "centerLatitude": 45.89000815866183,
+  "centerLongitude": 6.85546875,
+  "widthKm": 27.209532490265342,
+  "halfWidthM": 13620.050232685107,
+  "heightMinM": 556.5109252929688,
+  "heightMaxM": 4786.39013671875,
+  "resolution": 513,
+  "heightExaggeration": 1,
+  "imageryAttribution": "EOxCloudless https://cloudless.eox.at by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2016) \u2014 CC BY 4.0",
+  "elevationAttribution": "Mapzen / Tilezen Terrain Tiles, accessed 2026-10-28 from https://registry.opendata.aws/terrain-tiles/",
+  "coordinates": "local approximate east/north/up metres; mean-radius curvature correction"
+}

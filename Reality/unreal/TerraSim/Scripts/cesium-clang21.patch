@@ -1,0 +1,119 @@
+--- a/Source/CesiumRuntime/Private/CesiumGaussianSplatSubsystem.cpp
++++ b/Source/CesiumRuntime/Private/CesiumGaussianSplatSubsystem.cpp
+@@ -170,8 +170,9 @@
+ }
+ 
+ void UCesiumGaussianSplatSubsystem::initializeForWorld(UWorld& InWorld) {
+-  for (ACesiumGaussianSplatActor* pActor :
+-       TActorRange<ACesiumGaussianSplatActor>(&InWorld)) {
++  TActorIterator<ACesiumGaussianSplatActor> ExistingActor(&InWorld);
++  if (ExistingActor) {
++    ACesiumGaussianSplatActor* pActor = *ExistingActor;
+     // Actor singleton already exists in the world (usually means we stopped a
+     // PIE session and returned to the editor world).
+     this->_pLastCreatedWorld = &InWorld;
+--- a/Source/CesiumRuntime/Private/CesiumTextureUtility.cpp
++++ b/Source/CesiumRuntime/Private/CesiumTextureUtility.cpp
+@@ -434,37 +434,26 @@
+     switch (imageCesium.compressedPixelFormat) {
+     case CesiumImage::GpuCompressedPixelFormat::ETC1_RGB:
+       return EPixelFormat::PF_ETC1;
+-      break;
+     case CesiumImage::GpuCompressedPixelFormat::ETC2_RGBA:
+       return EPixelFormat::PF_ETC2_RGBA;
+-      break;
+     case CesiumImage::GpuCompressedPixelFormat::BC1_RGB:
+       return EPixelFormat::PF_DXT1;
+-      break;
+     case CesiumImage::GpuCompressedPixelFormat::BC3_RGBA:
+       return EPixelFormat::PF_DXT5;
+-      break;
+     case CesiumImage::GpuCompressedPixelFormat::BC4_R:
+       return EPixelFormat::PF_BC4;
+-      break;
+     case CesiumImage::GpuCompressedPixelFormat::BC5_RG:
+       return EPixelFormat::PF_BC5;
+-      break;
+     case CesiumImage::GpuCompressedPixelFormat::BC7_RGBA:
+       return EPixelFormat::PF_BC7;
+-      break;
+     case CesiumImage::GpuCompressedPixelFormat::ASTC_4x4_RGBA:
+       return EPixelFormat::PF_ASTC_4x4;
+-      break;
+     case CesiumImage::GpuCompressedPixelFormat::PVRTC2_4_RGBA:
+       return EPixelFormat::PF_PVRTC2;
+-      break;
+     case CesiumImage::GpuCompressedPixelFormat::ETC2_EAC_R11:
+       return EPixelFormat::PF_ETC2_R11_EAC;
+-      break;
+     case CesiumImage::GpuCompressedPixelFormat::ETC2_EAC_RG11:
+       return EPixelFormat::PF_ETC2_RG11_EAC;
+-      break;
+     default:
+       // Unsupported compressed texture format.
+       return std::nullopt;
+@@ -475,10 +464,8 @@
+     switch (imageCesium.channels) {
+     case 1:
+       return PF_R8;
+-      break;
+     case 2:
+       return PF_R8G8;
+-      break;
+     case 3:
+     case 4:
+     default:
+@@ -486,7 +473,6 @@
+     };
+   }
+ 
+-  return std::nullopt;
+ }
+ 
+ } // namespace CesiumTextureUtility
+--- a/Source/CesiumEditor/Private/IonQuickAddPanel.cpp
++++ b/Source/CesiumEditor/Private/IonQuickAddPanel.cpp
+@@ -141,9 +141,9 @@
+   TSharedRef<SWindow> AssetDepotConfirmWindow =
+     SNew(SWindow)
+       .Title(FText::FromString(TEXT("Asset is not available in My Assets")))
+-      .ClientSize(FVector2D(400.0f, 200.0f))
+-      .Content()
+-      [
++      .ClientSize(FVector2D(400.0f, 200.0f));
++  TWeakPtr<SWindow> WeakWindow = AssetDepotConfirmWindow;
++  AssetDepotConfirmWindow->SetContent(
+         SNew(SVerticalBox) +
+           SVerticalBox::Slot().AutoHeight().Padding(10.0f)
+           [
+@@ -191,14 +191,15 @@
+           [
+             SNew(SButton)
+               .OnClicked_Lambda(
+-                  [&AssetDepotConfirmWindow]() {
+-                    AssetDepotConfirmWindow
+-                        ->RequestDestroyWindow();
++                  [WeakWindow]() {
++                    if (TSharedPtr<SWindow> Window = WeakWindow.Pin()) {
++                      Window->RequestDestroyWindow();
++                    }
+                     return FReply::Handled();
+                   })
+               .Text(FText::FromString(TEXT("Close")))
+           ]
+-      ];
++      );
+   // clang-format on
+   GEditor->EditorAddModalWindow(AssetDepotConfirmWindow);
+ }
+--- a/Source/CesiumRuntime/Public/CesiumFeaturesMetadataDescription.h
++++ b/Source/CesiumRuntime/Public/CesiumFeaturesMetadataDescription.h
+@@ -400,7 +400,7 @@
+    * @brief The semantic of this statistic.
+    */
+   UPROPERTY(EditAnywhere, Category = "Cesium|Metadata|Statistics")
+-  ECesiumMetadataStatisticSemantic Semantic;
++  ECesiumMetadataStatisticSemantic Semantic = ECesiumMetadataStatisticSemantic::None;
+ 
+   /**
+    * @brief The value of this statistic. This reflects the value on the tileset
