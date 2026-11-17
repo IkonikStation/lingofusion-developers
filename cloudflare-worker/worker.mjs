@@ -1,3 +1,4 @@
+import { IMAGE_TRANSLATION_MODEL } from "../shared/imageTranslation.mjs";
 import { transcriptionRequest, createLiveTranscription, connectLiveTranscription } from './transcription.mjs';
 import { meteredText } from './meteredText.mjs';
 import { BILLING_POLICY, STRIPE_API_VERSION, depositQuote, requireUsd, retrieveCheckout, subscriptionQuote } from "../shared/billing.mjs";
@@ -919,15 +920,27 @@ export default {
           return jsonResponse({ error: "image_engine_not_configured", message: "Image synthesis engine secret is not configured on Gateway." }, 503, requestOrigin);
         }
 
-        const contentType = request.headers.get("content-type") || "";
-        const upstreamRes = await fetch("https://api.openai.com/v1/images/edits", {
-          method: "POST",
-          headers: {
-            ...(contentType ? { "Content-Type": contentType } : {}),
-            Authorization: `Bearer ${openaiKey}`,
-          },
-          body: request.body,
-        });
+        const headers = new Headers({ Authorization: `Bearer ${openaiKey}` });
+        const contentType = request.headers.get("content-type");
+        if (contentType) headers.set("Content-Type", contentType);
+        let body = request.body;
+        if (path === "/api/playground/image") {
+          try {
+            if (contentType?.split(";")[0].trim().toLowerCase() === "application/json") {
+              const payload = await request.json();
+              if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("Invalid image request");
+              body = JSON.stringify({ ...payload, model: IMAGE_TRANSLATION_MODEL });
+            } else {
+              const form = await request.formData();
+              form.set("model", IMAGE_TRANSLATION_MODEL);
+              body = form;
+              headers.delete("Content-Type");
+            }
+          } catch {
+            return jsonResponse({ error: "invalid_image_request", message: "Provide a valid image edit request." }, 400, requestOrigin);
+          }
+        }
+        const upstreamRes = await fetch("https://api.openai.com/v1/images/edits", { method: "POST", headers, body });
 
         const resHeaders = new Headers(upstreamRes.headers);
         const cors = getCorsHeaders(requestOrigin);

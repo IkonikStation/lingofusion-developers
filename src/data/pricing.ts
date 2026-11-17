@@ -1,3 +1,5 @@
+import { IMAGE_TRANSLATION_MODEL } from "../../shared/imageTranslation.mjs";
+
 export type TextModel = {
   model: string;
   inputUsd: number;
@@ -189,15 +191,12 @@ export const musicModels: SimpleModel[] = [
   { model: "LingoFusion Music", priceUsd: 0.10, pricingUnit: "per_song" },
 ];
 
-// In-image translation is served as LingoFusion Image Translate (upstream
-// gpt-image-2.5-sunburst). The standard and 4K tiers share the same upstream
-// model ID and differ only in the requested output resolution.
 export const imageModels: ImageModel[] = [
   {
     size: "Standard",
     model: "LingoFusion Image Translate",
     label: "LingoFusion Image Translate",
-    upstreamModel: "gpt-image-2.5-sunburst",
+    upstreamModel: IMAGE_TRANSLATION_MODEL,
     resolution: "standard",
     quality: "high",
     inputUsd: 12.00,
@@ -207,7 +206,7 @@ export const imageModels: ImageModel[] = [
     size: "4K",
     model: "LingoFusion Image Translate",
     label: "LingoFusion Image Translate 4K",
-    upstreamModel: "gpt-image-2.5-sunburst",
+    upstreamModel: IMAGE_TRANSLATION_MODEL,
     resolution: "4k",
     quality: "max",
     inputUsd: 15.00,

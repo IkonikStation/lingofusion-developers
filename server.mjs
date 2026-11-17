@@ -1,3 +1,4 @@
+import { IMAGE_TRANSLATION_MODEL } from "./shared/imageTranslation.mjs";
 import { BILLING_POLICY, STRIPE_API_VERSION, depositQuote, requireUsd, subscriptionQuote, assertSession, assertCharge, netCreditCents, retrieveCheckout } from "./shared/billing.mjs";
 import { dubbingRequest } from "./cloudflare-worker/dubbing.mjs";
 import { createDecipheriv, createHash, createHmac, pbkdf2Sync, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
@@ -88,9 +89,6 @@ const defaultPricingCatalog = [
   { model_id: "LingoFusion Voice Flash", provider: "lingofusion", upstream_model_name: "lf_voice_v4_turbo", input_per_million: 80.0000, output_per_million: 80.0000, is_active: 1 },
 ];
 
-// In-image translation is served as LingoFusion Image Translate (upstream
-// gpt-image-2.5-sunburst). Both tiers share the same upstream model ID and
-// differ only in output resolution.
 const imageModelCatalog = [
   {
     model_id: "LingoFusion Image Translate",
@@ -98,7 +96,7 @@ const imageModelCatalog = [
     size: "Standard",
     resolution: "standard",
     quality: "high",
-    upstream_model_name: "gpt-image-2.5-sunburst",
+    upstream_model_name: IMAGE_TRANSLATION_MODEL,
     input_per_million: 12.0,
     output_per_million: 45.0,
     default_size: process.env.LINGOFUSION_IMAGE_SIZE_STANDARD || "1024x1024",
@@ -109,7 +107,7 @@ const imageModelCatalog = [
     size: "4K",
     resolution: "4k",
     quality: "max",
-    upstream_model_name: "gpt-image-2.5-sunburst",
+    upstream_model_name: IMAGE_TRANSLATION_MODEL,
     input_per_million: 15.0,
     output_per_million: 50.0,
     default_size: process.env.LINGOFUSION_IMAGE_SIZE_4K || "3840x2160",

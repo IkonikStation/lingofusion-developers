@@ -1,50 +1,144 @@
 import { billing } from './billing.mjs';
-import { AUDIO_RATE, MAX_AUDIO_SECONDS, audioCharge, wavSamples } from '../shared/transcription.mjs';
+import { AUDIO_RATE, MAX_AUDIO_FILE_BYTES, MAX_LIVE_AUDIO_SECONDS, audioCharge, readTranscriptionWav } from '../shared/transcription.mjs';
 const hash = async b => [...new Uint8Array(await crypto.subtle.digest('SHA-256', b))].map(x => x.toString(16).padStart(2,'0')).join('');
 const bytes = s => new TextEncoder().encode(s);
 const identity = (email, operationId, fingerprint) => ({ email, operationId, fingerprint });
 async function reserve(env, who, maximumMicros) { return billing(env, { action: 'usageReserve', ...who, maximumMicros }); }
 async function uncertain(env, who) { await billing(env, { action: 'usageUncertain', ...who }).catch(() => {}); }
+const MAX_AUDIO_MULTIPART_BYTES = MAX_AUDIO_FILE_BYTES + 100000;
+
+function transcriptionSegments(file, buffer, { samples, sampleRate }) {
+  const samplesPerSegment = sampleRate * 60;
+  if (samples <= samplesPerSegment) return [file];
+
+  const pcm = new DataView(buffer, 44);
+  const segments = [];
+  // Prefer a quiet boundary near the end of each segment. Every PCM sample
+  // belongs to exactly one segment, including the last part of the file.
+  for (let start = 0; start < samples;) {
+    let end = Math.min(start + samplesPerSegment, samples);
+    if (end < samples) {
+      const window = Math.floor(sampleRate / 20);
+      let quietest = Infinity;
+      const lastBoundary = Math.min(end, samples - 2 * window);
+      const firstBoundary = end - sampleRate;
+      for (let boundary = lastBoundary; boundary >= firstBoundary; boundary -= window) {
+        let energy = 0;
+        for (let i = boundary - window; i < boundary; i += 8) {
+          energy += Math.abs(pcm.getInt16(i * 2, true));
+        }
+        if (energy < quietest) {
+          quietest = energy;
+          end = boundary;
+        }
+      }
+    }
+    const header = buffer.slice(0, 44);
+    const view = new DataView(header);
+    const segmentBytes = (end - start) * 2;
+    view.setUint32(4, 36 + segmentBytes, true);
+    view.setUint32(40, segmentBytes, true);
+    segments.push(new Blob([header, file.slice(44 + start * 2, 44 + end * 2)], { type: 'audio/wav' }));
+    start = end;
+  }
+  return segments;
+}
+
+async function transcribeSegment(file, apiKey, providerFetch) {
+  const payload = new FormData();
+  payload.set('file', file, 'audio.wav');
+  payload.set('model', 'gpt-transcribe');
+  payload.set('chunking_strategy', 'auto');
+  const response = await providerFetch('https://api.openai.com/v1/audio/transcriptions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: payload,
+    signal: AbortSignal.timeout(120000),
+  });
+  if (!response.ok) throw new Error('A transcription segment could not be completed');
+  const data = await response.json();
+  if (typeof data.text !== 'string') throw new Error('A transcription segment returned no transcript field');
+  return {
+    text: data.text.trim(),
+    requestId: response.headers.get('x-request-id') || 'transcribe-' + crypto.randomUUID(),
+    usage: data.usage,
+  };
+}
+
 export async function transcriptionRequest(request, env, auth, respond, providerFetch = fetch) {
   if (!env.OPENAI_API_KEY || !env.BILLING || !env.GIFTS) return respond({error:'transcription_unavailable'},503);
   const operationId = request.headers.get('Idempotency-Key');
   if (!/^[A-Za-z0-9_-]{1,100}$/.test(operationId || '')) return respond({error:'A valid Idempotency-Key is required'},400);
-  let form, file, samples;
+  let file, buffer, audio;
   try {
-    if (Number(request.headers.get('Content-Length')) > 9000000) throw new Error('Audio upload too large');
-    const reader=request.body?.getReader();
-    if(!reader)throw new Error('Audio upload required');
-    const chunks=[];let length=0;
-    while(true){const part=await reader.read();if(part.done)break;length+=part.value.length;if(length>9100000){await reader.cancel();throw new Error('Audio upload too large');}chunks.push(part.value);}
-    form = await new Response(new Blob(chunks),{headers:{'Content-Type':request.headers.get('Content-Type')||''}}).formData(); file = form.get('file');
-    if (!file || typeof file.arrayBuffer !== 'function' || file.size > 9000000) throw new Error('A supported audio file is required');
+    if (Number(request.headers.get('Content-Length')) > MAX_AUDIO_MULTIPART_BYTES) throw new Error('Audio upload exceeds 25 MB');
+    if (!request.body) throw new Error('Audio upload required');
+    let bytesRead = 0;
+    const limitedBody = request.body.pipeThrough(new TransformStream({
+      transform(chunk, controller) {
+        bytesRead += chunk.byteLength;
+        if (bytesRead > MAX_AUDIO_MULTIPART_BYTES) throw new Error('Audio upload exceeds 25 MB');
+        controller.enqueue(chunk);
+      },
+    }));
+    const form = await new Response(limitedBody, { headers: { 'Content-Type': request.headers.get('Content-Type') || '' } }).formData();
+    file = form.get('file');
+    if (!file || typeof file.arrayBuffer !== 'function') throw new Error('A supported audio file is required');
+    if (file.size > MAX_AUDIO_FILE_BYTES) throw new Error('Audio upload exceeds 25 MB');
     if (form.get('model') !== 'LingoFusion Transcribe') throw new Error('File transcription requires LingoFusion Transcribe');
-    samples = wavSamples(await file.arrayBuffer());
-  } catch(e) { return respond({error:'invalid_audio',message:e.message},400); }
-  const fingerprint = await hash(await file.arrayBuffer());
-  const who = identity(auth.email, operationId, 'transcribe-v1:'+fingerprint);
-  const micros = audioCharge(samples, 10000);
+    buffer = await file.arrayBuffer();
+    audio = readTranscriptionWav(buffer);
+  } catch (error) {
+    return respond({ error: 'invalid_audio', message: error.message }, 400);
+  }
+
+  const { samples, sampleRate } = audio;
+  const fingerprint = await hash(buffer);
+  const who = identity(auth.email, operationId, 'transcribe-v1:' + fingerprint);
+  const micros = audioCharge(samples, 10000, sampleRate);
   let held;
   try { held = await reserve(env, who, micros); }
   catch(e) { return respond({error:e.message}, /Insufficient/.test(e.message)?402:409); }
   if (held.replay) return held.status === 'settled' ? respond({...held.result,balance_usd:held.balance_usd,replay:true}) : respond({error:'request_pending_reconciliation',operation_id:operationId},409);
   try {
-    const payload = new FormData(); payload.set('file',file,'audio.wav'); payload.set('model','gpt-transcribe');
-    const r = await providerFetch('https://api.openai.com/v1/audio/transcriptions',{method:'POST',headers:{Authorization:`Bearer ${env.OPENAI_API_KEY}`},body:payload,signal:AbortSignal.timeout(120000)});
-    if (!r.ok) throw new Error('Transcription provider request requires reconciliation');
-    const data = await r.json();
-    if (typeof data.text !== 'string') throw new Error('Provider transcript missing');
-    const result = {model:'LingoFusion Transcribe',text:data.text,duration_seconds:samples/AUDIO_RATE,cost_usd:micros/1e6,operation_id:operationId};
-    const settled = await billing(env,{action:'usageFinish',...who,actualMicros:micros,result,evidence:{providerRequestId:r.headers.get('x-request-id') || 'transcribe-'+crypto.randomUUID(),upstreamModel:'gpt-transcribe',samples,providerUsage:data.usage}});
-    return respond({...result,balance_usd:settled.balance_usd});
-  } catch(e) { await uncertain(env,who); return respond({error:'transcription_requires_reconciliation',message:e.message,operation_id:operationId},502); }
+    const segments = transcriptionSegments(file, buffer, audio);
+    const transcribed = [];
+    // Limit concurrent uploads and keep each successful segment in source order.
+    const concurrency = 3;
+    for (let offset = 0; offset < segments.length; offset += concurrency) {
+      const batch = await Promise.allSettled(segments.slice(offset, offset + concurrency)
+        .map(segment => transcribeSegment(segment, env.OPENAI_API_KEY, providerFetch)));
+      for (const item of batch) {
+        if (item.status === 'rejected') throw item.reason;
+        transcribed.push(item.value);
+      }
+    }
+    const text = transcribed.map(segment => segment.text).filter(Boolean).join('\n');
+    const result = {
+      model: 'LingoFusion Transcribe', text, duration_seconds: samples / sampleRate,
+      cost_usd: micros / 1e6, operation_id: operationId,
+      ...(!text ? { notice: 'No speech was detected in the recording.' } : {}),
+    };
+    const settled = await billing(env, {
+      action: 'usageFinish', ...who, actualMicros: micros, result,
+      evidence: {
+        providerRequestId: transcribed[0].requestId,
+        upstreamModel: 'gpt-transcribe', samples, sampleRate,
+        providerSegments: transcribed.map(({ requestId, usage }) => ({ requestId, usage })),
+      },
+    });
+    return respond({ ...result, balance_usd: settled.balance_usd });
+  } catch (error) {
+    await uncertain(env, who);
+    return respond({ error: 'transcription_requires_reconciliation', message: error.message, operation_id: operationId }, 502);
+  }
 }
 export async function createLiveTranscription(request, env, auth, respond) {
   if (!env.OPENAI_API_KEY || !env.BILLING || !env.GIFTS) return respond({error:'transcription_unavailable'},503);
   const body = await request.json().catch(()=>null);
   const maxSeconds = body?.maximum_seconds ?? 60;
   const operationId = request.headers.get('Idempotency-Key');
-  if (!Number.isInteger(maxSeconds) || maxSeconds < 1 || maxSeconds > MAX_AUDIO_SECONDS || !/^[A-Za-z0-9_-]{1,100}$/.test(operationId||'')) return respond({error:'Invalid session bounds or Idempotency-Key'},400);
+  if (!Number.isInteger(maxSeconds) || maxSeconds < 1 || maxSeconds > MAX_LIVE_AUDIO_SECONDS || !/^[A-Za-z0-9_-]{1,100}$/.test(operationId||'')) return respond({error:'Invalid session bounds or Idempotency-Key'},400);
   const who = identity(auth.email,operationId,'live-transcribe-v1:'+maxSeconds);
   let held;
   try { held = await reserve(env,who,audioCharge(maxSeconds*AUDIO_RATE,30000)); }

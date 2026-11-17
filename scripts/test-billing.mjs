@@ -28,6 +28,10 @@ globalThis.fetch=async (url,options={})=>{
   if(target.startsWith('https://api.stripe.com/v1/disputes/')) return Response.json(disputeEvidence);
   if(target.startsWith('https://api.stripe.com/v1/charges/')) {const s=[...sessions.values()].find(x=>new URL(target).pathname.endsWith('/'+x.payment_intent?.latest_charge?.id));return Response.json(s.payment_intent.latest_charge);}
   if(target==='https://gmail.googleapis.com/gmail/v1/users/me/messages/send') return Response.json({id:'mock-message'});
+  if (target === 'https://api.openai.com/v1/images/edits') {
+    const body = await new Response(options.body, { headers: options.headers }).formData();
+    return Response.json({ model: body.get('model'), size: body.get('size'), quality: body.get('quality'), image: await body.get('image').text() });
+  }
   if(target==='https://api.openai.com/v1/chat/completions') {
     const payload = JSON.parse(options.body);
     return Response.json({ id: `chatcmpl-mock-${++serial}`, object: 'chat.completion', created: 1730000000, model: payload.model,
@@ -53,6 +57,30 @@ await test('no anonymous, foreign-currency, simulator or automatic credit creati
     assert.equal((await h.api(path,{input:'hello'},email,{ 'x-lingofusion-client-token': 'lf_play_secure_649f7' })).status,402);
   }
   assert.equal(h.records.has(`user_balance:${email}`),false);
+});
+await test('Playground image translation upgrades cached clients in both output resolutions', async () => {
+  const local = harness();
+  local.env.OPENAI_API_KEY = 'synthetic-only';
+  local.records.set(`user_balance:${email}`, '1');
+  const edit = async (path, size, quality) => {
+    const form = new FormData();
+    form.set('model', 'gpt-image-2.5-sunburst');
+    form.set('size', size);
+    form.set('quality', quality);
+    form.set('image', new Blob(['synthetic image'], { type: 'image/png' }), 'source.png');
+    const response = await worker.fetch(new Request(`https://gateway.test${path}`, {
+      method: 'POST',
+      body: form,
+      headers: { Authorization: `Bearer ${local.auth(email)}`, Origin: "https://ikonikstation.github.io" },
+    }), local.env);
+    assert.equal(response.status, 200, await response.clone().text());
+    return response.json();
+  };
+  for (const [size, quality] of [['1024x1024', 'high'], ['3840x2160', 'max']]) {
+    assert.deepEqual(await edit('/api/playground/image', size, quality),
+      { model: 'gpt-image-2.6-sunburst', size, quality, image: 'synthetic image' });
+  }
+  assert.equal((await edit('/v1/images/edits', '1024x1024', 'high')).model, 'gpt-image-2.5-sunburst');
 });
 await test('manual checkout retains USD and fee total; spoofed identity cannot change owner',async()=>{
  const s=await create({amount:5,currency:'USD',userEmail:'victim@example.com'});assert.equal(s.currency,'usd');assert.equal(s.amount_total,643);assert.equal(s.metadata.userEmail,email);

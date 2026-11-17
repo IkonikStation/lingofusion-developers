@@ -13,7 +13,9 @@ The production gateway is `https://lingofusion-gateway.lingofusion-api.workers.d
 
 `POST /v1/audio/transcriptions` (also `/api/transcription/file`) accepts multipart fields `model=LingoFusion Transcribe` and `file`, plus an `Idempotency-Key` header of 1–100 letters, numbers, underscores or hyphens.
 
-The gateway accepts canonical 44-byte-header, mono PCM16 WAV at 24 kHz, between 0.1 seconds and 180 seconds. The Playground accepts browser-decodable recordings up to 25 MB and converts them locally. External API callers must convert their own audio to this WAV format. Client-supplied duration and price fields do not control billing.
+The gateway accepts canonical 44-byte-header, mono PCM16 WAV at 16 or 24 kHz. File uploads must be between 0.1 seconds and 10 minutes and no larger than 25 MB (25,000,000 bytes). Use 16 kHz for a full 10-minute WAV to fit the size limit. The Playground converts browser-decodable recordings locally and uses 16 kHz when needed. Client-supplied duration and price fields do not control billing.
+
+The gateway transcribes long recordings in short segments, then returns their text in recording order and settles one charge for the full duration. A failed segment prevents settlement as a complete transcript. If every segment returns empty text, the receipt includes a no-speech notice.
 
 Success returns `model`, `text`, `duration_seconds`, `cost_usd`, `balance_usd`, and `operation_id`. Repeating the same operation and audio returns the durable receipt without submitting audio again. Different audio with the same operation ID is rejected.
 
@@ -29,7 +31,7 @@ The gateway sets `gpt-live-transcribe`, PCM format and manual turn detection; cl
 
 ## Settlement and recovery
 
-Audio cost is calculated from validated sample counts using integer microdollars: `ceil(samples × microdollars_per_minute / (24000 × 60))`. File rate is 10,000 microdollars per minute; live rate is 30,000. There is no additional service fee. Unused reserved credit is returned on settlement.
+Audio cost is calculated from validated sample counts using integer microdollars: `ceil(samples × microdollars_per_minute / (sample_rate × 60))`. File rate is 10,000 microdollars per minute; live rate is 30,000. There is no additional service fee. Unused reserved credit is returned on settlement.
 
 `GET /api/usage/:operation_id` returns the authenticated owner's operation status and settled receipt. `POST /api/transcription/cancel` with JSON `{ "operation_id": "…" }` refunds a live reservation only if no provider socket has claimed it. Cancellation and socket claim are serialized atomically; replayed cancellation never refunds twice.
 

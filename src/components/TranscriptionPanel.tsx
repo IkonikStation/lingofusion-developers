@@ -3,16 +3,16 @@ import { Mic, Square, UploadCloud, Copy, Download, Loader2 } from 'lucide-react'
 import { getCurrentUser } from '../data/auth';
 import { DEFAULT_EDGE_GATEWAY_URL, recordBrowserTranscriptionUsage } from '../data/browserApi';
 import { transcriptionModels } from '../data/pricing';
-const RATE=24000, MAX_SECONDS=180;
-function pcm(data:Float32Array, sourceRate:number) {
-  const n=Math.floor(data.length*RATE/sourceRate),out=new Int16Array(n);
-  for(let i=0;i<n;i++) out[i]=Math.round(Math.max(-1,Math.min(1,data[Math.min(data.length-1,Math.floor(i*sourceRate/RATE))]))*32767);
+import { AUDIO_RATE, FILE_AUDIO_RATE, MAX_AUDIO_FILE_BYTES, MAX_FILE_AUDIO_SECONDS, audioCharge } from '../../shared/transcription.mjs';
+function pcm(data:Float32Array, sourceRate:number, targetRate = AUDIO_RATE) {
+  const n=Math.floor(data.length*targetRate/sourceRate),out=new Int16Array(n);
+  for(let i=0;i<n;i++) out[i]=Math.round(Math.max(-1,Math.min(1,data[Math.min(data.length-1,Math.floor(i*sourceRate/targetRate))]))*32767);
   return out;
 }
-function wav(samples:Int16Array) {
+function wav(samples:Int16Array, sampleRate:number) {
   const bytes=new ArrayBuffer(44+samples.length*2),v=new DataView(bytes);
   const text=(offset:number,s:string)=>[...s].forEach((c,i)=>v.setUint8(offset+i,c.charCodeAt(0)));
-  text(0,'RIFF');v.setUint32(4,bytes.byteLength-8,true);text(8,'WAVE');text(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,RATE,true);v.setUint32(28,RATE*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);text(36,'data');v.setUint32(40,samples.length*2,true);
+  text(0,'RIFF');v.setUint32(4,bytes.byteLength-8,true);text(8,'WAVE');text(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,sampleRate,true);v.setUint32(28,sampleRate*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);text(36,'data');v.setUint32(40,samples.length*2,true);
   for(let i=0;i<samples.length;i++)v.setInt16(44+i*2,samples[i],true);
   return new Blob([bytes],{type:'audio/wav'});
 }
@@ -21,6 +21,7 @@ export function TranscriptionPanel({onBalance,onSignIn,initialModel}:{onBalance:
   const [ownerId]=useState(()=>getCurrentUser().id);
   const [model,setModel]=useState(initialModel==='LingoFusion Live Transcribe'?initialModel:'LingoFusion Transcribe');
   const [file,setFile]=useState<Blob|null>(null),[fileName,setFileName]=useState(''),[seconds,setSeconds]=useState(0);
+  const [estimatedMicros, setEstimatedMicros] = useState(0);
   const [busy,setBusy]=useState(false),[recording,setRecording]=useState(false),[text,setText]=useState(''),[error,setError]=useState('');
   const [notice,setNotice]=useState('');
   const [receipt,setReceipt]=useState<Receipt|null>(null),[copied,setCopied]=useState(false);
@@ -38,12 +39,25 @@ export function TranscriptionPanel({onBalance,onSignIn,initialModel}:{onBalance:
     if(!selected)return;setBusy(true);setError('');setFile(null);setFileName('');setSeconds(0);setReceipt(null);
     let ctx:AudioContext|undefined;
     try{
-      if(selected.size>25000000)throw new Error('Choose an audio file under 25 MB.');
-      ctx=new AudioContext();const audio=await ctx.decodeAudioData(await selected.arrayBuffer());
-      if(audio.duration<0.1||audio.duration>MAX_SECONDS)throw new Error('Choose a recording between 0.1 seconds and 3 minutes.');
-      const mono=new Float32Array(audio.length);
-      for(let c=0;c<audio.numberOfChannels;c++){const channel=audio.getChannelData(c);for(let i=0;i<mono.length;i++)mono[i]+=channel[i]/audio.numberOfChannels;}
-      const samples=pcm(mono,audio.sampleRate);setFile(wav(samples));setSeconds(samples.length/RATE);setFileName(selected.name);
+      if (selected.size > MAX_AUDIO_FILE_BYTES) throw new Error('Choose an audio file up to 25 MB.');
+      ctx = new AudioContext();
+      const audio = await ctx.decodeAudioData(await selected.arrayBuffer());
+      if (audio.duration < 0.1 || audio.duration > MAX_FILE_AUDIO_SECONDS) {
+        throw new Error('Choose a recording between 0.1 seconds and 10 minutes.');
+      }
+      const bytesAtLiveRate = Math.round(audio.duration * AUDIO_RATE) * 2 + 44;
+      const sampleRate = bytesAtLiveRate <= MAX_AUDIO_FILE_BYTES ? AUDIO_RATE : FILE_AUDIO_RATE;
+      const render = new OfflineAudioContext(1, Math.round(audio.duration * sampleRate), sampleRate);
+      const source = render.createBufferSource();
+      source.buffer = audio;
+      source.connect(render.destination);
+      source.start();
+      const mono = await render.startRendering();
+      const samples = pcm(mono.getChannelData(0), mono.sampleRate, sampleRate);
+      setFile(wav(samples, sampleRate));
+      setSeconds(samples.length / sampleRate);
+      setEstimatedMicros(audioCharge(samples.length, 10000, sampleRate));
+      setFileName(selected.name);
     }catch(e){setError((e as Error).message);}finally{await ctx?.close();setBusy(false);}
   }
   async function runFile(){
@@ -57,7 +71,7 @@ export function TranscriptionPanel({onBalance,onSignIn,initialModel}:{onBalance:
     setError('');setNotice('');setReceipt(null);setText('');setBusy(true);
     try{
       const headers=auth();media.current=await navigator.mediaDevices.getUserMedia({audio:true});
-      context.current=new AudioContext({sampleRate:RATE});await context.current.resume();
+      context.current=new AudioContext({sampleRate:AUDIO_RATE});await context.current.resume();
       const id=crypto.randomUUID();remember(id);
       const d=await read(await fetch(DEFAULT_EDGE_GATEWAY_URL+'/api/transcription/live',{method:'POST',headers:{...headers,'Content-Type':'application/json','Idempotency-Key':id},body:JSON.stringify({maximum_seconds:60})}));
       const socket=new WebSocket(d.websocket_url,['lingofusion-transcription',d.ticket]);connection.current=socket;
@@ -105,7 +119,7 @@ export function TranscriptionPanel({onBalance,onSignIn,initialModel}:{onBalance:
     <div className="grid divide-y divide-neutral-200 dark:divide-white/10 md:grid-cols-2 md:divide-x md:divide-y-0">
       <div className="space-y-4 p-5">
         <h2 className="text-sm font-medium">{live?'Live audio':'Audio file'}</h2>
-        {live?<p className="text-sm leading-6 text-neutral-500">Transcribe your microphone as you speak. Sessions support up to one minute of audio. Billing is based on audio sent; unused reserved credit is returned after settlement.</p>:<><label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-neutral-300 p-5 text-sm dark:border-white/20"><UploadCloud className="h-5 w-5"/><span>{fileName||'Choose an audio file'}</span><input aria-label="Audio file to transcribe" type="file" accept="audio/*" className="sr-only" disabled={busy||!!pending} onChange={e=>void prepareFile(e.target.files?.[0])}/></label><p className="text-xs leading-5 text-neutral-500">Up to 3 minutes and 25 MB. Audio is converted on your device before upload.</p>{file&&<p className="text-xs text-neutral-500">{seconds.toFixed(1)} seconds · ${(Math.ceil(seconds/60*10000)/1e6).toFixed(6)}</p>}</>}
+        {live?<p className="text-sm leading-6 text-neutral-500">Transcribe your microphone as you speak. Sessions support up to one minute of audio. Billing is based on audio sent; unused reserved credit is returned after settlement.</p>:<><label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-neutral-300 p-5 text-sm dark:border-white/20"><UploadCloud className="h-5 w-5"/><span>{fileName||'Choose an audio file'}</span><input aria-label="Audio file to transcribe" type="file" accept="audio/*" className="sr-only" disabled={busy||!!pending} onChange={e=>void prepareFile(e.target.files?.[0])}/></label><p className="text-xs leading-5 text-neutral-500">Up to 10 minutes and 25 MB. Audio is converted on your device before upload.</p>{file&&<p className="text-xs text-neutral-500">{seconds.toFixed(1)} seconds · ${(estimatedMicros/1e6).toFixed(6)}</p>}</>}
         {recording?<button type="button" onClick={()=>{stopCapture();connection.current?.send(JSON.stringify({type:'finish'}));}} className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm text-white"><Square className="h-4 w-4"/>Stop transcription</button>:<button type="button" disabled={busy||!!pending||(!live&&!file)} onClick={()=>void(live?startLive():runFile())} className="inline-flex items-center gap-2 rounded-lg bg-neutral-950 px-4 py-2.5 text-sm text-white disabled:opacity-40 dark:bg-white dark:text-neutral-950">{busy?<Loader2 className="h-4 w-4 animate-spin"/>:<Mic className="h-4 w-4"/>}{busy?'Processing…':live?'Start listening':'Transcribe'}</button>}
         {pending&&!busy&&<button type="button" onClick={()=>void recover()} className="block text-xs underline">Recover previous transcription</button>}
         {notice&&<p role="status" className="text-sm text-neutral-600 dark:text-neutral-300">{notice}</p>}

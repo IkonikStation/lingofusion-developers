@@ -4,31 +4,101 @@ import { createHash } from 'node:crypto';
 import { harness } from './billing-test-harness.mjs';
 import worker from '../cloudflare-worker/worker.mjs';
 import { billing } from '../cloudflare-worker/billing.mjs';
-import { audioCharge,wavSamples } from '../shared/transcription.mjs';
+import { audioCharge,readTranscriptionWav,MAX_AUDIO_FILE_BYTES } from '../shared/transcription.mjs';
 import { connectLiveTranscription } from '../cloudflare-worker/transcription.mjs';
-function wav(seconds=1) {
-  const b=new ArrayBuffer(44+seconds*48000),v=new DataView(b),a=new Uint8Array(b);
+function wav(seconds=1, sampleRate=24000) {
+  const b=new ArrayBuffer(44+Math.round(seconds*sampleRate)*2),v=new DataView(b),a=new Uint8Array(b);
   const str=(n,t)=>[...t].forEach((c,i)=>a[n+i]=c.charCodeAt(0));
   str(0,'RIFF');str(8,'WAVE');str(12,'fmt ');str(36,'data');
-  v.setUint32(4,b.byteLength-8,true);v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,24000,true);v.setUint32(28,48000,true);v.setUint16(32,2,true);v.setUint16(34,16,true);v.setUint32(40,b.byteLength-44,true);return b;
+  v.setUint32(4,b.byteLength-8,true);v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,sampleRate,true);v.setUint32(28,sampleRate*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);v.setUint32(40,b.byteLength-44,true);return b;
 }
 const email='transcription@example.invalid';
 const setup=()=>{const h=harness();h.records.set(`user_balance:${email}`,'1');h.env.OPENAI_API_KEY='synthetic-only';return h;};
-const request=(h,op='file-one',model='LingoFusion Transcribe')=>{const f=new FormData();f.set('file',new Blob([wav()],{type:'audio/wav'}),'one.wav');f.set('model',model);f.set('duration','0.0001');return new Request('https://gateway.test/v1/audio/transcriptions',{method:'POST',headers:{Authorization:`Bearer ${h.auth(email)}`,'Idempotency-Key':op},body:f});};
+const request=(h,op='file-one',model='LingoFusion Transcribe', audio=wav())=>{const f=new FormData();f.set('file',new Blob([audio],{type:'audio/wav'}),'one.wav');f.set('model',model);f.set('duration','0.0001');return new Request('https://gateway.test/v1/audio/transcriptions',{method:'POST',headers:{Authorization:`Bearer ${h.auth(email)}`,'Idempotency-Key':op},body:f});};
 
 test('duration and rates are computed from validated PCM, with one monetary rounding',()=>{
- assert.equal(wavSamples(wav()),24000);assert.equal(audioCharge(24000,10000),167);assert.equal(audioCharge(24000*60,10000),10000);assert.equal(audioCharge(24000*60,30000),30000);
- const b=wav();new DataView(b).setUint32(24,48000,true);assert.throws(()=>wavSamples(b));assert.throws(()=>wavSamples(wav(181)));
+ assert.deepEqual(readTranscriptionWav(wav()), { samples: 24000, sampleRate: 24000 });assert.equal(audioCharge(24000,10000),167);assert.equal(audioCharge(24000*60,10000),10000);assert.equal(audioCharge(24000*60,30000),30000);
+ const b=wav();new DataView(b).setUint32(24,48000,true);assert.throws(()=>readTranscriptionWav(b));
+ assert.throws(()=>readTranscriptionWav(wav(600 + 1/16000, 16000)), /10 minutes/);
+ assert.equal(audioCharge(16000,10000,16000),167);
 });
 test('file route reserves first, maps GPT-Transcribe, meters real audio bytes, and replays without dispatch',async()=>{
  const h=setup(),original=globalThis.fetch;let calls=0;
- globalThis.fetch=async(url,opts)=>{assert.equal(url,'https://api.openai.com/v1/audio/transcriptions');assert.equal(opts.body.get('model'),'gpt-transcribe');assert.equal(opts.headers.Authorization,'Bearer synthetic-only');
+ globalThis.fetch=async(url,opts)=>{assert.equal(url,'https://api.openai.com/v1/audio/transcriptions');assert.equal(opts.body.get('model'),'gpt-transcribe');assert.equal(opts.body.get('chunking_strategy'),'auto');assert.equal(opts.headers.Authorization,'Bearer synthetic-only');
  const hold=h.objects.get('billing:ledger-v1').data.get(`meteredUsage:${email}:file-one`);assert.equal(hold.status,'dispatched');assert.equal(hold.maximumMicros,167);calls++;return Response.json({text:'Hello world',usage:{type:'duration',seconds:1}},{headers:{'x-request-id':'synthetic-file-receipt'}});};
  try{
   const response=await worker.fetch(request(h),h.env);assert.equal(response.status,200,await response.clone().text());const d=await response.json();assert.equal(d.duration_seconds,1);assert.equal(d.cost_usd,0.000167);assert.equal(d.balance_usd,0.999833);assert.equal(d.text,'Hello world');
   const replay=await worker.fetch(request(h),h.env);assert.equal(replay.status,200);assert.equal((await replay.json()).replay,true);assert.equal(calls,1);
  }finally{globalThis.fetch=original;}
 });
+test('a 10-minute upload sends every sample in order, then settles once for the full duration', async () => {
+  const h = setup();
+  const originalFetch = globalThis.fetch;
+  const audio = wav(600, 16000);
+  const source = new Int16Array(audio, 44);
+  for (let i = 0; i < source.length; i++) source[i] = i % 32767;
+  const received = [];
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, 'https://api.openai.com/v1/audio/transcriptions');
+    const index = received.length;
+    received.push(options.body.get('file').arrayBuffer());
+    if (index === 0) await new Promise(resolve => setTimeout(resolve, 25));
+    return Response.json({ text: index === 1 ? ' ' : `Part ${index + 1}` },
+      { headers: { 'x-request-id': `long-file-${index}` } });
+  };
+  try {
+    const response = await worker.fetch(request(h, 'full-recording', undefined, audio), h.env);
+    assert.equal(response.status, 200, await response.clone().text());
+    const receipt = await response.json();
+    assert.ok(received.length >= 10);
+    assert.equal(receipt.text, received.map((_, index) => index === 1 ? '' : `Part ${index + 1}`).filter(Boolean).join('\n'));
+    assert.equal(receipt.duration_seconds, 600);
+    assert.equal(receipt.cost_usd, 0.1);
+    assert.equal(receipt.balance_usd, 0.9);
+    let offset = 44;
+    for (const bytes of received) {
+      const segment = await bytes;
+      const info = readTranscriptionWav(segment);
+      assert.equal(info.sampleRate, 16000);
+      assert.ok(info.samples <= 60 * info.sampleRate);
+      const pcm = Buffer.from(segment, 44);
+      assert.equal(pcm.compare(Buffer.from(audio, offset, pcm.length)), 0);
+      offset += pcm.length;
+    }
+    assert.equal(offset, audio.byteLength);
+    const segmentCount = received.length;
+    const replay = await worker.fetch(request(h, 'full-recording', undefined, audio), h.env);
+    assert.equal((await replay.json()).text, receipt.text);
+    assert.equal(received.length, segmentCount);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('file rejects oversize audio and does not report partial segment failures as complete', async () => {
+  const h = setup();
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return calls === 2 ? Response.json({}, { status: 500 }) : Response.json({ text: 'First part' });
+  };
+  try {
+    const oversized = wav((MAX_AUDIO_FILE_BYTES - 42) / 48000);
+    const rejected = await worker.fetch(request(h, 'oversized', undefined, oversized), h.env);
+    assert.equal(rejected.status, 400);
+    assert.match((await rejected.json()).message, /exceeds 25 MB/);
+    assert.equal(calls, 0);
+    const failure = await worker.fetch(request(h, 'partial-file', undefined, wav(61)), h.env);
+    assert.equal(failure.status, 502);
+    assert.equal(calls, 2);
+    const status = await billing(h.env, { action: 'usageStatus', email, operationId: 'partial-file' });
+    assert.equal(status.status, 'uncertain');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('unauthenticated, retired Mini, and unfunded requests cannot dispatch; ambiguous outcomes retain reservation',async()=>{
  const h=setup(),original=globalThis.fetch;let calls=0;globalThis.fetch=async()=>{calls++;throw new Error('synthetic unknown provider outcome');};
  try{
