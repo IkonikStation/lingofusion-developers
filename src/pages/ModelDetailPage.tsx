@@ -38,7 +38,7 @@ export type ModelProfileSpec = {
 };
 
 export const modelProfileSpecs: Record<string, ModelProfileSpec> = {
-  "LingoFusion Native-1.7B": {
+  "LingoFusion Native Air": {
     reasoning: "Minimal",
     reasoningLevel: 1,
     speed: "Hardware-dependent",
@@ -46,10 +46,10 @@ export const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     contextWindow: "32,000",
     maxOutput: "32,000",
     quality: "Practical local",
-    description: "LingoFusion Native-1.7B runs directly on your computer for lightweight, everyday translation without the LingoFusion cloud API, API credits, or monthly character allowances.",
+    description: "LingoFusion Native Air runs directly on your computer for lightweight, everyday translation without the LingoFusion cloud API, API credits, or monthly character allowances.",
     limitations: ["Performance depends on your local hardware", "Best for everyday and straightforward source text", "Not intended for specialist terminology or document-scale review"],
   },
-  "LingoFusion Native-9B": {
+  "LingoFusion Native Core": {
     reasoning: "Steady",
     reasoningLevel: 3,
     speed: "Hardware-dependent",
@@ -57,10 +57,10 @@ export const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     contextWindow: "Build-specific",
     maxOutput: "Build-specific",
     quality: "Capable local",
-    description: "LingoFusion Native-9B is the recommended free local model for most users, combining strong translation quality, practical speed, and 16 GB-class hardware requirements without cloud API usage.",
+    description: "LingoFusion Native Core is the recommended free local model for most users, combining strong translation quality, practical speed, and 16 GB-class hardware requirements without cloud API usage.",
     limitations: ["A compatible local build is required", "Exact context, output, download size, and quantization depend on the chosen build", "Not available through the LingoFusion cloud API or Playground"],
   },
-  "LingoFusion Native-35B": {
+  "LingoFusion Native Max": {
     reasoning: "Higher",
     reasoningLevel: 4,
     speed: "Hardware-dependent",
@@ -68,7 +68,7 @@ export const modelProfileSpecs: Record<string, ModelProfileSpec> = {
     contextWindow: "128,000",
     maxOutput: "32,000",
     quality: "Premium local",
-    description: "LingoFusion Native-35B runs directly on your computer and is designed to provide the highest local translation quality in the Native family, without consuming cloud API credits or monthly character allowances.",
+    description: "LingoFusion Native Max runs directly on your computer and is designed to provide the highest local translation quality in the Native family, without consuming cloud API credits or monthly character allowances.",
     limitations: ["Requires powerful local hardware and substantial storage", "Performance depends on CPU, GPU, memory, and local runtime settings", "Not available through the LingoFusion cloud API or Playground"],
   },
   "LingoFusion Nano": {
