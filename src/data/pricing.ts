@@ -1,4 +1,5 @@
 import { IMAGE_TRANSLATION_MODEL } from "../../shared/imageTranslation.mjs";
+import { VOICE_FLASH_LITE_NAME, VOICE_FLASH_LITE_PRICE } from "../../shared/voiceFlashLite.mjs";
 
 export type TextModel = {
   model: string;
@@ -163,6 +164,7 @@ export const textModelPresentations: Record<string, TextModelPresentation> = {
 export const ttsModels: SimpleModel[] = [
   { model: "LingoFusion Voice", priceUsd: 0.15, pricingUnit: "per_1k_characters" },
   { model: "LingoFusion Voice Flash", priceUsd: 0.08, pricingUnit: "per_1k_characters" },
+  { model: VOICE_FLASH_LITE_NAME, priceUsd: VOICE_FLASH_LITE_PRICE, pricingUnit: "per_1k_characters" },
 ];
 
 export const transcriptionModels: SimpleModel[] = [
@@ -250,6 +252,7 @@ export const latestModels = [
   "LingoFusion Spark",
   "LingoFusion Voice",
   "LingoFusion Voice Flash",
+  VOICE_FLASH_LITE_NAME,
   "LingoFusion Transcribe",
   "LingoFusion Live Transcribe",
   "LingoFusion Dubbing",
@@ -363,6 +366,8 @@ export const modelDetails: Record<string, string> = {
     "Expressive multilingual speech generation with strong pronunciation control.",
   "LingoFusion Voice Flash":
     "Fast, lower-cost multilingual speech generation.",
+  [VOICE_FLASH_LITE_NAME]:
+    "Low-cost speech synthesis in English, Spanish, German, and Brazilian Portuguese. Outputs MP3 or WAV.",
   "LingoFusion Transcribe":
     "Production transcription model for accurate speech-to-text workflows.",
   "LingoFusion Live Transcribe":

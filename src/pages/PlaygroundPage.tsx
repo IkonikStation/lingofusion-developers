@@ -68,6 +68,10 @@ import { dubbingLanguageNameToCode, dubbingLanguagesWithFlags, playgroundLanguag
 import { dubbingModels, imageModels, musicModels, textModelPresentations, ttsModels } from "../data/pricing";
 import { getCurrentUser, subscribeAuth } from "../data/auth";
 import { formatUsd, pageQuery } from "../lib/utils";
+import {
+  FLASH_LITE_AUDIO_TYPES, isVoiceFlashLite, VOICE_FLASH_LITE_MAX_CHARS, VOICE_FLASH_LITE_MODEL,
+  VOICE_FLASH_LITE_NAME, VOICE_FLASH_LITE_VOICES,
+} from "../../shared/voiceFlashLite.mjs";
 
 type TranslationRun = {
   webSearchSources?: Array<{url:string; title:string}>;
@@ -419,13 +423,20 @@ export function PlaygroundPage({
   }, [musicRunning]);
   const [selectedVoiceModel, setSelectedVoiceModel] = useState<string>(() => {
     const requested = pageQuery().get("model");
+    if (isVoiceFlashLite(requested)) return VOICE_FLASH_LITE_NAME;
     const match = ttsModels.find(
       (m) => m.model.toLowerCase() === requested?.toLowerCase(),
     );
     return match?.model ?? "LingoFusion Voice";
   });
   const [selectedVoiceGender, setSelectedVoiceGender] = useState<"female" | "male">("female");
+  const [flashLiteVoice, setFlashLiteVoice] = useState(VOICE_FLASH_LITE_VOICES[0].id);
+  const [flashLiteFormat, setFlashLiteFormat] = useState<"mp3" | "wav">("mp3");
+  const flashLiteSelected = isVoiceFlashLite(selectedVoiceModel);
   const [voiceAudioUrl, setVoiceAudioUrl] = useState<string | null>(null);
+  useEffect(() => () => {
+    if (voiceAudioUrl?.startsWith("blob:")) URL.revokeObjectURL(voiceAudioUrl);
+  }, [voiceAudioUrl]);
   const [voiceRunning, setVoiceRunning] = useState<boolean>(false);
   const [voicePlaying, setVoicePlaying] = useState<boolean>(false);
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -434,6 +445,7 @@ export function PlaygroundPage({
     model: string;
     chars: number;
     costUsd: number;
+    format?: "mp3" | "wav";
   } | null>(null);
   const [selectedImageModel, setSelectedImageModel] = useState<string>(() => {
     const requested = pageQuery().get("model");
@@ -1263,6 +1275,10 @@ export function PlaygroundPage({
   const handleRunVoiceSynthesis = async () => {
     const textToSpeak = userInput.trim() || translatedOutput.trim();
     if (!textToSpeak || voiceRunning) return;
+    if (flashLiteSelected && [...textToSpeak].length > VOICE_FLASH_LITE_MAX_CHARS) {
+      setErrorBanner(`Flash Lite supports up to ${VOICE_FLASH_LITE_MAX_CHARS.toLocaleString()} characters per request.`);
+      return;
+    }
     if (!unlimitedBalance && liveBalance <= 0) {
       setInsufficientModalOpen(true);
       return;
@@ -1273,7 +1289,12 @@ export function PlaygroundPage({
     setVoiceRun(null);
 
     const runId = `voice-${Date.now()}`;
-    const payload = {
+    const payload = flashLiteSelected ? {
+      model: VOICE_FLASH_LITE_MODEL,
+      input: textToSpeak,
+      voice: flashLiteVoice,
+      response_format: flashLiteFormat,
+    } : {
       model: selectedVoiceModel,
       input: textToSpeak,
       voice: selectedVoiceGender,
@@ -1301,15 +1322,21 @@ export function PlaygroundPage({
         setVoiceAudioUrl(response.audio_url);
         setVoiceRun({
           id: response.id || runId,
-          model: response.model || selectedVoiceModel,
+          model: flashLiteSelected ? VOICE_FLASH_LITE_NAME : response.model || selectedVoiceModel,
           chars: response.chars || textToSpeak.length,
           costUsd: response.cost_usd || 0,
+          format: flashLiteSelected ? flashLiteFormat : "mp3",
         });
       } else {
         const baseUrl = getApiBaseUrl();
+        const sessionToken = flashLiteSelected ? getCurrentUser().sessionToken : null;
         const res = await fetch(`${baseUrl}/api/playground/speech`, {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: {
+            "content-type": "application/json",
+            ...(flashLiteSelected && { Accept: FLASH_LITE_AUDIO_TYPES[flashLiteFormat] }),
+            ...(sessionToken && { Authorization: `Bearer ${sessionToken}` }),
+          },
           body: JSON.stringify(payload),
         });
 
@@ -1330,9 +1357,10 @@ export function PlaygroundPage({
         setVoiceAudioUrl(objectUrl);
         setVoiceRun({
           id: res.headers.get("x-lingofusion-request-id") || runId,
-          model: res.headers.get("x-lingofusion-model") || selectedVoiceModel,
+          model: flashLiteSelected ? VOICE_FLASH_LITE_NAME : res.headers.get("x-lingofusion-model") || selectedVoiceModel,
           chars,
           costUsd,
+          format: flashLiteSelected ? flashLiteFormat : "mp3",
         });
       }
 
@@ -2624,35 +2652,56 @@ export function PlaygroundPage({
                 )}
                 {mode === "voice" && (
                   <>
-                    {/* Voice Gender Toggle: Female vs Male */}
-                    <div
-                      role="group"
-                      aria-label="Voice gender"
-                      className="inline-flex rounded-xl border border-neutral-200 bg-white p-0.5 dark:border-white/15 dark:bg-neutral-950"
-                    >
-                      {([
-                        ["female", "Female"],
-                        ["male", "Male"],
-                      ] as const).map(([value, label]) => (
-                        <button
-                          key={value}
-                          type="button"
-                          aria-pressed={selectedVoiceGender === value}
-                          data-testid={`playground-voice-gender-${value}`}
-                          onClick={() => setSelectedVoiceGender(value)}
-                          className={`inline-flex h-8 items-center rounded-lg px-3 text-xs font-semibold transition ${
-                            selectedVoiceGender === value
-                              ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
-                              : "text-neutral-500 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white"
-                          }`}
+                    {flashLiteSelected ? (
+                      <>
+                        <select
+                          aria-label="Flash Lite voice"
+                          value={flashLiteVoice}
+                          onChange={(event) => setFlashLiteVoice(event.target.value)}
+                          className="h-9 rounded-xl border border-neutral-200 bg-white px-2 text-xs dark:border-white/15 dark:bg-neutral-950"
                         >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
+                          {VOICE_FLASH_LITE_VOICES.map((voice) => <option key={voice.id} value={voice.id}>{voice.label}</option>)}
+                        </select>
+                        <select
+                          aria-label="Audio format"
+                          value={flashLiteFormat}
+                          onChange={(event) => setFlashLiteFormat(event.target.value === "wav" ? "wav" : "mp3")}
+                          className="h-9 rounded-xl border border-neutral-200 bg-white px-2 text-xs dark:border-white/15 dark:bg-neutral-950"
+                        >
+                          <option value="mp3">MP3</option>
+                          <option value="wav">WAV</option>
+                        </select>
+                      </>
+                    ) : (
+                      <div
+                        role="group"
+                        aria-label="Voice gender"
+                        className="inline-flex rounded-xl border border-neutral-200 bg-white p-0.5 dark:border-white/15 dark:bg-neutral-950"
+                      >
+                        {([
+                          ["female", "Female"],
+                          ["male", "Male"],
+                        ] as const).map(([value, label]) => (
+                          <button
+                            key={value}
+                            type="button"
+                            aria-pressed={selectedVoiceGender === value}
+                            data-testid={`playground-voice-gender-${value}`}
+                            onClick={() => setSelectedVoiceGender(value)}
+                            className={`inline-flex h-8 items-center rounded-lg px-3 text-xs font-semibold transition ${
+                              selectedVoiceGender === value
+                                ? "bg-neutral-950 text-white dark:bg-white dark:text-neutral-950"
+                                : "text-neutral-500 hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white"
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
 
                     <span className="hidden font-sans tabular-nums text-[11px] text-neutral-500 md:inline dark:text-neutral-400">
-                      ${selectedVoiceModel.toLowerCase().includes("flash") ? "0.08" : "0.15"} / 1K chars
+                      ${ttsModels.find((model) => model.model === selectedVoiceModel)?.priceUsd?.toFixed(2)} / 1K chars
                     </span>
                   </>
                 )}
@@ -3381,7 +3430,7 @@ export function PlaygroundPage({
                   {userInput && (
                     <div className="flex items-center gap-3">
                       <span data-testid="playground-voice-character-count" className="font-mono text-[11px] text-neutral-400 dark:text-neutral-500">
-                        {userInput.length.toLocaleString()} chars
+                        {(flashLiteSelected ? [...userInput.trim()].length : userInput.length).toLocaleString()} chars
                       </span>
                       <button
                         type="button"
@@ -3421,7 +3470,7 @@ export function PlaygroundPage({
                   {voiceAudioUrl && (
                     <a
                       href={voiceAudioUrl}
-                      download="lingofusion-voice.mp3"
+                      download={`lingofusion-voice.${voiceRun?.format || "mp3"}`}
                       className="inline-flex items-center gap-1 text-[11px] text-neutral-500 hover:text-neutral-900 dark:hover:text-white"
                     >
                       <Download className="h-3 w-3" />

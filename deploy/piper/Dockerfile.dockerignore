@@ -1,0 +1,9 @@
+**
+!deploy/
+!deploy/piper/
+!deploy/piper/Dockerfile
+!deploy/piper/fetch-voices.py
+!deploy/piper/requirements.txt
+!deploy/piper/service.py
+!shared/
+!shared/piper-voices.json

@@ -1,0 +1,41 @@
+{
+  "revision": "e9c8a39444359388adaa94255becb37a5a2b8e51",
+  "voices": [
+    {
+      "id": "en_US-joe-medium",
+      "locale": "en-US",
+      "label": "English (US) — Joe",
+      "directory": "en/en_US/joe/medium",
+      "modelSha256": "abf4b998e34045cbd00eaf050de2de620f81ded6eb8b85a24b022a1c2b3f08d2",
+      "configSha256": "9b91a652090ffa8a49e36569afa9acc8ead2b3a22a950e8e6ca11914f3e85d56",
+      "cardSha256": "4b319248135916e8f5433ce7a9fe5271026b05cb598bab05807b22cb17fd129b"
+    },
+    {
+      "id": "es_ES-davefx-medium",
+      "locale": "es-ES",
+      "label": "Spanish (Spain) — Davefx",
+      "directory": "es/es_ES/davefx/medium",
+      "modelSha256": "d2c9224e122321aac3c33343957fff4d0f465226cb74c66b0f520ca3f8c0dd07",
+      "configSha256": "7d82d069eccca0f87963bd23c33166fe1ef6d24a6b231543931bfe692397f256",
+      "cardSha256": "2d55d0d84100cde9d9ed88866c2625c89d333a45507d88aa8bae40f6de94c134"
+    },
+    {
+      "id": "de_DE-thorsten-medium",
+      "locale": "de-DE",
+      "label": "German (Germany) — Thorsten",
+      "directory": "de/de_DE/thorsten/medium",
+      "modelSha256": "fd270eb3d1ebf91d763f8a0f949b1b1bebdfefaea18c3aaf8577dd34536e064f",
+      "configSha256": "e5bb7410dcbbcc0be6f4544f6bc66612b315ab5cb3099ec44bb46d860bc7cca9",
+      "cardSha256": "c638118fb06eb07d59e60270097c250cf2de81a037320a8a6306fec652ad13b0"
+    },
+    {
+      "id": "pt_BR-cadu-medium",
+      "locale": "pt-BR",
+      "label": "Portuguese (Brazil) — Cadu",
+      "directory": "pt/pt_BR/cadu/medium",
+      "modelSha256": "d5a662e3f606d5a49dd29ba9ce90c304ae45dd9543f8b0c773bcb0de282499de",
+      "configSha256": "28c27ae86debf5e304176c5be533bbb3a483e456f42272eeb7dbfede48dae741",
+      "cardSha256": "ccd97b4369f50e6fba3a4fb730643ef2675f87b43c5d22298404c58f8204a375"
+    }
+  ]
+}

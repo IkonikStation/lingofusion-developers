@@ -4,6 +4,7 @@ import type { TextPricingMode } from "./pricing";
 import { buildImageTranslationInstruction, buildModelSystemPrompt } from "./systemPrompts";
 import { getCurrentUser } from "./auth";
 import { countTokens } from "../lib/tokenizer";
+import { FLASH_LITE_AUDIO_TYPES, isVoiceFlashLite, VOICE_FLASH_LITE_MODEL } from "../../shared/voiceFlashLite.mjs";
 
 export type ModelPricingRecord = {
   id: string;
@@ -1420,6 +1421,66 @@ async function runSpeechBrowser(state: BrowserState, options?: RequestInit) {
   };
 }
 
+async function runFlashLiteBrowser(path: string, state: BrowserState, body: Record<string, unknown>, options?: RequestInit) {
+  // Older gateways treat any model name containing "flash" as Voice Flash.
+  // Require explicit model discovery before sending a synthesis request.
+  const models = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}/v1/models`, {
+    cache: "no-store",
+    signal: options?.signal,
+  });
+  const catalog = models.ok ? await models.json().catch(() => null) : null;
+  if (!Array.isArray(catalog?.data) || !catalog.data.some((model: { id?: string } | null) => model?.id === VOICE_FLASH_LITE_MODEL)) {
+    fail("Voice Flash Lite is not available on the gateway yet.");
+  }
+  const started = Date.now();
+  const format = body.response_format === "wav" ? "wav" : "mp3";
+  const authToken = getAuthBearer(options, state);
+  const response = await fetch(`${DEFAULT_EDGE_GATEWAY_URL}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: FLASH_LITE_AUDIO_TYPES[format],
+      "X-LingoFusion-Client-Token": "lf_play_secure_649f7",
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+    body: JSON.stringify(body),
+    signal: options?.signal,
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data?.error?.message || data?.message || `Voice synthesis failed (HTTP ${response.status})`);
+  }
+  const id = response.headers.get("X-LingoFusion-Request-Id");
+  const [chars, cost, billed, balance] = ["Chars", "Cost-Usd", "Billed-Usd", "Balance-Usd"].map((key) =>
+    Number(response.headers.get(`X-LingoFusion-${key}`) ?? NaN));
+  if (!id || response.headers.get("Content-Type") !== FLASH_LITE_AUDIO_TYPES[format] ||
+      ![chars, cost, billed, balance].every(Number.isFinite)) fail("Server speech receipt missing.");
+  const audio = await response.blob();
+  const timestamp = new Date().toISOString();
+  const account = state.dashboard.account;
+  account.paidBalance = balance;
+  account.unlimitedBalance = billed === 0;
+  account.lifetimeSpend = Number((account.lifetimeSpend + billed).toFixed(6));
+  if (state.dashboard.user) state.dashboard.user.balance_usd = balance;
+  createChargeEntry(state, billed, `LingoFusion Voice Flash Lite · ${chars} characters`);
+  const source = path === "/api/playground/speech" ? "playground" : "api";
+  state.dashboard.usageLedger?.unshift({
+    id, user_id: state.dashboard.user?.id || "", api_key_id: null, model_id: VOICE_FLASH_LITE_MODEL,
+    prompt_tokens: chars, completion_tokens: 0, cost_usd: billed, source, created_at: timestamp,
+  });
+  logRequest(state, {
+    id, timestamp, projectId: state.dashboard.projects[0]?.id || "proj_default", keyId: "playground_session",
+    endpoint: path, model: VOICE_FLASH_LITE_MODEL, feature: "Voice synthesis", status: 200,
+    inputTokens: chars, outputTokens: 0, reasoningTokens: 0, totalTokens: chars,
+    words: String(body.input ?? body.text ?? "").trim().split(/\s+/).length,
+    cost: billed, latencyMs: Date.now() - started, errorCode: "", streaming: false,
+  });
+  return {
+    id, model: VOICE_FLASH_LITE_MODEL, status: "completed", audio_url: URL.createObjectURL(audio),
+    chars, cost_usd: cost, format,
+  };
+}
+
 async function runMusic(state: BrowserState, options?: RequestInit) {
   const started = Date.now();
   let keyId = "playground_session";
@@ -2094,6 +2155,13 @@ export async function browserApi<T>(path: string, options?: RequestInit): Promis
   } else if (method === "POST" && (path === "/v1/music" || path === "/api/playground/music")) {
     result = await runMusic(state, options);
   } else if (method === "POST" && (path === "/v1/audio/speech" || path === "/api/playground/speech")) {
+    const body = requestBody(options);
+    if (isVoiceFlashLite(body.model)) {
+      const userId = getCurrentUser().id;
+      const speech = await runFlashLiteBrowser(path, state, body, options);
+      saveState(state, userId);
+      return speech as T;
+    }
     result = await runSpeechBrowser(state, options);
   } else if (method === "POST" && (path === "/v1/dubbing" || path === "/api/playground/dubbing")) {
     result = await runDubbingBrowser(state, options);

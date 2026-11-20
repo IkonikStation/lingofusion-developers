@@ -1,5 +1,9 @@
 import { AUDIO_RATE, audioCharge } from '../shared/transcription.mjs';
 import { assertSession, assertCharge, depositQuote, BILLING_POLICY, netCreditCents } from '../shared/billing.mjs';
+import {
+  FLASH_LITE_AUDIO_LIMITS, FLASH_LITE_CLOUD_BYTES_PER_MONTH, FLASH_LITE_CLOUD_CALLS_PER_MONTH,
+  FLASH_LITE_RATE_LIMIT, FLASH_LITE_WINDOW_MS, VOICE_FLASH_LITE_MAX_CHARS, VOICE_FLASH_LITE_MODEL, flashLiteCostMicros,
+} from '../shared/voiceFlashLite.mjs';
 
 export async function billing(env, body) {
   if (!env.BILLING || !env.GIFTS) throw new Error('Secure billing storage is not configured.');
@@ -63,8 +67,62 @@ export class BillingLedger {
     return this.state.blockConcurrencyWhile(async () => {
       try {
         await this.project();
-        const { action, email, order, session, delta, operationId, gifts, hold, gift, fingerprint, maximumMicros, actualMicros, result, evidence, liveCheckpoint } = await request.json();
+        const payload = await request.json();
+        const { action, email, order, session, delta, operationId, gifts, hold, gift, fingerprint, maximumMicros, actualMicros, result, evidence, liveCheckpoint } = payload;
         const storage = this.state.storage;
+        if (action === "flashLiteAdmit" || action === "flashLiteCharge") {
+          const { chars, apiKeyId, source, voice, format, admissionMonth, audioBytes } = payload;
+          const reservedBytes = Object.hasOwn(FLASH_LITE_AUDIO_LIMITS, format) ? FLASH_LITE_AUDIO_LIMITS[format] : null;
+          if (!email || !reservedBytes || !Number.isInteger(chars) || chars < 1 || chars > VOICE_FLASH_LITE_MAX_CHARS) throw new Error("Invalid Flash Lite usage.");
+          const cost = flashLiteCostMicros(chars);
+          const available = Math.round(await this.initial(email) * 1e6);
+          if (action === "flashLiteCharge" && !/^speech_[a-f0-9-]{36}$/.test(operationId ?? "")) throw new Error("Invalid Flash Lite usage ID.");
+          const usageKey = `meteredUsage:${email}:${operationId}`;
+          if (action === "flashLiteCharge") {
+            const saved = await storage.get(usageKey);
+            if (saved) return Response.json({ result: saved.result, balance_usd: available / 1e6 });
+          }
+          const unlimited = await this.unlimited(email);
+          if (!unlimited && available < cost) return Response.json({ message: "Insufficient available funds." }, { status: 402 });
+          if (action === "flashLiteAdmit") {
+            const rateKey = `flashLiteRate:${email}`;
+            const window = Math.floor(Date.now() / FLASH_LITE_WINDOW_MS);
+            const saved = await storage.get(rateKey);
+            const count = saved?.window === window ? saved.count : 0;
+            if (count >= FLASH_LITE_RATE_LIMIT) return Response.json({ error: "rate_limit_exceeded" }, { status: 429 });
+            const month = new Date().toISOString().slice(0, 7);
+            const savedBudget = await storage.get("flashLiteCloudBudget");
+            const budget = savedBudget?.month === month ? savedBudget : { month, calls: 0, bytes: 0 };
+            if (budget.calls >= FLASH_LITE_CLOUD_CALLS_PER_MONTH ||
+                budget.bytes + reservedBytes > FLASH_LITE_CLOUD_BYTES_PER_MONTH) {
+              return Response.json({ error: "flash_lite_monthly_limit" }, { status: 503 });
+            }
+            await storage.transaction(async txn => {
+              await txn.put(rateKey, { window, count: count + 1 });
+              await txn.put("flashLiteCloudBudget", { month, calls: budget.calls + 1, bytes: budget.bytes + reservedBytes });
+            });
+            return Response.json({ admissionMonth: month });
+          }
+          if (!Number.isSafeInteger(audioBytes) || audioBytes < 1 || audioBytes > reservedBytes) throw new Error("Invalid Flash Lite audio size.");
+          const billedMicros = unlimited ? 0 : cost;
+          const balance = (available - billedMicros) / 1e6;
+          const receipt = {
+            id: operationId, model: VOICE_FLASH_LITE_MODEL, status: "completed", chars, voice, format,
+            cost_usd: cost / 1e6, billed_usd: billedMicros / 1e6,
+          };
+          const entries = { [usageKey]: {
+            fingerprint: VOICE_FLASH_LITE_MODEL, status: "settled", createdAt: Date.now(), apiKeyId, source,
+            maximumMicros: cost, actualMicros: cost, billedMicros, unlimited, result: receipt,
+          } };
+          const budget = await storage.get("flashLiteCloudBudget");
+          // Failed or interrupted requests retain the full allowance. A settled request
+          // returns only bandwidth that the gateway verified it did not receive.
+          if (budget && budget.month === admissionMonth) {
+            entries.flashLiteCloudBudget = { ...budget, bytes: budget.bytes - reservedBytes + audioBytes };
+          }
+          await this.write(entries, unlimited ? {} : { [email]: balance });
+          return Response.json({ result: receipt, balance_usd: balance });
+        }
         if (action === 'usageStatus') {
           if (!email || !/^[A-Za-z0-9_-]{1,100}$/.test(operationId || '')) throw new Error('Invalid usage identity.');
           const record = await storage.get(`meteredUsage:${email}:${operationId}`);

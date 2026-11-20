@@ -37,6 +37,8 @@ Enterprise forms for 1,000 or more seats send an automatic acknowledgement to th
 
 Pushes to `main` deploy the static frontend to GitHub Pages. The Pages build includes an SPA fallback for `/models`, `/playground`, and subscription routes.
 
+[Voice Flash Lite setup](docs/voice-flash-lite.md) covers the speech API and the private Piper container on Google Cloud Run.
+
 ## Gift delivery and receiver preview
 
 Gifts use the signed-in sender's Gmail account after separate Google consent.

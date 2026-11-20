@@ -1,4 +1,6 @@
 import { IMAGE_TRANSLATION_MODEL } from "../shared/imageTranslation.mjs";
+import { isVoiceFlashLite, VOICE_FLASH_LITE_MODEL, VOICE_FLASH_LITE_NAME } from "../shared/voiceFlashLite.mjs";
+import { voiceFlashLite } from "./voiceFlashLite.mjs";
 import { transcriptionRequest, createLiveTranscription, connectLiveTranscription } from './transcription.mjs';
 import { meteredText } from './meteredText.mjs';
 import { BILLING_POLICY, STRIPE_API_VERSION, depositQuote, requireUsd, retrieveCheckout, subscriptionQuote } from "../shared/billing.mjs";
@@ -264,8 +266,8 @@ export default {
         return (u && !u.error) ? u : null;
       };
 
-      const requireUserBalance = async () => {
-        const user = await authenticateUser();
+      const requireUserBalance = async (user = undefined) => {
+        if (user === undefined) user = await authenticateUser();
         if (!user) {
           return { error: jsonResponse({ error: "sign_in_required", message: "Sign in before using models or provide Authorization: Bearer <API_KEY>." }, 401, requestOrigin) };
         }
@@ -378,6 +380,7 @@ export default {
               { id: "ExplainFusion", object: "model", created: 1730000000, owned_by: "lingofusion" },
               { id: "LingoFusion Voice", object: "model", created: 1730000000, owned_by: "lingofusion" },
               { id: "LingoFusion Voice Flash", object: "model", created: 1730000000, owned_by: "lingofusion" },
+              { id: VOICE_FLASH_LITE_MODEL, name: VOICE_FLASH_LITE_NAME, object: "model", owned_by: "lingofusion" },
               { id: "LingoFusion Transcribe", object: "model", owned_by: "lingofusion" },
               { id: "LingoFusion Live Transcribe", object: "model", owned_by: "lingofusion" },
             ],
@@ -798,9 +801,16 @@ export default {
         return jsonResponse({ ...result, sessionId: session.id, recipientEmail: session.metadata?.recipientEmail }, 200, requestOrigin);
       }
 
-      // 4. Voice Synthesis Proxy (server-side only using env.VOICE_API_KEY)
+      // 4. Voice synthesis. Provider credentials stay on the server.
       if (request.method === "POST" && (path === "/api/playground/speech" || path === "/v1/audio/speech")) {
-        const auth = await requireUserBalance();
+        const user = await authenticateUser();
+        if (!user || user.error) return (await requireUserBalance(user)).error;
+        const body = await request.json().catch(() => ({}));
+        if (isVoiceFlashLite(body?.model)) {
+          return await voiceFlashLite(request, body, user, env,
+            (data, status) => jsonResponse(data, status, requestOrigin), getCorsHeaders(requestOrigin));
+        }
+        const auth = await requireUserBalance(user);
         if (auth.error) return auth.error;
 
         const voiceKey = env.VOICE_API_KEY;
@@ -808,7 +818,6 @@ export default {
           return jsonResponse({ error: "voice_provider_not_configured", message: "VOICE_API_KEY secret is not set on Worker." }, 503);
         }
 
-        const body = await request.json().catch(() => ({}));
         const input = String(body.input || body.text || "").trim();
         if (!input) {
           return jsonResponse({ error: "missing_input", message: "Text input is required." }, 400);

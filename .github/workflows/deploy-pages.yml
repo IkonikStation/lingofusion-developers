@@ -35,6 +35,7 @@ jobs:
       - name: Check billing security
         run: |
           node --test scripts/test-billing.mjs
+          node --test scripts/test-voice-flash-lite.mjs
           node scripts/test-gifts.mjs
           node scripts/test-billing-node.mjs
           npm run test:text-billing

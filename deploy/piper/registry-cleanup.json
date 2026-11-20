@@ -1,0 +1,12 @@
+[
+  {
+    "name": "delete-superseded-images",
+    "action": {"type": "Delete"},
+    "condition": {"olderThan": "86400s"}
+  },
+  {
+    "name": "keep-current-image",
+    "action": {"type": "Keep"},
+    "mostRecentVersions": {"keepCount": 1}
+  }
+]

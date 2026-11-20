@@ -24,6 +24,11 @@ import {
 } from "./nodeTextMetered.mjs";
 import { buildModelSystemPrompt } from "./shared/systemPrompts.mjs";
 import { fetchTextProvider } from "./shared/textProvider.mjs";
+import {
+  isVoiceFlashLite, VOICE_FLASH_LITE_MODEL, VOICE_FLASH_LITE_NAME, VOICE_FLASH_LITE_PRICE,
+  FLASH_LITE_RATE_LIMIT, FLASH_LITE_WINDOW_MS, flashLiteCostMicros, FlashLiteError,
+  prepareFlashLiteSpeech, flashLiteProvider, synthesizeFlashLite, flashLiteAudioHeaders, flashLiteAudioDataUrl,
+} from "./shared/voiceFlashLite.mjs";
 
 const o200kEnc = getEncoding("o200k_base");
 
@@ -67,6 +72,13 @@ sqlDb.exec("CREATE TABLE IF NOT EXISTS billing_subscription_states (id TEXT PRIM
 sqlDb.exec("CREATE TABLE IF NOT EXISTS billing_invoices (id TEXT PRIMARY KEY, subscription_id TEXT NOT NULL)");
 sqlDb.exec("CREATE TABLE IF NOT EXISTS billing_orders (id TEXT PRIMARY KEY, body TEXT NOT NULL, refunded_cents INTEGER NOT NULL DEFAULT 0, credited_cents INTEGER NOT NULL DEFAULT 0)");
 initTextReservationTable(sqlDb);
+const admitFlashLite = sqlDb.prepare(`
+  INSERT INTO flash_lite_rate (user_id, window, requests) VALUES (?, ?, 1)
+  ON CONFLICT(user_id) DO UPDATE SET
+    requests = CASE WHEN window = excluded.window THEN requests + 1 ELSE 1 END,
+    window = excluded.window
+  WHERE window != excluded.window OR requests < ?
+`);
 
 const textModels = [
   { model: "LingoFusion Spark", input: 0.05, output: 0.25 },
@@ -87,6 +99,7 @@ const defaultPricingCatalog = [
   { model_id: "LingoFusion Ultra", provider: "lingofusion", upstream_model_name: "gpt-6.2-astra", input_per_million: 20.0000, output_per_million: 120.0000, is_active: 1 },
   { model_id: "LingoFusion Voice", provider: "lingofusion", upstream_model_name: "lf_voice_v4", input_per_million: 150.0000, output_per_million: 150.0000, is_active: 1 },
   { model_id: "LingoFusion Voice Flash", provider: "lingofusion", upstream_model_name: "lf_voice_v4_turbo", input_per_million: 80.0000, output_per_million: 80.0000, is_active: 1 },
+  { model_id: VOICE_FLASH_LITE_MODEL, provider: "lingofusion", upstream_model_name: VOICE_FLASH_LITE_MODEL, input_per_million: VOICE_FLASH_LITE_PRICE * 1000, output_per_million: 0, is_active: 1 },
 ];
 
 const imageModelCatalog = [
@@ -139,9 +152,8 @@ function seedDatabase() {
   }
 
   // Remove any non-LingoFusion models so only supported models exist
-  sqlDb.exec(
-    "DELETE FROM model_pricing WHERE model_id NOT IN ('LingoFusion Spark', 'LingoFusion Lite', 'LingoFusion', 'LingoFusion Pro', 'Ask LingoFusion', 'ExplainFusion', 'LingoFusion Ultra', 'LingoFusion Voice', 'LingoFusion Voice Flash')"
-  );
+  const catalogIds = defaultPricingCatalog.map(({ model_id }) => model_id);
+  sqlDb.prepare(`DELETE FROM model_pricing WHERE model_id NOT IN (${catalogIds.map(() => "?").join(", ")})`).run(...catalogIds);
 
   const upsertModel = sqlDb.prepare(`
     INSERT INTO model_pricing (model_id, provider, upstream_model_name, input_per_million, output_per_million, is_active)
@@ -224,6 +236,7 @@ function deductUserBalanceAndLogUsage({
   costUsd,
   source,
   db = null,
+  requireFullBalance = false,
 }) {
   const normalizedCost = Number(Number(costUsd).toFixed(6));
   const pTokens = Math.max(0, Math.trunc(Number(promptTokens) || 0));
@@ -234,9 +247,9 @@ function deductUserBalanceAndLogUsage({
   sqlDb.exec("BEGIN IMMEDIATE TRANSACTION");
   try {
     const updateStmt = sqlDb.prepare(
-      "UPDATE users SET balance_usd = ROUND(balance_usd - ?, 6) WHERE id = ? AND balance_usd >= 0"
+      "UPDATE users SET balance_usd = ROUND(balance_usd - ?, 6) WHERE id = ? AND balance_usd >= ?"
     );
-    const result = updateStmt.run(normalizedCost, userId);
+    const result = updateStmt.run(normalizedCost, userId, requireFullBalance ? normalizedCost : 0);
     if (!result || result.changes === 0) {
       sqlDb.exec("ROLLBACK");
       return { success: false, error: "insufficient_quota" };
@@ -460,6 +473,9 @@ const voiceModelRouting = {
 };
 
 export function resolveVoiceModelRouting(modelName) {
+  if (isVoiceFlashLite(modelName)) {
+    return { publicName: VOICE_FLASH_LITE_MODEL, provider: "lingofusion", upstream_model_name: "piper", pricePerThousandChars: VOICE_FLASH_LITE_PRICE };
+  }
   const normalized = String(modelName || "").trim().toLowerCase();
   for (const [key, value] of Object.entries(voiceModelRouting)) {
     if (key.toLowerCase() === normalized) {
@@ -2347,6 +2363,45 @@ async function handleImageTranslation({ res, body, user, source = "playground", 
   });
 }
 
+async function handleFlashLiteSpeech({ req, res, body, user, apiKeyId, source }) {
+  const error = (code, message, status) => send(res, status, { error: { code, message } });
+  const insufficient = () => error("insufficient_quota", "Insufficient balance. Please deposit credits.", 402);
+  try {
+    const speech = prepareFlashLiteSpeech(body, req.headers.accept ?? "", source === "playground");
+    const provider = flashLiteProvider(process.env, process.env.PIPER_LOCAL_DEVELOPMENT === "true");
+    const costUsd = flashLiteCostMicros(speech.chars) / 1e6;
+    if (user.balance_usd < costUsd) return insufficient();
+    const window = Math.floor(Date.now() / FLASH_LITE_WINDOW_MS);
+    if (!admitFlashLite.run(user.id, window, FLASH_LITE_RATE_LIMIT).changes) {
+      res.setHeader("Retry-After", "60");
+      return error("rate_limit_exceeded", `Flash Lite allows ${FLASH_LITE_RATE_LIMIT} requests per minute per account.`, 429);
+    }
+    const audio = await synthesizeFlashLite(provider, speech);
+    const charge = deductUserBalanceAndLogUsage({
+      userId: user.id, apiKeyId, modelId: VOICE_FLASH_LITE_MODEL, promptTokens: speech.chars,
+      completionTokens: 0, costUsd, source, requireFullBalance: true,
+    });
+    if (!charge.success) return insufficient();
+    const receipt = {
+      id: charge.ledgerId, model: VOICE_FLASH_LITE_MODEL, status: "completed", chars: speech.chars,
+      voice: speech.voice, format: speech.format, cost_usd: costUsd, billed_usd: costUsd, balance_usd: charge.balanceUsd,
+    };
+    if (speech.json) {
+      res.setHeader("Cache-Control", "no-store");
+      return send(res, 200, { ...receipt, audio_url: flashLiteAudioDataUrl(audio, speech.format) });
+    }
+    res.writeHead(200, {
+      ...flashLiteAudioHeaders(receipt, speech.format),
+      "Content-Length": audio.length,
+      "Access-Control-Allow-Origin": "*",
+    });
+    return res.end(audio);
+  } catch (cause) {
+    if (cause instanceof FlashLiteError) return error(cause.code, cause.message, cause.status);
+    return error("flash_lite_billing_unavailable", "Voice Flash Lite billing is temporarily unavailable.", 503);
+  }
+}
+
 // Handles Text-to-Speech generation: POST /v1/audio/speech
 async function handleTextToSpeech({ req, res, body, user, apiKeyId, source, db }) {
   const started = Date.now();
@@ -2357,7 +2412,7 @@ async function handleTextToSpeech({ req, res, body, user, apiKeyId, source, db }
   if (!route) {
     return send(res, 400, {
       error: {
-        message: `Unknown or unsupported voice model: '${requestedModel}'. Supported models: 'LingoFusion Voice', 'LingoFusion Voice Flash'.`,
+        message: `Unknown or unsupported voice model: '${requestedModel}'. Supported models: 'LingoFusion Voice', 'LingoFusion Voice Flash', '${VOICE_FLASH_LITE_MODEL}'.`,
         type: "invalid_request_error",
         code: "unsupported_model",
       },
@@ -3105,6 +3160,7 @@ async function route(req, res) {
         object: "model",
         created: 1735689600,
         owned_by: m.provider,
+        ...(m.model_id === VOICE_FLASH_LITE_MODEL && { name: VOICE_FLASH_LITE_NAME }),
         provider: m.provider,
         upstream_model_name: m.upstream_model_name,
         input_per_million: Number(m.input_per_million),
@@ -3193,6 +3249,15 @@ async function route(req, res) {
       }
 
       const body = await parseBody(req);
+      if (resolveVoiceModelRouting(body?.model)?.publicName === VOICE_FLASH_LITE_MODEL) {
+        if (isPlayground) {
+          const auth = authenticateBearerApiKey(req, db);
+          apiKeyId = auth.sqlKey?.id ?? null;
+          user = auth.user ?? billingBuyer(req, db);
+          if (!user) return send(res, 401, { error: { code: "sign_in_required", message: "Sign in or provide a valid API key." } });
+        }
+        return await handleFlashLiteSpeech({ req, res, body, user, apiKeyId, source: isPlayground ? "playground" : "api" });
+      }
       return await handleTextToSpeech({
         req,
         res,
