@@ -1472,7 +1472,7 @@ function lmStudioErrorFromConnection(error) {
   return providerError("lm_studio_server_not_running", 503, "LM Studio is not running or its local server is unavailable. Start the server in LM Studio and try again.");
 }
 
-async function resolveLmStudioModel(modelName = "LingoFusion Native-1.7B") {
+async function resolveLmStudioModel(modelName = "LingoFusion Native Air") {
   let response;
   try {
     response = await fetch(`${lmStudio.baseUrl}/models`, {
@@ -1492,7 +1492,7 @@ async function resolveLmStudioModel(modelName = "LingoFusion Native-1.7B") {
   if (models.length === 0) {
     throw providerError("lm_studio_no_model_loaded", 503, "No model is loaded in LM Studio. Load the selected Native model, start the local server, and try again.");
   }
-  const matcher = modelName === "LingoFusion Native-35B" ? /(?:qwen|native).*35b/i : modelName === "LingoFusion Native-9B" ? /qwen.*9b/i : /qwen.*1[._-]?7b/i;
+  const matcher = modelName === "LingoFusion Native Max" ? /(?:qwen|native).*35b/i : modelName === "LingoFusion Native Core" ? /qwen.*9b/i : /qwen.*1[._-]?7b/i;
   const localModel = models.find((model) => matcher.test(model.id));
   if (!localModel) {
     throw providerError("lm_studio_model_not_loaded", 503, `${modelName} is not available from LM Studio. Load it in LM Studio and try again.`);
@@ -4231,7 +4231,7 @@ async function route(req, res) {
       if (!text) return send(res, 400, { error: "invalid_request", message: "input is required", request_id: requestId });
       if (text.length > 20_000) return send(res, 413, { error: "input_too_large", message: "Tokenizer input is limited to 20,000 characters.", request_id: requestId });
 
-      if (model.model.startsWith("LingoFusion Native-")) {
+      if (model.model.startsWith("LingoFusion Native ")) {
         const { modelId, tokenIds } = await tokenizeWithLmStudio(text, model.model);
         return send(res, 200, {
           model: model.model,

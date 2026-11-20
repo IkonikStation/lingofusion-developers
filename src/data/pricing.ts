@@ -42,9 +42,9 @@ export type ImageModel = {
 };
 
 export const textModels: TextModel[] = [
-  { model: "LingoFusion Native-1.7B", inputUsd: 0, outputUsd: 0, local: true },
-  { model: "LingoFusion Native-9B", inputUsd: 0, outputUsd: 0, local: true, recommended: true },
-  { model: "LingoFusion Native-35B", inputUsd: 0, outputUsd: 0, local: true },
+  { model: "LingoFusion Native Air", inputUsd: 0, outputUsd: 0, local: true },
+  { model: "LingoFusion Native Core", inputUsd: 0, outputUsd: 0, local: true, recommended: true },
+  { model: "LingoFusion Native Max", inputUsd: 0, outputUsd: 0, local: true },
   { model: "LingoFusion Spark", inputUsd: 0.05, outputUsd: 0.25 },
   { model: "LingoFusion Lite", inputUsd: 0.50, outputUsd: 2.00 },
   {
@@ -89,21 +89,21 @@ export const webSearchPricing = [
 ] as const;
 
 export const textModelPresentations: Record<string, TextModelPresentation> = {
-  "LingoFusion Native-1.7B": {
+  "LingoFusion Native Air": {
     image: "/assets/models/lingofusion-native-1-7b.png",
     imageScale: 1.10,
     capability: "Free local translation for everyday language tasks on most modern computers.",
     bestFor: "Everyday translation, fast local inference, and lower-memory devices.",
     features: ["1.7B parameters", "32K context", "8 GB RAM minimum", "~1.3 GB download", "Free · Runs locally"],
   },
-  "LingoFusion Native-9B": {
+  "LingoFusion Native Core": {
     image: "/assets/models/lingofusion-native-9b.png",
     imageScale: 1.08,
     capability: "Capable local translation for most users, designed around mainstream 16 GB-class computers.",
     bestFor: "Everyday professional translation with a practical quality, speed, and hardware balance.",
     features: ["9B parameters", "Recommended for most users", "Free · Runs locally", "Build-specific local requirements"],
   },
-  "LingoFusion Native-35B": {
+  "LingoFusion Native Max": {
     image: "/assets/models/lingofusion-native-35b.png",
     imageScale: 2.30,
     capability: "High-quality local translation for difficult multilingual work, powered entirely by your own hardware.",
@@ -244,9 +244,9 @@ export const latestModels = [
   "ExplainFusion",
   "LingoFusion",
   "LingoFusion Lite",
-  "LingoFusion Native-1.7B",
-  "LingoFusion Native-9B",
-  "LingoFusion Native-35B",
+  "LingoFusion Native Air",
+  "LingoFusion Native Core",
+  "LingoFusion Native Max",
   "LingoFusion Spark",
   "LingoFusion Voice",
   "LingoFusion Voice Flash",
@@ -296,9 +296,9 @@ export const navMenus = {
     "ExplainFusion",
     "LingoFusion",
     "LingoFusion Lite",
-    "LingoFusion Native-1.7B",
-    "LingoFusion Native-9B",
-    "LingoFusion Native-35B",
+    "LingoFusion Native Air",
+    "LingoFusion Native Core",
+    "LingoFusion Native Max",
     "LingoFusion Spark",
     "LingoFusion Transcribe",
     "LingoFusion Live Transcribe",
@@ -353,11 +353,11 @@ export const modelDetails: Record<string, string> = {
     "Low-cost, fast model for simple translation, extraction, and classification.",
   "LingoFusion Spark":
     "Ultra-efficient model for high-volume utility tasks and latency-sensitive flows.",
-  "LingoFusion Native-1.7B":
+  "LingoFusion Native Air":
     "Lightweight free local translation for everyday tasks on ordinary computers.",
-  "LingoFusion Native-9B":
+  "LingoFusion Native Core":
     "Capable free local translation for everyday professional work on mainstream computers.",
-  "LingoFusion Native-35B":
+  "LingoFusion Native Max":
     "Higher-quality free local translation for difficult multilingual work on powerful computers.",
   "LingoFusion Voice":
     "Expressive multilingual speech generation with strong pronunciation control.",

@@ -47,9 +47,9 @@ const routes = [
   "models/explainfusion",
   "models/lingofusion-explain",
   "models/lingofusion-ultra",
-  "models/lingofusion-native-1-7b",
-  "models/lingofusion-native-9b",
-  "models/lingofusion-native-35b",
+  "models/lingofusion-native-air",
+  "models/lingofusion-native-core",
+  "models/lingofusion-native-max",
 ];
 
 for (const route of routes) {

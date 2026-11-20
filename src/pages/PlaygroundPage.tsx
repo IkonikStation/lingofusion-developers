@@ -110,9 +110,9 @@ function readFileAsDataUrl(file: File): Promise<string> {
 }
 
 const ALLOWED_LINGOFUSION_MODELS = [
-  "LingoFusion Native-1.7B",
-  "LingoFusion Native-9B",
-  "LingoFusion Native-35B",
+  "LingoFusion Native Air",
+  "LingoFusion Native Core",
+  "LingoFusion Native Max",
   "LingoFusion Spark",
   "LingoFusion Lite",
   "LingoFusion",
@@ -3768,7 +3768,7 @@ export function PlaygroundPage({
             </button>
             {latestRun && !isRunning && (
               <span className="text-xs tabular-nums text-neutral-600 dark:text-neutral-400" data-testid="playground-final-cost">
-                {latestRun.model.startsWith("LingoFusion Native-") ? "Free" : `Cost: $${Number(latestRun.costUsd || 0).toFixed(6)}`}
+                {latestRun.model.startsWith("LingoFusion Native ") ? "Free" : `Cost: $${Number(latestRun.costUsd || 0).toFixed(6)}`}
               </span>
             )}
           </div>
