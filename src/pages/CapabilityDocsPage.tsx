@@ -1,6 +1,8 @@
 import { ArrowRight, BookOpen, Check, Copy, ExternalLink } from "lucide-react";
 import { useState } from "react";
+import { DiscountBadge, PromoPriceValue } from "../components/PromoPrice";
 import { dubbingModels, imageModels, musicModels, pdfModels, textModels, transcriptionModels, ttsModels } from "../data/pricing";
+import { usePromotion } from "../data/promotion";
 
 type Guide = {
   title: string; eyebrow: string; intro: string; input: string; process: string; output: string;
@@ -91,9 +93,22 @@ export function isCapabilityGuide(page: string) { return Boolean(guides[page]); 
 
 export function CapabilityDocsPage({ page, onNavigate }: { page: string; onNavigate: (page: string, query?: Record<string, string>) => void }) {
   const guide = guides[page];
+  const { getModelOffer } = usePromotion();
   const [copied, setCopied] = useState(false);
-  const comparable = (unit: string) => guide.prices.filter((p) => p.unit === unit && p.amount !== null);
-  const hasComparisons = guide.prices.some((p) => p.amount !== null && comparable(p.unit).length > 1);
+  const resolvedPrices = guide.prices.map((item) => {
+    const promo = page === "Text generation" ? getModelOffer(item.name, "instant") : null;
+    if (!promo) return { ...item, promotion: null as ReturnType<typeof getModelOffer>, originalAmount: item.amount, originalNote: item.note };
+    return {
+      ...item,
+      amount: promo.inputUsd,
+      originalAmount: promo.originalInputUsd,
+      note: `$${promo.outputUsd.toFixed(2)} / 1M output tokens`,
+      originalNote: `$${promo.originalOutputUsd.toFixed(2)} / 1M output tokens`,
+      promotion: promo,
+    };
+  });
+  const comparable = (unit: string) => resolvedPrices.filter((p) => p.unit === unit && p.amount !== null);
+  const hasComparisons = resolvedPrices.some((p) => p.amount !== null && comparable(p.unit).length > 1);
   async function copySample() {
     if (!guide.sample) return;
     try { await navigator.clipboard.writeText(guide.sample); setCopied(true); window.setTimeout(() => setCopied(false), 2000); } catch { setCopied(false); }
@@ -120,7 +135,43 @@ export function CapabilityDocsPage({ page, onNavigate }: { page: string; onNavig
         </section>
         <section id="use-cases" className="scroll-mt-24 pt-12"><h2 className="text-2xl font-semibold tracking-tight">What you can build</h2><div className="mt-5 grid gap-3 sm:grid-cols-3">{guide.uses.map((item) => <div key={item} className="rounded-xl border border-neutral-200 p-5 text-sm leading-6 text-neutral-700 dark:border-neutral-800 dark:text-neutral-300"><Check className="mb-4 h-4 w-4 text-emerald-600" />{item}</div>)}</div></section>
         <section id="models-pricing" className="scroll-mt-24 pt-12"><div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-semibold tracking-tight">Models and pricing</h2><p className="mt-2 text-sm text-neutral-500">Compare the available options and their published rates.</p></div><button type="button" onClick={() => onNavigate("Pricing")} className="text-sm font-medium underline underline-offset-4">All pricing</button></div>
-          <div className="mt-5 overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800"><div className="divide-y divide-neutral-200 dark:divide-neutral-800">{guide.prices.map((item) => <div key={item.name} className="grid gap-2 p-4 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,0.7fr)] sm:items-center"><span className="text-sm font-medium">{item.name}</span><div><p className="text-sm font-semibold tabular-nums">{item.amount === null ? "To be determined" : `$${item.amount < 0.1 ? item.amount.toFixed(3).replace(/0$/, "") : item.amount.toFixed(2)}`} <span className="font-normal text-neutral-500">{item.unit}</span></p>{item.note && <p className="mt-1 text-xs text-neutral-500">{item.note}</p>}{item.amount !== null && comparable(item.unit).length > 1 && <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800"><div className="h-full rounded-full bg-neutral-700 dark:bg-neutral-300" style={{width: `${(item.amount / Math.max(...comparable(item.unit).map((p) => p.amount ?? 0), 0.01)) * 100}%`}} /></div>}</div></div>)}</div></div>
+          <div className="mt-5 overflow-hidden rounded-xl border border-neutral-200 dark:border-neutral-800"><div className="divide-y divide-neutral-200 dark:divide-neutral-800">{resolvedPrices.map((item) => {
+            const fmt = (val: number) => `$${val < 0.1 ? val.toFixed(3).replace(/0$/, "") : val.toFixed(2)}`;
+            return (
+            <div key={item.name} className="grid gap-2 p-4 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,0.7fr)] sm:items-center">
+              <span className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                <span>{item.name}</span>
+                {item.promotion && <DiscountBadge promotion={item.promotion} compact />}
+              </span>
+              <div>
+                <p className="text-sm font-semibold tabular-nums">
+                  {item.amount === null ? "To be determined" : (
+                    <PromoPriceValue
+                      price={fmt(item.amount)}
+                      originalPrice={item.originalAmount !== null ? fmt(item.originalAmount) : undefined}
+                      discounted={Boolean(item.promotion && item.promotion.inputDiscountPercent > 0)}
+                    />
+                  )}{" "}
+                  <span className="font-normal text-neutral-500">{item.unit}</span>
+                </p>
+                {item.note && (
+                  <p className="mt-1 text-xs text-neutral-500">
+                    {item.promotion && item.promotion.outputDiscountPercent > 0 ? (
+                      <PromoPriceValue
+                        price={item.note}
+                        originalPrice={item.originalNote}
+                        discounted
+                      />
+                    ) : (
+                      item.note
+                    )}
+                  </p>
+                )}
+                {item.amount !== null && comparable(item.unit).length > 1 && <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800"><div className="h-full rounded-full bg-neutral-700 dark:bg-neutral-300" style={{width: `${(item.amount / Math.max(...comparable(item.unit).map((p) => p.amount ?? 0), 0.01)) * 100}%`}} /></div>}
+              </div>
+            </div>
+            );
+          })}</div></div>
           {hasComparisons && <p className="mt-2 text-xs text-neutral-500">Bars compare the listed rates using the same billing unit.</p>}
         </section>
         {guide.sample && <section id="example" className="scroll-mt-24 pt-12"><h2 className="text-2xl font-semibold tracking-tight">Example request</h2><p className="mt-3 text-sm leading-6 text-neutral-500">Use an API key with access to this capability. Keep your key in an environment variable.</p><div className="mt-5 overflow-hidden rounded-xl bg-neutral-950 text-neutral-100"><div className="flex items-center justify-between border-b border-white/10 px-4 py-3 text-xs text-neutral-400"><span className="font-mono">POST {guide.endpoint}</span><button type="button" onClick={copySample} className="inline-flex items-center gap-1.5 text-neutral-300 hover:text-white"><Copy className="h-3.5 w-3.5" />{copied ? "Copied" : "Copy"}</button></div><pre className="overflow-x-auto p-5 text-xs leading-6"><code>{guide.sample}</code></pre></div></section>}

@@ -18,14 +18,15 @@ import {
   musicModels,
   pdfModels,
   textModelPresentations,
-  textModelsByPricingMode,
   transcriptionModels,
   ttsModels,
   webSearchPricing,
 } from "../data/pricing";
-import type { TextModel, TextPricingMode } from "../data/pricing";
+import type { TextPricingMode } from "../data/pricing";
+import { usePromotion } from "../data/promotion";
 import { PricingCard } from "../components/PricingCard";
 import type { PricingLabels } from "../components/PricingCard";
+import { BlackFridaySpotlightCard } from "../components/PromoPrice";
 import {
   ModelIcon,
   NumberField,
@@ -133,8 +134,10 @@ export function PricingPage({
     return `${displayCurrency(usdAmount, true)}${suffix}`;
   };
 
-  const visibleTextModels = textModelsByPricingMode[textPricingMode].filter((model) => !model.local);
-  const calculatorTextModels = textModelsByPricingMode[textPricingMode].filter((model) => !model.local);
+  const { promotion, getEffectiveTextModels } = usePromotion();
+  const effectiveTextModels = getEffectiveTextModels(textPricingMode);
+  const visibleTextModels = effectiveTextModels.filter((model) => !model.local);
+  const calculatorTextModels = effectiveTextModels.filter((model) => !model.local);
   const selectedTextModel = calculatorTextModels.find((model) => model.model === selectedModel) ?? calculatorTextModels[0];
   const selectedTts = characterTtsModels.find((model) => model.model === selectedTtsModel) ?? characterTtsModels[0];
   const selectedTranscription = transcriptionModels.find((model) => model.model === selectedTranscriptionModel) ?? transcriptionModels[0];
@@ -144,11 +147,13 @@ export function PricingPage({
   const selectedPdf = pdfModels.find((model) => model.model === selectedPdfModel) ?? pdfModels[0];
 
   const textPricingDescription = textPricingMode === "fast"
-    ? "Fast mode is priced at 1.5× Default for supported models."
+    ? "Fast mode is priced at 1.5× Default for supported models." + (promotion.active ? " Black Friday discounts apply to standard Default processing only." : "")
     : textPricingMode === "ultrafast"
-    ? "Ultrafast is 6× the Default price. Available only for Pro and Ultra."
+    ? "Ultrafast is 6× the Default price. Available only for Pro and Ultra." + (promotion.active ? " Black Friday discounts apply to standard Default processing only." : "")
     : textPricingMode === "instant"
-    ? "Real-time streaming processing with immediate results."
+    ? promotion.active
+      ? "Real-time streaming processing with immediate results. Black Friday discounts apply automatically to eligible models up to 272K context (no stacking with other modes)."
+      : "Real-time streaming processing with immediate results."
     : "Reference Batch rates are 50% of Default. Asynchronous Batch processing is not currently available on these translation routes.";
 
   const pricingLabels: PricingLabels = {
@@ -165,7 +170,14 @@ export function PricingPage({
     deprecated: model.model === "LingoFusion Spark",
     input: model.local ? "Free" : displayCurrency(model.inputUsd, true),
     output: model.local ? "Free" : displayCurrency(model.outputUsd, true),
+    originalInput: model.local ? undefined : displayCurrency(model.originalInputUsd, true),
+    originalOutput: model.local ? undefined : displayCurrency(model.originalOutputUsd, true),
+    promotion: model.promotion,
   }));
+  const spotlightPromoModels =
+    promotion.active && textPricingMode === "instant"
+      ? visibleTextModels.filter((model) => Boolean(model.promotion))
+      : [];
   const displayedCloudTextModels = displayedTextModels.filter((model) => !model.local);
   const displayedTtsModels = ttsModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
   const displayedTranscriptionModels = transcriptionModels.map((model) => ({ ...model, price: displayPrice(model.priceUsd, model.pricingUnit) }));
@@ -281,6 +293,20 @@ export function PricingPage({
             />
           </SectionCalculator>
           <p className="mt-3 text-xs text-neutral-500">Output includes reasoning tokens. Playground provides a request-specific maximum quote.</p>
+
+          {spotlightPromoModels.length > 0 && (
+            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {spotlightPromoModels.map((model) => (
+                <BlackFridaySpotlightCard
+                  key={model.model}
+                  modelName={model.model}
+                  promotion={model.promotion!}
+                  formatUsd={(amount) => displayCurrency(amount, true)}
+                  onClick={() => onOpenModel(model.model)}
+                />
+              ))}
+            </div>
+          )}
 
           <PricingCard
             key={`text-${textPricingMode}-${currencyPresentationKey}`}

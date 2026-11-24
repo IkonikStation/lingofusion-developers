@@ -1,9 +1,12 @@
 import { ArrowDown, ArrowRight, Image as ImageIcon, Search, X } from "lucide-react";
 import { useState } from "react";
 import { ModelIcon, SelectField } from "../components/shared/FormFields";
+import { DiscountBadge, PromoPriceValue } from "../components/PromoPrice";
 import { nativeLocalModels } from "../data/nativeLocal";
-import { imageModels, textModelPresentations, textModelsByPricingMode, webSearchPricing } from "../data/pricing";
+import { imageModels, textModelPresentations, webSearchPricing } from "../data/pricing";
 import type { TextModel, TextPricingMode } from "../data/pricing";
+import { usePromotion } from "../data/promotion";
+import type { EffectiveTextModel } from "../data/promotion";
 import { modelSlug, withBasePath } from "../lib/utils";
 
 type CategoryTab = "all" | "flagship" | "efficient" | "local";
@@ -22,8 +25,9 @@ export function ModelsPage({
   const [pricingMode, setPricingMode] = useState<TextPricingMode>("instant");
   const [leftModelName, setLeftModelName] = useState("LingoFusion");
   const [rightModelName, setRightModelName] = useState("LingoFusion Pro");
-  const catalog = textModelsByPricingMode.instant;
-  const models = textModelsByPricingMode[pricingMode];
+  const { getEffectiveTextModels } = usePromotion();
+  const catalog = getEffectiveTextModels("instant");
+  const models = getEffectiveTextModels(pricingMode);
   const query = searchQuery.trim().toLowerCase();
   const filtered = catalog.filter((model) => {
     const presentation = textModelPresentations[model.model];
@@ -36,7 +40,7 @@ export function ModelsPage({
   });
   const featured = ["LingoFusion", "LingoFusion Pro", "LingoFusion Ultra"]
     .map((name) => catalog.find((model) => model.model === name))
-    .filter((model): model is TextModel => Boolean(model));
+    .filter((model): model is EffectiveTextModel => Boolean(model));
   const leftModel = models.find((model) => model.model === leftModelName) ?? models[0];
   const rightModel = models.find((model) => model.model === rightModelName) ?? models[1] ?? models[0];
 
@@ -73,9 +77,31 @@ export function ModelsPage({
               <div className={`models-art models-art-${index}`}>
                 <img src={`${import.meta.env.BASE_URL}${presentation.image.replace(/^\//, "")}`} alt="" loading="eager" />
               </div>
-              <div className="models-featured-title"><h3>{model.model}</h3><ArrowRight size={19} /></div>
+              <div className="models-featured-title">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3>{model.model}</h3>
+                  {model.promotion && <DiscountBadge promotion={model.promotion} compact />}
+                </div>
+                <ArrowRight size={19} />
+              </div>
               <p>{presentation.capability}</p>
-              <div className="models-featured-price"><span>${model.inputUsd.toFixed(2)} input</span><span>${model.outputUsd.toFixed(2)} output</span><small>per 1M tokens</small></div>
+              <div className="models-featured-price">
+                <span>
+                  <PromoPriceValue
+                    price={`$${model.inputUsd.toFixed(2)}`}
+                    originalPrice={`$${model.originalInputUsd.toFixed(2)}`}
+                    discounted={Boolean(model.promotion && model.promotion.inputDiscountPercent > 0)}
+                  />{" "}input
+                </span>
+                <span>
+                  <PromoPriceValue
+                    price={`$${model.outputUsd.toFixed(2)}`}
+                    originalPrice={`$${model.originalOutputUsd.toFixed(2)}`}
+                    discounted={Boolean(model.promotion && model.promotion.outputDiscountPercent > 0)}
+                  />{" "}output
+                </span>
+                <small>per 1M tokens</small>
+              </div>
             </>);
           })}
         </div>
@@ -99,13 +125,35 @@ export function ModelsPage({
               <div className="flex items-center gap-3.5 min-w-0">
                 <ModelIcon presentation={presentation} size="catalog" />
                 <div className="min-w-0">
-                  <h3>{model.model}{model.local && <span className="models-local-label">Local</span>}</h3>
+                  <h3 className="flex flex-wrap items-center gap-2">
+                    <span>{model.model}</span>
+                    {model.local && <span className="models-local-label">Local</span>}
+                    {model.promotion && <DiscountBadge promotion={model.promotion} compact />}
+                  </h3>
                   <p>{presentation?.capability}</p>
                 </div>
               </div>
               <span className="models-spec"><small>Context</small>{localSpecs(model)?.context ?? "1M tokens"}</span>
-              <span className="models-spec"><small>Input / 1M</small>{model.local ? "Free" : `$${model.inputUsd.toFixed(2)}`}</span>
-              <span className="models-spec"><small>Output / 1M</small>{model.local ? "Free" : `$${model.outputUsd.toFixed(2)}`}</span>
+              <span className="models-spec">
+                <small>Input / 1M</small>
+                {model.local ? "Free" : (
+                  <PromoPriceValue
+                    price={`$${model.inputUsd.toFixed(2)}`}
+                    originalPrice={`$${model.originalInputUsd.toFixed(2)}`}
+                    discounted={Boolean(model.promotion && model.promotion.inputDiscountPercent > 0)}
+                  />
+                )}
+              </span>
+              <span className="models-spec">
+                <small>Output / 1M</small>
+                {model.local ? "Free" : (
+                  <PromoPriceValue
+                    price={`$${model.outputUsd.toFixed(2)}`}
+                    originalPrice={`$${model.originalOutputUsd.toFixed(2)}`}
+                    discounted={Boolean(model.promotion && model.promotion.outputDiscountPercent > 0)}
+                  />
+                )}
+              </span>
               <ArrowRight className="models-row-arrow" size={18} />
             </>);
           })}
@@ -174,12 +222,43 @@ export function ModelsPage({
           {[{ label: "Model A", model: leftModel, change: setLeftModelName }, { label: "Model B", model: rightModel, change: setRightModelName }].map(({ label, model, change }) => (
             <div key={label}>
               <SelectField label={label} value={model.model} onChange={change}>{models.map((option) => <option key={option.model} value={option.model}>{option.model}</option>)}</SelectField>
-              <dl className="models-comparison">{[
-                ["Input / 1M tokens", model.local ? "Free" : `$${model.inputUsd.toFixed(2)}`],
-                ["Output / 1M tokens", model.local ? "Free" : `$${model.outputUsd.toFixed(2)}`],
-                ["Context window", localSpecs(model)?.context ?? "1M tokens"],
-                ["Best for", textModelPresentations[model.model]?.bestFor ?? "Multilingual translation"],
-              ].map(([labelText, value]) => <div key={labelText}><dt>{labelText}</dt><dd>{value}</dd></div>)}</dl>
+              <dl className="models-comparison">
+                <div>
+                  <dt>Input / 1M tokens</dt>
+                  <dd>
+                    {model.local ? "Free" : (
+                      <span className="inline-flex flex-wrap items-center gap-2">
+                        <PromoPriceValue
+                          price={`$${model.inputUsd.toFixed(2)}`}
+                          originalPrice={`$${model.originalInputUsd.toFixed(2)}`}
+                          discounted={Boolean(model.promotion && model.promotion.inputDiscountPercent > 0)}
+                        />
+                        {model.promotion && <DiscountBadge promotion={model.promotion} compact />}
+                      </span>
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Output / 1M tokens</dt>
+                  <dd>
+                    {model.local ? "Free" : (
+                      <PromoPriceValue
+                        price={`$${model.outputUsd.toFixed(2)}`}
+                        originalPrice={`$${model.originalOutputUsd.toFixed(2)}`}
+                        discounted={Boolean(model.promotion && model.promotion.outputDiscountPercent > 0)}
+                      />
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Context window</dt>
+                  <dd>{localSpecs(model)?.context ?? "1M tokens"}</dd>
+                </div>
+                <div>
+                  <dt>Best for</dt>
+                  <dd>{textModelPresentations[model.model]?.bestFor ?? "Multilingual translation"}</dd>
+                </div>
+              </dl>
               {modelLink(model, "models-text-link mt-5", <>Model details <ArrowRight size={15} /></>)}
             </div>
           ))}

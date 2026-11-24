@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { getEncoding } from "js-tiktoken";
 import { buildModelSystemPrompt } from "./shared/systemPrompts.mjs";
 import { prepareTextRequest, verifyAndPrice } from "./shared/textRequest.mjs";
-import { TEXT_PRICING_VERSION, textPricePolicy, priceTextUsage } from "./shared/textPricing.mjs";
+import { TEXT_PRICING_VERSION, textPricePolicy, priceTextUsage, resolveEffectivePolicy } from "./shared/textPricing.mjs";
 
 let encoder;
 const getTokenizer = () => (encoder ||= getEncoding("o200k_base"));
@@ -43,12 +43,12 @@ export function initTextReservationTable(sqlDb) {
   } catch {}
 }
 
-export function prepareNodeTextRequest(body, defaultModelName = "LingoFusion") {
-  return prepareTextRequest({ ...body, model: body.model || defaultModelName });
+export function prepareNodeTextRequest(body, defaultModelName = "LingoFusion", nowMs = Date.now()) {
+  return prepareTextRequest({ ...body, model: body.model || defaultModelName }, nowMs);
 }
 
-export function quoteNodeTextRequest(body, defaultModelName = "LingoFusion") {
-  const prepared = prepareNodeTextRequest(body, defaultModelName);
+export function quoteNodeTextRequest(body, defaultModelName = "LingoFusion", nowMs = Date.now()) {
+  const prepared = prepareNodeTextRequest(body, defaultModelName, nowMs);
   return {
     model: prepared.policy.model,
     pricing_version: TEXT_PRICING_VERSION,
@@ -59,6 +59,7 @@ export function quoteNodeTextRequest(body, defaultModelName = "LingoFusion") {
     instruction_tokens_estimate: prepared.systemTokens,
     max_completion_tokens: prepared.maxOutput,
     billed_input_tokens: prepared.maximum.billed_input_tokens,
+    promotion: prepared.promotion || null,
     notice: prepared.policy.conversationInputOnly
       ? "Conversation input and generated output are billed. The system prompt and message framing are excluded."
       : "Total input is billed at the published input rate. Output includes reasoning. No additional service fee. Final token charges round up once to six decimal USD places.",
@@ -304,8 +305,9 @@ export function markNodeTextUncertain(sqlDb, operationId, userId = null) {
   } catch {}
 }
 
-export function settleSimulatedTextUsage(sqlDb, { userId, apiKeyId, modelName = "LingoFusion", userTokens, outputTokens, mode = "default", source = "playground", db = null, systemTokens }) {
-  const policy = textPricePolicy(modelName, false);
+export function settleSimulatedTextUsage(sqlDb, { userId, apiKeyId, modelName = "LingoFusion", userTokens, outputTokens, mode = "default", source = "playground", db = null, systemTokens, nowMs = Date.now() }) {
+  const basePolicy = textPricePolicy(modelName, false);
+  const policy = resolveEffectivePolicy(basePolicy, { nowMs, mode, longContext: false });
   const rawMaximum = userTokens + (systemTokens ?? countTextTokens(buildModelSystemPrompt({ modelName })));
   const price = priceTextUsage({
     policy,
@@ -381,9 +383,11 @@ export function settleSimulatedTextUsage(sqlDb, { userId, apiKeyId, modelName = 
   }
 }
 
-export function priceTranslateUsage({ modelName, inputTokens, outputTokens, pricingMode = "default", rawInputTokens, cachedTokens = 0, cacheWriteTokens = 0 }) {
-  const policy = textPricePolicy(modelName, false);
+export function priceTranslateUsage({ modelName, inputTokens, outputTokens, pricingMode = "default", rawInputTokens, cachedTokens = 0, cacheWriteTokens = 0, nowMs = Date.now() }) {
+  const basePolicy = textPricePolicy(modelName, false);
   const rawMax = rawInputTokens && rawInputTokens >= inputTokens ? rawInputTokens : (inputTokens + countTextTokens(buildModelSystemPrompt({ modelName })));
+  const longContext = basePolicy.provider !== "openrouter" && rawMax > 272000;
+  const policy = resolveEffectivePolicy(basePolicy, { nowMs, mode: pricingMode, longContext });
   const price = priceTextUsage({
     policy,
     mode: pricingMode,
@@ -392,7 +396,8 @@ export function priceTranslateUsage({ modelName, inputTokens, outputTokens, pric
     rawInputTokens: rawMax,
     cachedTokens,
     cacheWriteTokens,
-    longContext: false,
+    longContext,
   });
+  price.promotion = policy.promotion;
   return price;
 }

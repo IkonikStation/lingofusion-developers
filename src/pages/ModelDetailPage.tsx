@@ -18,8 +18,11 @@ import { useState } from "react";
 import { formatCurrencyAmount } from "../data/currency";
 import { nativeLocalModels } from "../data/nativeLocal";
 import { modelPriceTone } from "../data/priceTone";
-import { textModelPresentations, textModelsByPricingMode } from "../data/pricing";
-import type { TextModel, TextPricingMode } from "../data/pricing";
+import { textModelPresentations } from "../data/pricing";
+import type { TextPricingMode } from "../data/pricing";
+import { usePromotion } from "../data/promotion";
+import type { EffectiveTextModel } from "../data/promotion";
+import { BlackFridaySpotlightCard, DiscountBadge, PromoPriceValue } from "../components/PromoPrice";
 import { modelSlug } from "../lib/utils";
 import { ModelIcon, RatingMarks } from "../components/shared/FormFields";
 
@@ -157,9 +160,10 @@ export function ModelDetailPage({
   onCompare: () => void;
   onOpenPlayground: () => void;
 }) {
-  const defaultModel = textModelsByPricingMode.instant.find((model) => model.model === modelName);
-  const batchModel = textModelsByPricingMode.batch.find((model) => model.model === modelName);
-  const fastModel = textModelsByPricingMode.fast.find((model) => model.model === modelName);
+  const { getEffectiveTextModels } = usePromotion();
+  const defaultModel = getEffectiveTextModels("instant").find((model) => model.model === modelName);
+  const batchModel = getEffectiveTextModels("batch").find((model) => model.model === modelName);
+  const fastModel = getEffectiveTextModels("fast").find((model) => model.model === modelName);
   const presentation = textModelPresentations[modelName];
   const profile = modelProfileSpecs[modelName];
   const [pricingMode, setPricingMode] = useState<TextPricingMode>("instant");
@@ -173,8 +177,8 @@ export function ModelDetailPage({
   const isLocalModel = Boolean(defaultModel.local);
   const hasBatchPricing = Boolean(batchModel);
   const localModel = isLocalModel ? nativeLocalModels[modelName as keyof typeof nativeLocalModels] : null;
-  const ultrafastModel = textModelsByPricingMode.ultrafast.find((model) => model.model === modelName);
-  const activePrice =
+  const ultrafastModel = getEffectiveTextModels("ultrafast").find((model) => model.model === modelName);
+  const activePrice: EffectiveTextModel =
     pricingMode === "fast" && fastModel
       ? fastModel
       : pricingMode === "ultrafast" && ultrafastModel
@@ -182,7 +186,7 @@ export function ModelDetailPage({
       : pricingMode === "batch" && hasBatchPricing
       ? batchModel!
       : defaultModel;
-  const comparisonModels = textModelsByPricingMode[pricingMode];
+  const comparisonModels = getEffectiveTextModels(pricingMode);
   const comparisonMax = Math.max(
     ...comparisonModels.map((model) => model[comparisonMetric === "input" ? "inputUsd" : "outputUsd"]),
   );
@@ -307,9 +311,30 @@ export function ModelDetailPage({
           </div>
           <div className="bg-white p-5 text-center dark:bg-[#0e0e11]">
             <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Price (USD)</p>
-            <p className={`mt-2 font-sans tabular-nums text-base font-bold ${modelPriceTone(modelName)}`}>
-              {isLocalModel ? "Free (Local)" : `${price(activePrice.inputUsd)} / ${price(activePrice.outputUsd)}`}
-            </p>
+            <div className={`mt-2 font-sans tabular-nums text-base font-bold ${modelPriceTone(modelName)}`}>
+              {isLocalModel ? (
+                "Free (Local)"
+              ) : activePrice.promotion ? (
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex flex-wrap items-baseline justify-center gap-1.5">
+                    <PromoPriceValue
+                      price={price(activePrice.inputUsd)}
+                      originalPrice={price(activePrice.originalInputUsd)}
+                      discounted={activePrice.promotion.inputDiscountPercent > 0}
+                    />
+                    <span className="text-neutral-400">/</span>
+                    <PromoPriceValue
+                      price={price(activePrice.outputUsd)}
+                      originalPrice={price(activePrice.originalOutputUsd)}
+                      discounted={activePrice.promotion.outputDiscountPercent > 0}
+                    />
+                  </div>
+                  <DiscountBadge promotion={activePrice.promotion} compact />
+                </div>
+              ) : (
+                `${price(activePrice.inputUsd)} / ${price(activePrice.outputUsd)}`
+              )}
+            </div>
             <p className="mt-1 text-[11px] text-neutral-500">Per 1M In / Out</p>
           </div>
           <div className="bg-white p-5 text-center dark:bg-[#0e0e11]">
@@ -374,20 +399,28 @@ export function ModelDetailPage({
           ) : (
             <>
               <p className="mb-4 text-xs leading-5 text-neutral-500">{modelName === "Ask LingoFusion" ? "Only conversation input and generated output are billed. The system prompt and message framing are excluded." : "Total input is billed at the displayed input rate. Output includes reasoning tokens. There is no additional service fee. Playground shows the maximum price before translation; some processing modes may be unavailable."}</p>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-neutral-200/80 bg-neutral-50/80 p-4 dark:border-white/[0.08] dark:bg-white/[0.03]">
-                  <p className="text-xs text-neutral-500">Input / 1M</p>
-                  <p className="mt-1 font-sans tabular-nums text-xl font-bold text-neutral-950 dark:text-white">{price(activePrice.inputUsd)}</p>
+              {activePrice.promotion ? (
+                <BlackFridaySpotlightCard
+                  modelName={modelName}
+                  promotion={activePrice.promotion}
+                  formatUsd={price}
+                />
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl border border-neutral-200/80 bg-neutral-50/80 p-4 dark:border-white/[0.08] dark:bg-white/[0.03]">
+                    <p className="text-xs text-neutral-500">Input / 1M</p>
+                    <p className="mt-1 font-sans tabular-nums text-xl font-bold text-neutral-950 dark:text-white">{price(activePrice.inputUsd)}</p>
+                  </div>
+                  <div className="rounded-xl border border-neutral-200/80 bg-neutral-50/80 p-4 dark:border-white/[0.08] dark:bg-white/[0.03]">
+                    <p className="text-xs text-neutral-500">Output / 1M</p>
+                    <p className="mt-1 font-sans tabular-nums text-xl font-bold text-neutral-950 dark:text-white">{price(activePrice.outputUsd)}</p>
+                  </div>
+                  <div className="rounded-xl border border-neutral-200/80 bg-neutral-50/80 p-4 dark:border-white/[0.08] dark:bg-white/[0.03]">
+                    <p className="text-xs text-neutral-500">Processing Mode</p>
+                    <p className="mt-1 text-sm font-semibold capitalize text-neutral-950 dark:text-white">{pricingMode}</p>
+                  </div>
                 </div>
-                <div className="rounded-xl border border-neutral-200/80 bg-neutral-50/80 p-4 dark:border-white/[0.08] dark:bg-white/[0.03]">
-                  <p className="text-xs text-neutral-500">Output / 1M</p>
-                  <p className="mt-1 font-sans tabular-nums text-xl font-bold text-neutral-950 dark:text-white">{price(activePrice.outputUsd)}</p>
-                </div>
-                <div className="rounded-xl border border-neutral-200/80 bg-neutral-50/80 p-4 dark:border-white/[0.08] dark:bg-white/[0.03]">
-                  <p className="text-xs text-neutral-500">Processing Mode</p>
-                  <p className="mt-1 text-sm font-semibold capitalize text-neutral-950 dark:text-white">{pricingMode}</p>
-                </div>
-              </div>
+              )}
 
               <div className="mt-8 flex items-center justify-between gap-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500">Relative Price Index</h3>
@@ -503,10 +536,11 @@ export function ModelComparisonCard({
   model,
   pricingMode,
 }: {
-  model: TextModel;
+  model: EffectiveTextModel;
   pricingMode: TextPricingMode;
 }) {
   const price = (value: number) => formatCurrencyAmount(value, "USD", 1, true);
+  void pricingMode;
 
   return (
     <article
@@ -518,7 +552,10 @@ export function ModelComparisonCard({
     >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-lg font-bold text-neutral-950 dark:text-neutral-50">{model.model}</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-lg font-bold text-neutral-950 dark:text-neutral-50">{model.model}</h3>
+            {model.promotion && <DiscountBadge promotion={model.promotion} compact />}
+          </div>
           <p className="mt-1.5 text-xs leading-5 text-neutral-600 dark:text-neutral-400">
             {model.model in textModelPresentations
               ? textModelPresentations[model.model]?.capability
@@ -545,13 +582,21 @@ export function ModelComparisonCard({
             <div>
               <dt className="text-neutral-500">Input per 1M</dt>
               <dd className="mt-0.5 font-sans tabular-nums text-base font-bold text-neutral-950 dark:text-neutral-50">
-                {price(model.inputUsd)}
+                <PromoPriceValue
+                  price={price(model.inputUsd)}
+                  originalPrice={price(model.originalInputUsd)}
+                  discounted={Boolean(model.promotion && model.promotion.inputDiscountPercent > 0)}
+                />
               </dd>
             </div>
             <div>
               <dt className="text-neutral-500">Output per 1M</dt>
               <dd className="mt-0.5 font-sans tabular-nums text-base font-bold text-neutral-950 dark:text-neutral-50">
-                {price(model.outputUsd)}
+                <PromoPriceValue
+                  price={price(model.outputUsd)}
+                  originalPrice={price(model.originalOutputUsd)}
+                  discounted={Boolean(model.promotion && model.promotion.outputDiscountPercent > 0)}
+                />
               </dd>
             </div>
           </>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AuthModal } from "./components/AuthModal";
+import { BlackFridayBanner } from "./components/BlackFridayBanner";
 import { DashboardModal } from "./components/DashboardModal";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Header } from "./components/Header";
@@ -389,6 +390,12 @@ export default function App() {
         />
 
         <main id="main-content" className="site-main min-w-0 flex-1 overflow-hidden px-4 py-6 sm:px-8 sm:py-10 lg:px-12">
+          <div className="mx-auto mb-6 max-w-7xl">
+            <BlackFridayBanner
+              showCta={activePage !== "Pricing"}
+              onViewPricing={() => navigate("Pricing")}
+            />
+          </div>
           {isSubscriptionPage ? (
             <SubscriptionPage
               onApiPrices={() => navigate("API Prices")}

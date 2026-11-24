@@ -17,6 +17,7 @@ export async function meteredText(request, env, auth, respond, quoteOnly = false
     maximum_cost_usd: maximum.cost_usd, maximum_service_fee_usd: 0,
     input_tokens: maximum.billed_input_tokens, customer_input_tokens: prepared.exactInputCount ? userTokens : null, input_count_is_upper_bound: !prepared.exactInputCount, instruction_tokens_estimate: prepared.systemTokens, max_completion_tokens: prepared.maxOutput,
     billed_input_tokens: maximum.billed_input_tokens,
+    promotion: prepared.promotion || null,
     notice: policy.conversationInputOnly
       ? 'Conversation input and generated output are billed. The system prompt and message framing are excluded.'
       : 'Total input is billed at the published input rate. Output includes reasoning. No additional service fee. Final token charges round up once to six decimal USD places.' });
@@ -56,6 +57,7 @@ export async function meteredText(request, env, auth, respond, quoteOnly = false
         billed_input_tokens: price.billed_input_tokens, prompt_tokens_details: undefined, cost_usd: price.cost_usd, service_fee_usd: price.service_fee_usd,
         token_cost_usd: price.token_cost_usd, web_search_cost_usd: price.web_search_cost_usd ?? 0 },
       cost_usd: price.cost_usd, service_fee_usd: price.service_fee_usd, token_cost_usd: price.token_cost_usd,
+      promotion: price.promotion || null,
       pricing_version: TEXT_PRICING_VERSION, instruction_and_overhead_tokens: prepared.exactInputCount ? price.instruction_and_overhead_tokens : null, operation_id: operationId };
     const settled = await billing(env, { action: 'usageFinish', ...identity, actualMicros: price.chargeMicros, result,
       evidence: { providerRequestId: data.id, upstreamModel: data.model, rawUsage, ...price } });

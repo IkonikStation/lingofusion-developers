@@ -3,6 +3,7 @@ import { LOOKUP_POLICY } from "../../shared/webTranslation.mjs";
 import { buildPromptMessages } from "../../shared/promptMessages.mjs";
 import { TranscriptionPanel } from '../components/TranscriptionPanel';
 import { waitForDubbing } from "../data/dubbingApi";
+import { usePromotion } from "../data/promotion";
 import {
   Activity,
   AlertCircle,
@@ -762,15 +763,23 @@ export function PlaygroundPage({
     [],
   );
 
+  const { getModelOffer } = usePromotion();
   const modelItems = useMemo(
     () =>
-      models.map((m) => ({
-        id: m.model_id,
-        label: m.model_id,
-        icon: <ModelThumb presentation={textModelPresentations[m.model_id]} />,
-        hint: `$${m.input_per_million.toFixed(2)}/M · $${m.output_per_million.toFixed(2)}/M out`,
-      })),
-    [models],
+      models.map((m) => {
+        const promo = getModelOffer(m.model_id, "instant");
+        const inputRate = promo ? promo.inputUsd : m.input_per_million;
+        const outputRate = promo ? promo.outputUsd : m.output_per_million;
+        return {
+          id: m.model_id,
+          label: m.model_id,
+          icon: <ModelThumb presentation={textModelPresentations[m.model_id]} />,
+          hint: promo
+            ? `$${inputRate.toFixed(2)}/M · $${outputRate.toFixed(2)}/M out · ${promo.inputOnly ? `${promo.discountPercent}% OFF IN` : `${promo.discountPercent}% OFF`}`
+            : `$${inputRate.toFixed(2)}/M · $${outputRate.toFixed(2)}/M out`,
+        };
+      }),
+    [models, getModelOffer],
   );
 
   const imageModelItems = useMemo(

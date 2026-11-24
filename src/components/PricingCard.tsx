@@ -1,9 +1,14 @@
 import type { ReactNode } from "react";
+import type { ModelPromotion } from "../../shared/textPricing.mjs";
+import { DiscountBadge, PromoPriceValue } from "./PromoPrice";
 
 type DisplayTextModel = {
   model: string;
   input: string;
   output: string;
+  originalInput?: string;
+  originalOutput?: string;
+  promotion?: ModelPromotion | null;
   recommended?: boolean;
   deprecated?: boolean;
 };
@@ -112,11 +117,24 @@ function TextTable({ rows, labels }: { rows: DisplayTextModel[]; labels: Pricing
                       New
                     </span>
                   )}
+                  {row.promotion && <DiscountBadge promotion={row.promotion} compact />}
 
                 </div>
               </td>
-              <td data-label={labels.input} className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.input}</td>
-              <td data-label={labels.output} className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">{row.output}</td>
+              <td data-label={labels.input} className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">
+                <PromoPriceValue
+                  price={row.input}
+                  originalPrice={row.originalInput}
+                  discounted={Boolean(row.promotion && row.promotion.inputDiscountPercent > 0)}
+                />
+              </td>
+              <td data-label={labels.output} className="px-5 py-3.5 font-sans tabular-nums text-neutral-700 dark:text-neutral-300">
+                <PromoPriceValue
+                  price={row.output}
+                  originalPrice={row.originalOutput}
+                  discounted={Boolean(row.promotion && row.promotion.outputDiscountPercent > 0)}
+                />
+              </td>
             </tr>
           ))}
         </tbody>

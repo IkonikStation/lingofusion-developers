@@ -3,6 +3,7 @@ import { isVoiceFlashLite, VOICE_FLASH_LITE_MODEL, VOICE_FLASH_LITE_NAME } from 
 import { voiceFlashLite } from "./voiceFlashLite.mjs";
 import { transcriptionRequest, createLiveTranscription, connectLiveTranscription } from './transcription.mjs';
 import { meteredText } from './meteredText.mjs';
+import { getPromotionState } from '../shared/textPricing.mjs';
 import { BILLING_POLICY, STRIPE_API_VERSION, depositQuote, requireUsd, retrieveCheckout, subscriptionQuote } from "../shared/billing.mjs";
 import { buildModelSystemPrompt } from "../shared/systemPrompts.mjs";
 import { billing as billingLedger } from "./billing.mjs";
@@ -885,6 +886,13 @@ export default {
           audio_url: `data:audio/mpeg;base64,${base64}`,
           chars: input.length,
         });
+      }
+
+      // Public server-time promotion schedule & active discount status (no-store).
+      if (request.method === 'GET' && path === '/api/promotion') {
+        const response = jsonResponse(getPromotionState(Date.now()), 200, requestOrigin);
+        response.headers.set('Cache-Control', 'no-store');
+        return response;
       }
 
       // Text pricing and settlement are owned by the server-side adapter.

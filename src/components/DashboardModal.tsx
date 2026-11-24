@@ -23,6 +23,8 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { AuthUser } from "../data/auth";
 import { musicModels, textModelsByPricingMode, webSearchPricing } from "../data/pricing";
 import type { TextPricingMode } from "../data/pricing";
+import { usePromotion } from "../data/promotion";
+import { DiscountBadge, PromoPriceValue } from "./PromoPrice";
 import { playgroundLanguages } from "../data/playgroundLanguages";
 import { browserApi, calculateGrossDeposit, getApiBaseUrl, shouldUseBrowserApi } from "../data/browserApi";
 import { sdkExamples } from "../data/sdkExamples";
@@ -343,9 +345,10 @@ export function DashboardModal({
   const [tokenizerResult, setTokenizerResult] = useState<TokenizerResult | null>(null);
   const [tokenizerLoading, setTokenizerLoading] = useState(false);
 
+  const { getEffectiveTextModels } = usePromotion();
   // Keep all cloud models in the selector. Nano only supports Default pricing;
   // the event handlers below keep the simulated request on that supported mode.
-  const playgroundModels = textModelsByPricingMode.instant.filter((model) => !model.local);
+  const playgroundModels = getEffectiveTextModels("instant").filter((model) => !model.local);
   const selectedPlaygroundModel =
     playgroundModels.find((model) => model.model === tryModel) ?? playgroundModels[0];
   const selectedMusicPlaygroundModel =
@@ -814,7 +817,12 @@ export function DashboardModal({
                       <div className="space-y-3">
                         <div className="rounded-lg border border-neutral-200 p-4 dark:border-white/10">
                           <p className="text-sm text-neutral-500 dark:text-neutral-500">Selected model pricing</p>
-                          <p className="mt-2 font-medium text-neutral-950 dark:text-neutral-50">{playgroundMode === "music" ? selectedMusicPlaygroundModel.model : selectedPlaygroundModel.model}</p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <p className="font-medium text-neutral-950 dark:text-neutral-50">{playgroundMode === "music" ? selectedMusicPlaygroundModel.model : selectedPlaygroundModel.model}</p>
+                            {playgroundMode !== "music" && selectedPlaygroundModel.promotion && (
+                              <DiscountBadge promotion={selectedPlaygroundModel.promotion} compact />
+                            )}
+                          </div>
                           {playgroundMode === "music" ? (
                             <div className="mt-3 text-sm">
                               <p className="text-neutral-500 dark:text-neutral-500">Price / song</p>
@@ -822,8 +830,26 @@ export function DashboardModal({
                             </div>
                           ) : (
                             <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                              <div><p className="text-neutral-500 dark:text-neutral-500">Input / 1M tokens</p><p className="mt-1 font-sans tabular-nums font-semibold text-neutral-950 dark:text-neutral-50">{dollars(selectedPlaygroundModel.inputUsd)}</p></div>
-                              <div><p className="text-neutral-500 dark:text-neutral-500">Output / 1M tokens</p><p className="mt-1 font-sans tabular-nums font-semibold text-neutral-950 dark:text-neutral-50">{dollars(selectedPlaygroundModel.outputUsd)}</p></div>
+                              <div>
+                                <p className="text-neutral-500 dark:text-neutral-500">Input / 1M tokens</p>
+                                <p className="mt-1 font-sans tabular-nums font-semibold text-neutral-950 dark:text-neutral-50">
+                                  <PromoPriceValue
+                                    price={dollars(selectedPlaygroundModel.inputUsd)}
+                                    originalPrice={dollars(selectedPlaygroundModel.originalInputUsd)}
+                                    discounted={Boolean(selectedPlaygroundModel.promotion && selectedPlaygroundModel.promotion.inputDiscountPercent > 0)}
+                                  />
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-neutral-500 dark:text-neutral-500">Output / 1M tokens</p>
+                                <p className="mt-1 font-sans tabular-nums font-semibold text-neutral-950 dark:text-neutral-50">
+                                  <PromoPriceValue
+                                    price={dollars(selectedPlaygroundModel.outputUsd)}
+                                    originalPrice={dollars(selectedPlaygroundModel.originalOutputUsd)}
+                                    discounted={Boolean(selectedPlaygroundModel.promotion && selectedPlaygroundModel.promotion.outputDiscountPercent > 0)}
+                                  />
+                                </p>
+                              </div>
                             </div>
                           )}
                         </div>

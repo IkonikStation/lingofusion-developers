@@ -23,6 +23,7 @@ import {
   countTextTokens,
 } from "./nodeTextMetered.mjs";
 import { buildModelSystemPrompt } from "./shared/systemPrompts.mjs";
+import { getModelPromotion, getPromotionState } from "./shared/textPricing.mjs";
 import { fetchTextProvider } from "./shared/textProvider.mjs";
 import {
   isVoiceFlashLite, VOICE_FLASH_LITE_MODEL, VOICE_FLASH_LITE_NAME, VOICE_FLASH_LITE_PRICE,
@@ -3807,16 +3808,25 @@ async function route(req, res) {
       catch (error) { return send(res, 409, { verified: false, message: error.message }); }
     }
 
+    if (req.method === "GET" && url.pathname === "/api/promotion") {
+      res.setHeader("Cache-Control", "no-store");
+      return send(res, 200, getPromotionState(Date.now()));
+    }
+
     // =========================================================================
     // 6. Token Cost Calculator Preview Endpoint: POST /api/pricing/calculate
     // =========================================================================
     if (req.method === "POST" && url.pathname === "/api/pricing/calculate") {
       const body = await parseBody(req);
       const modelPricing = resolveModelPricing(body.model || "gpt-4o");
-      const inputPerMillion = Number(body.input_per_million ?? modelPricing?.input_per_million ?? 2.0);
-      const outputPerMillion = Number(body.output_per_million ?? modelPricing?.output_per_million ?? 8.0);
+      const mode = normalizePricingMode(body.pricing_mode);
       const promptTokens = Math.max(0, Math.trunc(Number(body.prompt_tokens) || 0));
       const completionTokens = Math.max(0, Math.trunc(Number(body.completion_tokens) || 0));
+      const promo = body.input_per_million === undefined && body.output_per_million === undefined && modelPricing?.model_id
+        ? getModelPromotion(modelPricing.model_id, { nowMs: Date.now(), mode, longContext: promptTokens > 272000 })
+        : null;
+      const inputPerMillion = Number(body.input_per_million ?? promo?.inputUsd ?? modelPricing?.input_per_million ?? 2.0);
+      const outputPerMillion = Number(body.output_per_million ?? promo?.outputUsd ?? modelPricing?.output_per_million ?? 8.0);
       const promptCostUsd = Number((promptTokens * (inputPerMillion / 1_000_000)).toFixed(6));
       const completionCostUsd = Number((completionTokens * (outputPerMillion / 1_000_000)).toFixed(6));
       const costUsd = calculateTokenCostUsd(promptTokens, completionTokens, inputPerMillion, outputPerMillion, modelPricing?.model_id);
@@ -3827,6 +3837,9 @@ async function route(req, res) {
         completion_tokens: completionTokens,
         input_per_million: inputPerMillion,
         output_per_million: outputPerMillion,
+        original_input_per_million: promo?.originalInputUsd ?? inputPerMillion,
+        original_output_per_million: promo?.originalOutputUsd ?? outputPerMillion,
+        promotion: promo,
         prompt_cost_usd: promptCostUsd,
         completion_cost_usd: completionCostUsd,
         cost_usd: costUsd,
@@ -3851,10 +3864,35 @@ async function route(req, res) {
     }
 
     if (req.method === "GET" && url.pathname === "/api/models") {
+      const nowMs = Date.now();
+      const promoState = getPromotionState(nowMs);
       const activeModels = sqlDb.prepare(
         "SELECT model_id, provider, upstream_model_name, input_per_million, output_per_million, is_active FROM model_pricing WHERE is_active = 1"
-      ).all();
-      return send(res, 200, { models: textModels, model_pricing: activeModels });
+      ).all().map((row) => {
+        const promo = getModelPromotion(row.model_id, { nowMs, mode: "default", longContext: false });
+        if (!promo) return row;
+        return {
+          ...row,
+          original_input_per_million: row.input_per_million,
+          original_output_per_million: row.output_per_million,
+          input_per_million: promo.inputUsd,
+          output_per_million: promo.outputUsd,
+          discount_percent: promo.discountPercent,
+        };
+      });
+      const effectiveTextModels = textModels.map((item) => {
+        const promo = getModelPromotion(item.model, { nowMs, mode: "default", longContext: false });
+        if (!promo) return item;
+        return {
+          ...item,
+          original_input: item.input,
+          original_output: item.output,
+          input: promo.inputUsd,
+          output: promo.outputUsd,
+          discount_percent: promo.discountPercent,
+        };
+      });
+      return send(res, 200, { models: effectiveTextModels, model_pricing: activeModels, promotion: promoState });
     }
 
     if (req.method === "POST" && url.pathname === "/api/sales-requests") {

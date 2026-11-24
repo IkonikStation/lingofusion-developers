@@ -3,7 +3,7 @@ import ranks from 'js-tiktoken/ranks/o200k_base';
 import { ASK_LINGOFUSION_PROMPT } from './askLingoFusionPrompt.mjs';
 import { SEARCH_FEES, SEARCH_CONTEXT_BOUND, LOOKUP_POLICY } from './webTranslation.mjs';
 import { buildPromptMessages } from './promptMessages.mjs';
-import { TEXT_PRICING_VERSION, textPricePolicy, priceTextUsage } from './textPricing.mjs';
+import { TEXT_PRICING_VERSION, textPricePolicy, priceTextUsage, resolveEffectivePolicy } from './textPricing.mjs';
 
 // UTF-8 bytes bound byte-level token counts without constructing a tokenizer.
 const bytes = new TextEncoder();
@@ -11,10 +11,12 @@ const byteBound = text => bytes.encode(text).length;
 let conversationEncoder;
 const countConversationTokens = text => (conversationEncoder ??= new Tiktoken(ranks)).encode(text, [], []).length;
 
-export function prepareTextRequest(body, count = byteBound, exact = false) {
+export function prepareTextRequest(body, count = byteBound, exact = false, nowMs = Date.now()) {
+  const acceptedAtMs = Number.isFinite(nowMs) ? nowMs : Date.now();
   const reasoning = Boolean(body.reasoning || body.reasoning_enabled || ['medium', 'high', 'max', 'xhigh'].includes(body.reasoning_effort));
   const mode = String(body.pricing_mode || 'default');
-  const policy = textPricePolicy(body.model || 'LingoFusion', reasoning || mode === 'ultrafast');
+  const basePolicy = textPricePolicy(body.model || 'LingoFusion', reasoning || mode === 'ultrafast');
+  const policy = basePolicy;
   if (!['default', 'instant', 'batch', 'fast', 'ultrafast'].includes(mode)) throw new Error('Unsupported pricing mode');
   if (policy.model === 'Ask LingoFusion' && mode === 'fast') throw new Error('Ask LingoFusion supports Standard speed');
   if (policy.provider === 'openrouter' && mode === 'fast') throw new Error('Spark supports Standard speed');
@@ -53,14 +55,16 @@ export function prepareTextRequest(body, count = byteBound, exact = false) {
   const maxOutput = body.max_completion_tokens ?? body.max_tokens ?? 512;
   if (!Number.isSafeInteger(maxOutput) || maxOutput < 1 || maxOutput > (policy.provider === 'openrouter' ? 65536 : 128000)) throw new Error('max_completion_tokens exceeds the supported range');
   const longContext = policy.provider !== 'openrouter' && rawMaximum > 272000;
-  const maximum = priceTextUsage({ policy, userTokens, outputTokens: maxOutput, rawInputTokens: rawMaximum, ...(cacheWritesEnabled ? {} : { cacheWriteTokens: 0 }), mode, longContext });
+  // Lock in effective retail pricing (including any active promotion) at request acceptance time (UTC).
+  const effectivePolicy = resolveEffectivePolicy(basePolicy, { nowMs: acceptedAtMs, mode, longContext });
+  const maximum = priceTextUsage({ policy: effectivePolicy, userTokens, outputTokens: maxOutput, rawInputTokens: rawMaximum, ...(cacheWritesEnabled ? {} : { cacheWriteTokens: 0 }), mode, longContext });
   if (webSearch) { maximum.chargeMicros += SEARCH_FEES[policy.model]; maximum.cost_usd = maximum.chargeMicros / 1e6; }
   // Do not silently add a fee or change a published price to cover a mode
   // whose input/output rates cannot cover the conservative provider rates.
   const retailMultiplier = mode === 'fast' ? 1.5 : mode === 'ultrafast' ? 6 : 1;
   const providerMultiplier = mode === 'fast' ? 2 : mode === 'ultrafast' ? 6 : 1;
-  if (Math.ceil(policy.ri * retailMultiplier) < Math.max(policy.wi, cacheWritesEnabled ? policy.write : 0) * providerMultiplier * (longContext ? 2 : 1) ||
-      Math.ceil(policy.ro * retailMultiplier) < policy.wo * providerMultiplier * (longContext ? 1.5 : 1)) {
+  if (Math.ceil(effectivePolicy.ri * retailMultiplier) < Math.max(effectivePolicy.wi, cacheWritesEnabled ? effectivePolicy.write : 0) * providerMultiplier * (longContext ? 2 : 1) ||
+      Math.ceil(effectivePolicy.ro * retailMultiplier) < effectivePolicy.wo * providerMultiplier * (longContext ? 1.5 : 1)) {
     throw new Error('This processing mode or context length is unavailable at the published token rates');
   }
   if (body.max_cost_usd !== undefined && (!Number.isFinite(body.max_cost_usd) || body.max_cost_usd < maximum.cost_usd)) throw new Error('The full price exceeds your approved spending cap. Refresh the quote.');
@@ -76,11 +80,11 @@ export function prepareTextRequest(body, count = byteBound, exact = false) {
     if (!Number.isFinite(body.temperature) || body.temperature < 0 || body.temperature > 2) throw new Error('Temperature must be between 0 and 2');
     payload.temperature = body.temperature;
   }
-  return { cacheWritesEnabled, webSearch, searchFeeMicros: webSearch ? SEARCH_FEES[policy.model] : 0, exactInputCount: exact, userTokenUpperBound, policy, mode, pricingVersion: TEXT_PRICING_VERSION, userTokens, systemTokens, system, rawMaximum, maxOutput, longContext, maximum, payload, settings };
+  return { cacheWritesEnabled, webSearch, searchFeeMicros: webSearch ? SEARCH_FEES[policy.model] : 0, exactInputCount: exact, userTokenUpperBound, policy: effectivePolicy, promotion: effectivePolicy.promotion, acceptedAtMs, acceptedAt: new Date(acceptedAtMs).toISOString(), mode, pricingVersion: TEXT_PRICING_VERSION, userTokens, systemTokens, system, rawMaximum, maxOutput, longContext, maximum, payload, settings };
 }
 
 export function verifyAndPrice(prepared, data) {
-  const { policy, mode, userTokens, rawMaximum, maxOutput, longContext } = prepared;
+  const { policy, mode, userTokens, rawMaximum, maxOutput } = prepared;
   const usage = data?.usage;
   if (!data?.id || typeof data.id !== 'string' || typeof data.model !== 'string' ||
       !(data.model === policy.upstream || data.model.startsWith(`${policy.upstream}-`)) || !usage) throw new Error('Missing provider provenance');
@@ -91,10 +95,19 @@ export function verifyAndPrice(prepared, data) {
   if (!actualMode || ({ default: 1, instant: 1, batch: 1, fast: 2, ultrafast: 6 }[actualMode] > { default: 1, instant: 1, batch: 1, fast: 2, ultrafast: 6 }[mode])) throw new Error('Unverified provider service tier');
   if (!prepared.cacheWritesEnabled && ((usage.prompt_tokens_details?.cached_tokens ?? 0) > 0 || (usage.prompt_tokens_details?.cache_write_tokens ?? 0) > 0)) throw new Error('Unexpected provider cache usage');
   if ((usage.prompt_tokens_details?.cache_write_tokens_12h ?? 0) > 0) throw new Error('Unexpected 12-hour cache write');
-  const price = priceTextUsage({ policy, mode: actualTier === 'default' && mode === 'batch' ? mode : actualMode, userTokens, outputTokens: usage.completion_tokens,
+  const settledMode = actualTier === 'default' && mode === 'batch' ? mode : actualMode;
+  const actualLongContext = policy.provider !== 'openrouter' && usage.prompt_tokens > 272000;
+  // Honor the server UTC timestamp locked when the request was accepted.
+  const settledPolicy = resolveEffectivePolicy(policy, {
+    nowMs: prepared.acceptedAtMs ?? Date.now(),
+    mode: settledMode,
+    longContext: actualLongContext,
+  });
+  const price = priceTextUsage({ policy: settledPolicy, mode: settledMode, userTokens, outputTokens: usage.completion_tokens,
     rawInputTokens: usage.prompt_tokens, cachedTokens: usage.prompt_tokens_details?.cached_tokens ?? 0,
     cacheWriteTokens: usage.prompt_tokens_details?.cache_write_tokens ?? 0,
-    longContext: policy.provider !== 'openrouter' && usage.prompt_tokens > 272000 });
+    longContext: actualLongContext });
+  price.promotion = settledPolicy.promotion;
   if (prepared.webSearch) {
     if (data.web_search_call_count !== 0 && data.web_search_call_count !== 1) throw new Error('Search call limit exceeded');
     if (!Number.isInteger(data.web_search_calls) || data.web_search_calls < 0 || data.web_search_calls > 1) throw new Error('Unverified search usage');
