@@ -12,13 +12,13 @@ import {
 } from '../shared/textPricing.mjs';
 import { prepareTextRequest, verifyAndPrice } from '../shared/textRequest.mjs';
 
-const START_MS = Date.parse('2026-11-25T05:00:00Z');
-const END_MS = Date.parse('2026-12-01T05:00:00Z');
+const START_MS = Date.parse('2026-11-24T05:00:00Z');
+const END_MS = Date.parse('2026-11-30T05:00:00Z');
 const DURING_MS = Date.parse('2026-11-27T12:00:00Z');
 
 test('promotion schedule is exactly 144 hours in UTC and flips cleanly at boundaries', () => {
-  assert.equal(BLACK_FRIDAY_PROMOTION.startsAt, '2026-11-25T05:00:00Z');
-  assert.equal(BLACK_FRIDAY_PROMOTION.endsAt, '2026-12-01T05:00:00Z');
+  assert.equal(BLACK_FRIDAY_PROMOTION.startsAt, '2026-11-24T05:00:00Z');
+  assert.equal(BLACK_FRIDAY_PROMOTION.endsAt, '2026-11-30T05:00:00Z');
   assert.equal(END_MS - START_MS, 144 * 60 * 60 * 1000);
 
   // 1ms before start -> upcoming, not active

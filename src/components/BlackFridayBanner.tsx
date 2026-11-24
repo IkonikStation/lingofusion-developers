@@ -1,4 +1,4 @@
-import { ArrowRight, Clock, Sparkles } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { usePromotion } from "../data/promotion";
 
 function pad2(n: number) {
@@ -20,65 +20,57 @@ export function BlackFridayBanner({
   }
 
   const units = [
-    { label: "Days", value: pad2(countdown.days) },
-    { label: "Hrs", value: pad2(countdown.hours) },
-    { label: "Min", value: pad2(countdown.minutes) },
-    { label: "Sec", value: pad2(countdown.seconds) },
+    { label: "d", value: pad2(countdown.days), name: "days" },
+    { label: "h", value: pad2(countdown.hours), name: "hours" },
+    { label: "m", value: pad2(countdown.minutes), name: "minutes" },
+    { label: "s", value: pad2(countdown.seconds), name: "seconds" },
   ];
 
   return (
     <div
       role="region"
       aria-label="Black Friday and Cyber Monday Sale"
-      className="relative overflow-hidden rounded-2xl border border-neutral-900/15 bg-gradient-to-r from-neutral-950 via-neutral-900 to-emerald-950 px-5 py-4 text-white shadow-sm dark:border-emerald-500/25 dark:from-[#0b0f0d] dark:via-[#111513] dark:to-[#0c2117] sm:px-6"
+      className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-neutral-900 dark:border-neutral-800 dark:bg-[#141414] dark:text-neutral-100 sm:px-5"
     >
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-emerald-500/15 blur-3xl"
-      />
-      <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0 space-y-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/15 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-300">
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  promotion.active ? "animate-pulse bg-emerald-400" : "bg-amber-400"
-                }`}
-              />
-              {promotion.active ? "Black Friday & Cyber Monday" : "Upcoming · Black Friday & Cyber Monday"}
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold text-white">
-              <Sparkles className="h-3 w-3 text-emerald-400" />
-              Up to 50% OFF
-            </span>
-          </div>
-
-          <p className="text-sm font-medium text-neutral-100 sm:text-[15px]">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 text-sm">
+          <span className="font-semibold tracking-tight text-neutral-950 dark:text-white">
+            Black Friday &amp; Cyber Monday
+          </span>
+          <span className="rounded bg-emerald-600/10 px-1.5 py-0.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
+            Up to 50% OFF
+          </span>
+          <span className="text-neutral-600 dark:text-neutral-400">
             {promotion.active
-              ? "Limited-time API token discounts applied automatically across eligible LingoFusion text models."
-              : "6-day API sale starts Nov 25 at 05:00 UTC — up to 50% off eligible LingoFusion text models."}
-          </p>
+              ? "Temporary discounts are live on eligible API text models."
+              : "Starts Nov 24 at 12:00 AM EST across eligible API text models."}
+          </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-          <div className="flex items-center gap-2" aria-live="off">
-            <span className="hidden items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-neutral-400 sm:inline-flex">
-              <Clock className="h-3.5 w-3.5 text-emerald-400" />
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-neutral-500 dark:text-neutral-400">
               {promotion.active ? "Ends in" : "Starts in"}
             </span>
-            <div className="flex items-center gap-1.5" role="timer" aria-label={promotion.active ? "Sale ends in" : "Sale starts in"}>
-              {units.map((unit) => (
-                <div
-                  key={unit.label}
-                  className="flex min-w-[3.1rem] flex-col items-center rounded-lg border border-white/10 bg-white/[0.06] px-2 py-1 text-center backdrop-blur-xs"
-                >
-                  <span className="font-sans text-sm font-bold tabular-nums leading-tight text-white sm:text-base">
+            <div
+              role="timer"
+              aria-label={promotion.active ? "Sale ends in" : "Sale starts in"}
+              className="inline-flex items-center gap-1 font-mono text-xs font-medium tabular-nums text-neutral-900 dark:text-neutral-100"
+            >
+              {units.map((unit, idx) => (
+                <span key={unit.name} className="inline-flex items-baseline">
+                  <span className="rounded border border-neutral-200 bg-white px-1.5 py-0.5 dark:border-neutral-800 dark:bg-neutral-900">
                     {unit.value}
+                    <span className="ml-0.5 text-[10px] text-neutral-400 dark:text-neutral-500">
+                      {unit.label}
+                    </span>
                   </span>
-                  <span className="text-[9px] font-medium uppercase tracking-wider text-neutral-400">
-                    {unit.label}
-                  </span>
-                </div>
+                  {idx < units.length - 1 && (
+                    <span aria-hidden="true" className="mx-0.5 text-neutral-300 dark:text-neutral-700">
+                      :
+                    </span>
+                  )}
+                </span>
               ))}
             </div>
           </div>
@@ -87,9 +79,9 @@ export function BlackFridayBanner({
             <button
               type="button"
               onClick={onViewPricing}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3.5 py-2 text-xs font-semibold text-neutral-950 transition hover:bg-emerald-400"
+              className="inline-flex items-center gap-1 text-xs font-medium text-neutral-900 underline-offset-4 hover:underline dark:text-white"
             >
-              View API Prices
+              View prices
               <ArrowRight className="h-3.5 w-3.5" />
             </button>
           )}
